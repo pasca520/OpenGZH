@@ -403,6 +403,23 @@ function extractStyleValue(styleText, property) {
   return match ? match[1].trim() : null;
 }
 
+function scaleStyleConfigFontSizes(styleConfig, scale) {
+  if (!styleConfig?.styles || !Number.isFinite(scale) || scale === 1) return styleConfig;
+  const nextStyles = {};
+  Object.keys(styleConfig.styles).forEach((selector) => {
+    nextStyles[selector] = scaleFontSizeInDeclaration(styleConfig.styles[selector], scale);
+  });
+  return { ...styleConfig, styles: nextStyles };
+}
+
+function scaleFontSizeInDeclaration(declaration, scale) {
+  if (!declaration || typeof declaration !== 'string') return declaration;
+  return declaration.replace(/(font-size\s*:\s*)([\d.]+)(px|rem|em|pt)/gi, (_match, prefix, value, unit) => {
+    const scaled = (parseFloat(value) * scale).toFixed(2).replace(/\.?0+$/, '');
+    return `${prefix}${scaled}${unit}`;
+  });
+}
+
 function extractLastStyleValue(styleText, property) {
   if (!styleText || !property) return null;
   const escapedProperty = property.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -481,15 +498,33 @@ function convertOrderedListsToWechatParagraphs(doc, styleConfig) {
 function buildWechatOrderedParagraph(doc, item, order, styleConfig) {
   const paragraph = doc.createElement('p');
   const prefix = doc.createElement('span');
+  const content = doc.createElement('span');
   const clonedItem = item.cloneNode(true);
   const containerStyle = styleConfig?.styles?.container || '';
   const paragraphStyle = styleConfig?.styles?.p || '';
   const listItemStyle = styleConfig?.styles?.li || '';
+  const typographyStyle = buildTypographyStyle({
+    fontSize: extractStyleValue(listItemStyle, 'font-size')
+      || extractStyleValue(paragraphStyle, 'font-size')
+      || extractStyleValue(containerStyle, 'font-size'),
+    lineHeight: extractStyleValue(listItemStyle, 'line-height')
+      || extractStyleValue(paragraphStyle, 'line-height')
+      || extractStyleValue(containerStyle, 'line-height'),
+    color: extractStyleValue(listItemStyle, 'color')
+      || extractStyleValue(paragraphStyle, 'color')
+      || extractStyleValue(containerStyle, 'color'),
+    fontFamily: extractStyleValue(listItemStyle, 'font-family')
+      || extractStyleValue(paragraphStyle, 'font-family')
+      || extractStyleValue(containerStyle, 'font-family')
+  });
 
   prefix.textContent = `${order}. `;
   prefix.setAttribute(
     'style',
-    'display: inline !important; white-space: nowrap !important;'
+    mergeStyleText(
+      typographyStyle,
+      'display: inline !important; white-space: nowrap !important;'
+    )
   );
 
   if (!containsRenderableMath(clonedItem)) {
@@ -502,28 +537,21 @@ function buildWechatOrderedParagraph(doc, item, order, styleConfig) {
   paragraph.setAttribute(
     'style',
     mergeStyleText(
-      buildTypographyStyle({
-        fontSize: extractStyleValue(listItemStyle, 'font-size')
-          || extractStyleValue(paragraphStyle, 'font-size')
-          || extractStyleValue(containerStyle, 'font-size'),
-        lineHeight: extractStyleValue(listItemStyle, 'line-height')
-          || extractStyleValue(paragraphStyle, 'line-height')
-          || extractStyleValue(containerStyle, 'line-height'),
-        color: extractStyleValue(listItemStyle, 'color')
-          || extractStyleValue(paragraphStyle, 'color')
-          || extractStyleValue(containerStyle, 'color'),
-        fontFamily: extractStyleValue(listItemStyle, 'font-family')
-          || extractStyleValue(paragraphStyle, 'font-family')
-          || extractStyleValue(containerStyle, 'font-family')
-      }),
+      typographyStyle,
       'margin: 0 0 14px !important; white-space: normal !important; word-break: break-word !important; overflow-wrap: anywhere !important;'
     )
   );
 
-  paragraph.appendChild(prefix);
+  content.setAttribute(
+    'style',
+    mergeStyleText(typographyStyle, 'display: inline !important;')
+  );
   while (clonedItem.firstChild) {
-    paragraph.appendChild(clonedItem.firstChild);
+    content.appendChild(clonedItem.firstChild);
   }
+
+  paragraph.appendChild(prefix);
+  paragraph.appendChild(content);
   return paragraph;
 }
 
@@ -546,16 +574,13 @@ function normalizeListTypographyForWechat(doc, styleConfig) {
     || extractStyleValue(paragraphStyle, 'font-family')
     || extractStyleValue(containerStyle, 'font-family');
 
+  const typographyStyle = buildTypographyStyle({ fontSize, lineHeight, color, fontFamily });
+
   doc.querySelectorAll('ol, ul').forEach((list) => {
     const currentStyle = list.getAttribute('style') || '';
     list.setAttribute(
       'style',
-      mergeStyleText(currentStyle, buildTypographyStyle({
-        fontSize,
-        lineHeight,
-        color,
-        fontFamily
-      }), listStyle)
+      mergeStyleText(currentStyle, typographyStyle, listStyle)
     );
   });
 
@@ -563,13 +588,25 @@ function normalizeListTypographyForWechat(doc, styleConfig) {
     const currentStyle = item.getAttribute('style') || '';
     item.setAttribute(
       'style',
-      mergeStyleText(currentStyle, buildTypographyStyle({
-        fontSize,
-        lineHeight,
-        color,
-        fontFamily
-      }))
+      mergeStyleText(currentStyle, typographyStyle)
     );
+
+    if (!typographyStyle) return;
+    if (item.children.length === 1 && item.firstElementChild?.tagName === 'SPAN'
+      && item.firstElementChild.getAttribute('data-wechat-li-content') === 'true') {
+      return;
+    }
+
+    const wrapper = doc.createElement('span');
+    wrapper.setAttribute('data-wechat-li-content', 'true');
+    wrapper.setAttribute(
+      'style',
+      mergeStyleText(typographyStyle, 'display: inline !important;')
+    );
+    while (item.firstChild) {
+      wrapper.appendChild(item.firstChild);
+    }
+    item.appendChild(wrapper);
   });
 }
 
@@ -627,6 +664,39 @@ function normalizeTablesForWechat(doc) {
   });
 }
 
+function inlineContainerTypographyForWechat(doc, styleConfig) {
+  const containerStyle = styleConfig?.styles?.container || '';
+  const containerFontSize = extractStyleValue(containerStyle, 'font-size');
+  const containerLineHeight = extractStyleValue(containerStyle, 'line-height');
+  const containerColor = extractStyleValue(containerStyle, 'color');
+  const containerFontFamily = extractStyleValue(containerStyle, 'font-family');
+
+  const selectors = ['p', 'blockquote', 'li', 'td', 'th', 'dd', 'dt', 'figcaption'];
+  selectors.forEach((selector) => {
+    doc.querySelectorAll(selector).forEach((element) => {
+      const currentStyle = element.getAttribute('style') || '';
+      const additions = [];
+
+      if (containerFontSize && !extractStyleValue(currentStyle, 'font-size')) {
+        additions.push(`font-size: ${containerFontSize} !important;`);
+      }
+      if (containerLineHeight && !extractStyleValue(currentStyle, 'line-height')) {
+        additions.push(`line-height: ${containerLineHeight} !important;`);
+      }
+      if (containerColor && !extractStyleValue(currentStyle, 'color')) {
+        additions.push(`color: ${containerColor} !important;`);
+      }
+      if (containerFontFamily && !extractStyleValue(currentStyle, 'font-family')) {
+        additions.push(`font-family: ${containerFontFamily} !important;`);
+      }
+
+      if (additions.length > 0) {
+        element.setAttribute('style', mergeStyleText(currentStyle, additions.join(' ')));
+      }
+    });
+  });
+}
+
 function wrapSectionIfNeeded(doc, styleConfig) {
   const containerBg = extractBackgroundColor(styleConfig.styles.container);
   if (!containerBg || containerBg === '#fff' || containerBg === '#ffffff') return;
@@ -676,11 +746,14 @@ function replaceFormulaNodesWithPlainText(root) {
   });
 }
 
-export async function copyToWechat({ renderedHTML, styleConfig, imageStore, showToast, codeTheme }) {
+export async function copyToWechat({ renderedHTML, styleConfig, imageStore, showToast, codeTheme, displaySettings }) {
   if (!renderedHTML) {
     showToast('没有内容可复制', 'error');
     return false;
   }
+
+  const fontScale = Number(displaySettings?.fontScale) || 1;
+  const effectiveStyleConfig = fontScale !== 1 ? scaleStyleConfigFontSizes(styleConfig, fontScale) : styleConfig;
 
   try {
     const parser = new DOMParser();
@@ -719,13 +792,14 @@ export async function copyToWechat({ renderedHTML, styleConfig, imageStore, show
     }
 
     await convertMathForWechat(doc);
-    applyCodeHighlighting(doc, { codeTheme, styleConfig });
-    convertCodeBlocks(doc, styleConfig, codeTheme);
+    applyCodeHighlighting(doc, { codeTheme, styleConfig: effectiveStyleConfig });
+    convertCodeBlocks(doc, effectiveStyleConfig, codeTheme);
     flattenListItems(doc);
-    convertOrderedListsToWechatParagraphs(doc, styleConfig);
-    normalizeListTypographyForWechat(doc, styleConfig);
+    convertOrderedListsToWechatParagraphs(doc, effectiveStyleConfig);
+    normalizeListTypographyForWechat(doc, effectiveStyleConfig);
+    inlineContainerTypographyForWechat(doc, effectiveStyleConfig);
     normalizeBlockquotes(doc);
-    wrapSectionIfNeeded(doc, styleConfig);
+    wrapSectionIfNeeded(doc, effectiveStyleConfig);
 
     const text = buildClipboardPlainText(doc);
     stripFormulaExportMetadata(doc.body);

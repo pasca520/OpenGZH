@@ -666,7 +666,8 @@ async function doCopy() {
     styleConfig,
     imageStore,
     showToast: (message, type) => toast.show(message, type),
-    codeTheme: getResolvedCodeTheme()
+    codeTheme: getResolvedCodeTheme(),
+    displaySettings: displaySettings.value
   });
 
   if (success) {
