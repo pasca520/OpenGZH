@@ -1,89 +1,82 @@
-# OpenGZH - 公众号 Markdown 编辑器
+# OpenGZH · 公众号 Markdown 编辑器
 
-一个面向微信公众号写作与排版的纯前端 Markdown 编辑器，支持实时预览、代码块主题、图片本地持久化与一键复制富文本。
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Vue 3](https://img.shields.io/badge/Vue-3.x-4FC08D?logo=vue.js)](https://vuejs.org/)
+[![Vanilla JS](https://img.shields.io/badge/JS-ES_Modules-f7df1e?logo=javascript)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
+[![Zero Dependencies](https://img.shields.io/badge/dependencies-zero-2ea44f)]()
 
-## 核心能力
+面向微信公众号写作与排版的纯前端 Markdown 编辑器——实时预览、代码高亮、图片本地持久化、一键复制富文本，**零构建、零依赖**，部署即用。
 
-### 1. 编辑与预览
-- 左侧 Markdown 编辑，右侧实时预览。
-- 支持常用编辑快捷操作（标题、加粗、斜体、引用、代码块、分割线、表格等）。
-- 支持桌面/手机预览模式切换。
+<p align="center">
+  <img src="https://opengzh.pasca.fun/screenshot.png" alt="OpenGZH 编辑器截图" width="800">
+</p>
 
-### 2. 文档管理
-- 支持多文档创建、切换、复制、删除。
-- 删除操作使用确认弹窗，避免误删。
-- 文档与当前激活状态持久化到 `localStorage`。
+---
 
-### 3. 自动保存与保存状态
-- 输入后采用固定 5 秒防抖自动保存。
-- 状态栏显示 `保存中 / 已保存 / 保存失败` 与最后保存时间。
-- 保留显式保存快捷键：`Ctrl/Cmd + S`。
+## 功能
 
-### 4. 主题与代码面板
-- 内置多套公众号排版主题，按风格分类。
-- 代码面板支持独立代码主题。
+<table>
+<tr>
+<td width="50%">
 
-### 5. 图片处理（本地优先）
-- 支持粘贴、拖拽、工具栏上传图片。
-- 使用 Canvas 压缩后写入 IndexedDB。
-- 复制到公众号时自动转换为 Base64。
-
-### 6. 导出与复制
-- 一键复制到公众号（富文本 HTML）。
-- 支持导出 `.md` 与 `.html`。
-- 导入 Markdown 文件。
+---
 
 ## 技术栈
 
-- Vue 3（CDN）
-- markdown-it
-- highlight.js
-- turndown
-- IndexedDB
-- Canvas API
-- 原生 ES Modules + 纯 CSS
+| 层             | 方案                                     |
+| -------------- | ---------------------------------------- |
+| 框架           | Vue 3（CDN）                             |
+| Markdown 渲染  | markdown-it                              |
+| 代码高亮       | highlight.js                             |
+| HTML→Markdown | turndown                                 |
+| 图片存储       | IndexedDB + Canvas API                   |
+| 模块化         | 原生 ES Modules                          |
+| 样式           | 纯 CSS（CSS Variables 主题系统）         |
+| 部署           | 纯静态，GitHub Actions → rsync → Nginx |
+
+---
 
 ## 本地运行
 
 ```bash
-# 启动本地静态服务
-python -m http.server 8080
+# 启动静态服务
+python3 -m http.server 8080
 
-# 访问
-# http://localhost:8080
-```
-
-也可使用仓库内脚本：
-
-```bash
+# 或使用内置脚本
 ./start.sh
 ```
+
+浏览器打开 `http://localhost:8080` 即可。
+
+---
 
 ## 项目结构
 
 ```text
 OpenGZH/
-├── index.html
-├── about.html
-├── README.md
-├── start.sh
+├── index.html              # 主编辑器
+├── about.html              # 关于页面
+├── start.sh                # 本地启动脚本
 ├── assets/
-│   ├── images/
+│   ├── images/             # 图标、Logo、封面插图（200+ SVG）
 │   ├── scripts/
-│   │   ├── main.js
-│   │   ├── core/
-│   │   ├── export/
-│   │   ├── storage/
-│   │   └── ui/
+│   │   ├── main.js         # Vue 应用入口
+│   │   ├── core/           # Markdown 渲染管线
+│   │   ├── storage/        # IndexedDB 持久化
+│   │   ├── export/         # 导出 / 复制模块
+│   │   ├── ui/             # 主题管理、代码主题
+│   │   └── cover/          # 封面插图系统
 │   └── styles/
-│       ├── base.css
-│       ├── editor.css
-│       ├── panel.css
-│       └── themes/
-└── docs/
+│       ├── base.css        # 基础样式 & CSS Variables
+│       ├── editor.css      # 编辑器布局
+│       ├── panel.css       # 侧边面板
+│       ├── cover.css       # 封面插图样式
+│       └── themes/         # 微信公众号主题（6+ 套）
+└── docs/                   # 设计文档 & PRD
 ```
 
-## 兼容性说明
+---
 
-- 纯前端静态项目，无构建步骤。
-- 需要现代浏览器支持：ES Modules、Clipboard API、Fetch、IndexedDB。
+## 兼容性
+
+需现代浏览器支持：ES Modules · Clipboard API · Fetch · IndexedDB · Canvas API
