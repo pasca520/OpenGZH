@@ -1,0 +1,105 @@
+<svg viewBox="0 0 500 400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="screen-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1E3A5F"/>
+      <stop offset="100%" stop-color="#0A192F"/>
+    </linearGradient>
+    <linearGradient id="device-body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2D3748"/>
+      <stop offset="100%" stop-color="#1A202C"/>
+    </linearGradient>
+    <linearGradient id="chart-bar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#60A5FA"/>
+      <stop offset="100%" stop-color="#3B82F6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Connection lines between devices -->
+  <line x1="130" y1="180" x2="250" y2="140" stroke="#60A5FA" stroke-width="1.5" opacity="0.4" stroke-dasharray="4,3"/>
+  <line x1="250" y1="140" x2="380" y2="200" stroke="#38BDF8" stroke-width="1.5" opacity="0.4" stroke-dasharray="4,3"/>
+  <line x1="130" y1="180" x2="380" y2="200" stroke="#818CF8" stroke-width="1" opacity="0.3" stroke-dasharray="4,3"/>
+
+  <!-- Connection nodes -->
+  <circle cx="130" cy="180" r="6" fill="#60A5FA" opacity="0.6"/>
+  <circle cx="130" cy="180" r="3" fill="#93C5FD" opacity="0.9"/>
+  <circle cx="250" cy="140" r="7" fill="#38BDF8" opacity="0.5"/>
+  <circle cx="250" cy="140" r="3.5" fill="#7DD3FC" opacity="0.9"/>
+  <circle cx="380" cy="200" r="6" fill="#818CF8" opacity="0.6"/>
+  <circle cx="380" cy="200" r="3" fill="#A5B4FC" opacity="0.9"/>
+
+  <!-- Laptop (isometric, center) -->
+  <g transform="translate(180, 120)">
+    <!-- Laptop base -->
+    <path d="M 0 80 L 60 50 L 140 90 L 80 120 Z" fill="url(#device-body)" stroke="#4A5568" stroke-width="1"/>
+    <!-- Laptop screen back -->
+    <path d="M 10 10 L 70 -20 L 130 10 L 70 40 Z" fill="#2D3748" stroke="#4A5568" stroke-width="1"/>
+    <!-- Laptop screen -->
+    <path d="M 15 13 L 68 -15 L 125 12 L 72 38 Z" fill="url(#screen-grad)"/>
+    <!-- Chart bars on laptop -->
+    <rect x="30" y="18" width="8" height="14" fill="#60A5FA" opacity="0.8" transform="skewX(-15)"/>
+    <rect x="42" y="12" width="8" height="20" fill="#38BDF8" opacity="0.8" transform="skewX(-15)"/>
+    <rect x="54" y="15" width="8" height="17" fill="#818CF8" opacity="0.8" transform="skewX(-15)"/>
+    <rect x="66" y="8" width="8" height="24" fill="#34D399" opacity="0.8" transform="skewX(-15)"/>
+    <!-- Line chart on laptop -->
+    <polyline points="28,25 40,18 52,22 64,14 76,20" stroke="#F472B6" stroke-width="1.5" fill="none" opacity="0.9"/>
+    <!-- Keyboard dots -->
+    <circle cx="40" cy="90" r="1" fill="#718096" opacity="0.5"/>
+    <circle cx="50" cy="85" r="1" fill="#718096" opacity="0.5"/>
+    <circle cx="60" cy="90" r="1" fill="#718096" opacity="0.5"/>
+    <circle cx="70" cy="85" r="1" fill="#718096" opacity="0.5"/>
+    <circle cx="80" cy="90" r="1" fill="#718096" opacity="0.5"/>
+    <circle cx="90" cy="95" r="1" fill="#718096" opacity="0.5"/>
+  </g>
+
+  <!-- Phone (isometric, left) -->
+  <g transform="translate(60, 140)">
+    <!-- Phone body -->
+    <path d="M 0 30 L 30 15 L 60 30 L 30 45 Z" fill="#2D3748" stroke="#4A5568" stroke-width="1"/>
+    <path d="M 0 30 L 0 90 L 30 105 L 30 45 Z" fill="#1A202C" stroke="#4A5568" stroke-width="1"/>
+    <path d="M 30 45 L 30 105 L 60 90 L 60 30 Z" fill="#2D3748" stroke="#4A5568" stroke-width="1"/>
+    <!-- Phone screen -->
+    <path d="M 5 37 L 5 83 L 28 95 L 28 49 Z" fill="url(#screen-grad)"/>
+    <!-- Mini chart on phone -->
+    <circle cx="16" cy="58" r="8" fill="none" stroke="#60A5FA" stroke-width="2" opacity="0.7" stroke-dasharray="12 38"/>
+    <circle cx="16" cy="58" r="8" fill="none" stroke="#34D399" stroke-width="2" opacity="0.7" stroke-dasharray="8 42" stroke-dashoffset="-12"/>
+    <rect x="10" y="72" width="14" height="2" fill="#38BDF8" opacity="0.6"/>
+    <rect x="10" y="77" width="10" height="2" fill="#818CF8" opacity="0.5"/>
+    <rect x="10" y="82" width="12" height="2" fill="#60A5FA" opacity="0.4"/>
+  </g>
+
+  <!-- Monitor (isometric, right) -->
+  <g transform="translate(330, 130)">
+    <!-- Monitor stand -->
+    <path d="M 40 120 L 50 115 L 60 120 L 50 125 Z" fill="#4A5568"/>
+    <path d="M 45 100 L 45 120 L 55 115 L 55 95 Z" fill="#2D3748" stroke="#4A5568" stroke-width="0.5"/>
+    <!-- Monitor body -->
+    <path d="M 0 10 L 50 -15 L 110 15 L 60 40 Z" fill="#2D3748" stroke="#4A5568" stroke-width="1"/>
+    <path d="M 0 10 L 0 80 L 60 110 L 60 40 Z" fill="#1A202C" stroke="#4A5568" stroke-width="1"/>
+    <path d="M 60 40 L 60 110 L 110 85 L 110 15 Z" fill="#2D3748" stroke="#4A5568" stroke-width="1"/>
+    <!-- Monitor screen -->
+    <path d="M 5 18 L 5 72 L 55 97 L 55 43 Z" fill="url(#screen-grad)"/>
+    <!-- Dashboard on monitor -->
+    <rect x="10" y="30" width="18" height="12" rx="1" fill="#1E3A5F" stroke="#60A5FA" stroke-width="0.5" opacity="0.8"/>
+    <rect x="10" y="46" width="18" height="12" rx="1" fill="#1E3A5F" stroke="#38BDF8" stroke-width="0.5" opacity="0.8"/>
+    <rect x="32" y="38" width="18" height="20" rx="1" fill="#1E3A5F" stroke="#818CF8" stroke-width="0.5" opacity="0.8"/>
+    <!-- Mini bars in cards -->
+    <rect x="13" y="34" width="3" height="6" fill="#60A5FA" opacity="0.7"/>
+    <rect x="18" y="32" width="3" height="8" fill="#60A5FA" opacity="0.7"/>
+    <rect x="23" y="35" width="3" height="5" fill="#60A5FA" opacity="0.7"/>
+    <rect x="13" y="50" width="12" height="1.5" fill="#38BDF8" opacity="0.5"/>
+    <rect x="13" y="53" width="9" height="1.5" fill="#38BDF8" opacity="0.4"/>
+    <!-- Line in right card -->
+    <polyline points="35,48 39,44 43,46 47,42" stroke="#34D399" stroke-width="1" fill="none" opacity="0.8"/>
+  </g>
+
+  <!-- Floating data points -->
+  <circle cx="160" cy="100" r="3" fill="#60A5FA" opacity="0.5"/>
+  <circle cx="350" cy="90" r="4" fill="#38BDF8" opacity="0.4"/>
+  <circle cx="440" cy="280" r="3" fill="#818CF8" opacity="0.5"/>
+  <circle cx="50" cy="260" r="3" fill="#34D399" opacity="0.4"/>
+
+  <!-- Small decorative elements -->
+  <rect x="420" y="100" width="15" height="15" rx="2" fill="none" stroke="#60A5FA" stroke-width="1" opacity="0.3" transform="rotate(20 427 107)"/>
+  <polygon points="30,300 40,285 50,300" fill="none" stroke="#38BDF8" stroke-width="1" opacity="0.3"/>
+  <circle cx="460" cy="350" r="8" fill="none" stroke="#818CF8" stroke-width="1" opacity="0.25"/>
+</svg>

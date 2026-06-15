@@ -1,0 +1,10 @@
+# 部署密钥（绝不入仓）
+.ssh-key
+*.pem
+*.key
+authorized_keys
+
+# 本地临时文件
+*.bak
+*.log
+.DS_Store

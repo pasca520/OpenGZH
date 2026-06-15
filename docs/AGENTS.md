@@ -4,7 +4,7 @@
 
 ## 项目定位
 
-Rico MD 是一个面向微信公众号排版的纯前端 Markdown 编辑器。
+OpenGZH 是一个面向微信公众号排版的纯前端 Markdown 编辑器。
 
 - 无构建流程，基于静态页面 + ES Modules
 - 入口页：`index.html`

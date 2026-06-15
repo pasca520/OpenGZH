@@ -1,0 +1,208 @@
+{
+  "source": "undraw.co",
+  "totalFiles": 40,
+  "categories": {
+    "tech": {
+      "label": "Technology",
+      "count": 8,
+      "files": [
+        {
+          "file": "tech-ai-data.svg",
+          "size": 13692
+        },
+        {
+          "file": "tech-audio.svg",
+          "size": 4629
+        },
+        {
+          "file": "tech-build-mode.svg",
+          "size": 14919
+        },
+        {
+          "file": "tech-click.svg",
+          "size": 2814
+        },
+        {
+          "file": "tech-delete.svg",
+          "size": 5587
+        },
+        {
+          "file": "tech-markdown.svg",
+          "size": 5362
+        },
+        {
+          "file": "tech-setup-wizard.svg",
+          "size": 8089
+        },
+        {
+          "file": "tech-web-developer.svg",
+          "size": 7781
+        }
+      ]
+    },
+    "business": {
+      "label": "Business",
+      "count": 12,
+      "files": [
+        {
+          "file": "biz-budget-adj.svg",
+          "size": 8971
+        },
+        {
+          "file": "biz-budget.svg",
+          "size": 12650
+        },
+        {
+          "file": "biz-charts.svg",
+          "size": 3743
+        },
+        {
+          "file": "biz-contract.svg",
+          "size": 5205
+        },
+        {
+          "file": "biz-digital-sig.svg",
+          "size": 4668
+        },
+        {
+          "file": "biz-meeting.svg",
+          "size": 10865
+        },
+        {
+          "file": "biz-order.svg",
+          "size": 5174
+        },
+        {
+          "file": "biz-payment.svg",
+          "size": 9422
+        },
+        {
+          "file": "biz-plan.svg",
+          "size": 6545
+        },
+        {
+          "file": "biz-reviews.svg",
+          "size": 12303
+        },
+        {
+          "file": "biz-split-testing.svg",
+          "size": 5690
+        },
+        {
+          "file": "biz-team.svg",
+          "size": 13270
+        }
+      ]
+    },
+    "creative": {
+      "label": "Creative",
+      "count": 3,
+      "files": [
+        {
+          "file": "creative-content-team.svg",
+          "size": 11559
+        },
+        {
+          "file": "creative-design.svg",
+          "size": 12773
+        },
+        {
+          "file": "creative-fill.svg",
+          "size": 6338
+        }
+      ]
+    },
+    "communication": {
+      "label": "Communication",
+      "count": 4,
+      "files": [
+        {
+          "file": "comm-comment.svg",
+          "size": 4381
+        },
+        {
+          "file": "comm-news.svg",
+          "size": 14173
+        },
+        {
+          "file": "comm-share.svg",
+          "size": 9287
+        },
+        {
+          "file": "comm-text.svg",
+          "size": 16706
+        }
+      ]
+    },
+    "education": {
+      "label": "Education",
+      "count": 2,
+      "files": [
+        {
+          "file": "edu-book.svg",
+          "size": 13851
+        },
+        {
+          "file": "edu-road.svg",
+          "size": 6335
+        }
+      ]
+    },
+    "nature": {
+      "label": "Nature",
+      "count": 6,
+      "files": [
+        {
+          "file": "nature-adventure.svg",
+          "size": 15481
+        },
+        {
+          "file": "nature-airplane.svg",
+          "size": 5915
+        },
+        {
+          "file": "nature-exploring.svg",
+          "size": 9783
+        },
+        {
+          "file": "nature-finding-way.svg",
+          "size": 5764
+        },
+        {
+          "file": "nature-travel.svg",
+          "size": 5458
+        },
+        {
+          "file": "nature-walking.svg",
+          "size": 6697
+        }
+      ]
+    },
+    "other": {
+      "label": "Other",
+      "count": 5,
+      "files": [
+        {
+          "file": "misc-gift.svg",
+          "size": 5666
+        },
+        {
+          "file": "misc-goal.svg",
+          "size": 14101
+        },
+        {
+          "file": "misc-join.svg",
+          "size": 5084
+        },
+        {
+          "file": "misc-location.svg",
+          "size": 7358
+        },
+        {
+          "file": "misc-party.svg",
+          "size": 11315
+        }
+      ]
+    }
+  }
+}

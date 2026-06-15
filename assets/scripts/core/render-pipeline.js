@@ -49,6 +49,7 @@ function applyInlineStyles(html, styleConfig, codeTheme, displaySettings) {
   const style = styleConfig.styles;
   const fontScale = Number(displaySettings?.fontScale) || 1;
   const scaledStyle = fontScale !== 1 ? scaleStyleFontSizes(style, fontScale) : style;
+  const fontStyle = buildFontFamilyOverride(displaySettings?.fontFamily);
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
 
@@ -72,10 +73,11 @@ function applyInlineStyles(html, styleConfig, codeTheme, displaySettings) {
   applyStandalonePreStyles(doc, scaledStyle);
   applyCodeBlockStyles(doc, scaledStyle, codeTheme, fontScale);
   applyCodeHighlighting(doc, { codeTheme, styleConfig });
+  applyFontFamilyOverride(doc, fontStyle);
   applyImageDisplaySettings(doc, displaySettings);
 
   const container = doc.createElement('div');
-  container.setAttribute('style', scaledStyle.container);
+  container.setAttribute('style', mergeStyleText(scaledStyle.container, fontStyle?.container));
   container.innerHTML = doc.body.innerHTML;
   return container.outerHTML;
 }
@@ -179,15 +181,23 @@ function scaleFontSizeInDeclaration(declaration, scale) {
 }
 
 function applyImageDisplaySettings(doc, displaySettings) {
-  if (!displaySettings || displaySettings.imageStyleMode !== 'custom') return;
+  if (!displaySettings) return;
 
-  const marginTop = clampNumber(displaySettings.imageMarginTop, 0, 200, 24);
-  const marginBottom = clampNumber(displaySettings.imageMarginBottom, 0, 200, 32);
-  const radius = displaySettings.imageRadiusMode === 'circle'
+  const preset = getImageEffectPreset(displaySettings.imageEffect);
+  const isCustom = displaySettings.imageStyleMode === 'custom';
+  if (!preset && !isCustom) return;
+
+  const marginTop = preset?.marginTop ?? clampNumber(displaySettings.imageMarginTop, 0, 200, 24);
+  const marginBottom = preset?.marginBottom ?? clampNumber(displaySettings.imageMarginBottom, 0, 200, 32);
+  const radius = preset?.radius ?? (displaySettings.imageRadiusMode === 'circle'
     ? '50%'
-    : `${clampNumber(displaySettings.imageRadius, 0, 360, 8)}px`;
-  const shadow = buildShadowValue(displaySettings);
-  const overrideDecl = `margin-top: ${marginTop}px !important; margin-bottom: ${marginBottom}px !important; border-radius: ${radius} !important; box-shadow: ${shadow} !important;`;
+    : `${clampNumber(displaySettings.imageRadius, 0, 360, 8)}px`);
+  const shadow = preset?.shadow ?? buildShadowValue(displaySettings);
+  const border = preset?.border || 'none';
+  const filter = preset?.filter || 'none';
+  const background = preset?.background ? `background: ${preset.background} !important;` : '';
+  const padding = preset?.padding ? `padding: ${preset.padding} !important;` : '';
+  const overrideDecl = `margin-top: ${marginTop}px !important; margin-bottom: ${marginBottom}px !important; border-radius: ${radius} !important; box-shadow: ${shadow} !important; border: ${border} !important; filter: ${filter} !important; ${background} ${padding}`;
 
   doc.querySelectorAll('img').forEach((img) => {
     if (img.closest('.image-grid')) return;
@@ -200,9 +210,100 @@ function applyImageDisplaySettings(doc, displaySettings) {
       appendStyleText(wrapper, 'overflow: visible !important;');
       const img = wrapper.querySelector('img');
       if (img) {
-        appendStyleText(img, `border-radius: ${radius} !important; box-shadow: ${shadow} !important;`);
+        appendStyleText(img, `border-radius: ${radius} !important; box-shadow: ${shadow} !important; border: ${border} !important; filter: ${filter} !important; ${background} ${padding}`);
       }
     });
+  });
+}
+
+function getImageEffectPreset(effect) {
+  const presets = {
+    clean: {
+      marginTop: 24,
+      marginBottom: 28,
+      radius: '0',
+      shadow: 'none'
+    },
+    'soft-shadow': {
+      marginTop: 26,
+      marginBottom: 32,
+      radius: '10px',
+      shadow: '0 12px 30px rgba(26, 23, 20, 0.14)'
+    },
+    paper: {
+      marginTop: 28,
+      marginBottom: 34,
+      radius: '4px',
+      shadow: '0 1px 0 rgba(26, 23, 20, 0.08), 0 10px 24px rgba(26, 23, 20, 0.10)',
+      border: '1px solid rgba(26, 23, 20, 0.10)',
+      background: '#fffdf8',
+      padding: '6px'
+    },
+    polaroid: {
+      marginTop: 30,
+      marginBottom: 38,
+      radius: '3px',
+      shadow: '0 14px 28px rgba(26, 23, 20, 0.16)',
+      border: '10px solid #ffffff'
+    },
+    rounded: {
+      marginTop: 24,
+      marginBottom: 30,
+      radius: '18px',
+      shadow: '0 8px 20px rgba(26, 23, 20, 0.10)'
+    },
+    circle: {
+      marginTop: 26,
+      marginBottom: 32,
+      radius: '50%',
+      shadow: '0 10px 24px rgba(26, 23, 20, 0.12)'
+    },
+    bordered: {
+      marginTop: 24,
+      marginBottom: 30,
+      radius: '8px',
+      shadow: 'none',
+      border: '1px solid rgba(26, 23, 20, 0.16)'
+    },
+    bleed: {
+      marginTop: 20,
+      marginBottom: 26,
+      radius: '0',
+      shadow: 'none'
+    },
+    mono: {
+      marginTop: 24,
+      marginBottom: 30,
+      radius: '6px',
+      shadow: '0 8px 22px rgba(26, 23, 20, 0.10)',
+      filter: 'grayscale(100%) contrast(1.08)'
+    }
+  };
+
+  return presets[effect] || null;
+}
+
+function buildFontFamilyOverride(fontFamily) {
+  const families = {
+    sans: "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Noto Sans SC\", \"Helvetica Neue\", Arial, sans-serif",
+    serif: "Georgia, \"Noto Serif SC\", \"Songti SC\", STSong, serif",
+    mono: "\"SF Mono\", Menlo, Monaco, Consolas, \"Liberation Mono\", monospace"
+  };
+
+  const family = families[fontFamily];
+  if (!family) return null;
+
+  return {
+    container: `font-family: ${family} !important;`,
+    text: `font-family: ${family} !important;`
+  };
+}
+
+function applyFontFamilyOverride(doc, fontStyle) {
+  if (!fontStyle?.text) return;
+
+  doc.querySelectorAll('h1, h2, h3, h4, h5, h6, p, li, blockquote, table, th, td').forEach((element) => {
+    appendStyleText(element, fontStyle.text);
   });
 }
 

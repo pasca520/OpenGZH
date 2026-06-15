@@ -1,4 +1,4 @@
-# Rico MD — Claude Code 协作文档
+# OpenGZH — Claude Code 协作文档
 
 > 本文件由 Claude Code 自动读取。目的是让 AI 快速理解代码组织方式，避免改错东西。
 > 产品定义见 docs/PRD.md，设计规范见 docs/DESIGN.md。

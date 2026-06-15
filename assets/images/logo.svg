@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="OpenGZH">
+  <defs>
+    <linearGradient id="app-bg" x1="26" y1="18" x2="228" y2="236" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#153B35"/>
+      <stop offset="0.58" stop-color="#0F2928"/>
+      <stop offset="1" stop-color="#0A1D22"/>
+    </linearGradient>
+    <linearGradient id="paper" x1="68" y1="46" x2="190" y2="211" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFDF8"/>
+      <stop offset="1" stop-color="#EAF3EC"/>
+    </linearGradient>
+    <filter id="paper-shadow" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#041014" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+  <rect x="14" y="14" width="228" height="228" rx="50" fill="url(#app-bg)"/>
+  <path d="M48 184c24 25 58 37 102 31 30-4 50-17 62-37" fill="none" stroke="#20B486" stroke-width="8" stroke-linecap="round" opacity="0.78"/>
+  <g filter="url(#paper-shadow)">
+    <path d="M70 47h92l28 30v132H70z" fill="url(#paper)"/>
+    <path d="M162 47v32h28" fill="#DCECE4"/>
+    <path d="M162 47v32h28" fill="none" stroke="#BBD4C8" stroke-width="3" stroke-linejoin="round"/>
+  </g>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M94 104v58" stroke="#123C36" stroke-width="14"/>
+    <path d="M154 104v58" stroke="#123C36" stroke-width="14"/>
+    <path d="M94 104l18 28 16-28 18 28 18-28" stroke="#123C36" stroke-width="12"/>
+    <path d="M108 178h58" stroke="#FF7C00" stroke-width="8"/>
+  </g>
+  <g fill="#20B486">
+    <circle cx="83" cy="75" r="5"/>
+    <rect x="94" y="70" width="48" height="10" rx="5"/>
+  </g>
+</svg>

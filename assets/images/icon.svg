@@ -1,17 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
-  <!-- 背景圆角矩形 -->
-  <rect width="256" height="256" rx="48" fill="#0066FF"/>
-
-  <!-- M 符号（代表 Markdown） -->
-  <g fill="white">
-    <!-- 左侧 M -->
-    <path d="M40 80 L40 176 L60 176 L60 120 L88 160 L116 120 L116 176 L136 176 L136 80 L108 80 L88 112 L68 80 Z"/>
-
-    <!-- 右侧向下箭头（代表导出/转换） -->
-    <path d="M176 80 L176 140 L156 140 L196 180 L236 140 L216 140 L216 80 Z"/>
-  </g>
-
-  <!-- 细节：编辑线条 -->
-  <rect x="40" y="196" width="176" height="4" rx="2" fill="white" opacity="0.6"/>
-  <rect x="40" y="210" width="120" height="4" rx="2" fill="white" opacity="0.4"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="公众号 Markdown 编辑器">
+  <defs>
+    <linearGradient id="icon-bg" x1="30" y1="24" x2="226" y2="232" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#173E38"/>
+      <stop offset="1" stop-color="#0A1F25"/>
+    </linearGradient>
+    <linearGradient id="icon-sheet" x1="75" y1="48" x2="185" y2="210" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFDF8"/>
+      <stop offset="1" stop-color="#EDF6EF"/>
+    </linearGradient>
+  </defs>
+  <rect x="14" y="14" width="228" height="228" rx="50" fill="url(#icon-bg)"/>
+  <path d="M44 184c26 27 65 38 112 29 25-5 42-17 55-35" fill="none" stroke="#20B486" stroke-width="8" stroke-linecap="round"/>
+  <path d="M72 48h91l27 30v132H72z" fill="url(#icon-sheet)"/>
+  <path d="M163 48v31h27" fill="#DCECE4"/>
+  <path d="M163 48v31h27" fill="none" stroke="#BBD4C8" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M94 104v58M154 104v58M94 104l18 28 16-28 18 28 18-28" fill="none" stroke="#123C36" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M108 178h58" stroke="#FF7C00" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="84" cy="75" r="5" fill="#20B486"/>
+  <rect x="96" y="70" width="46" height="10" rx="5" fill="#20B486"/>
 </svg>

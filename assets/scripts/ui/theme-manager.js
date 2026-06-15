@@ -7,14 +7,15 @@ import { STYLES } from '../../styles/themes/index.js';
 
 /** 主题分类定义 */
 export const THEME_CATEGORIES = {
-  '简约主义': ['wechat-default', 'minimalism','wechat-tech', 'wechat-elegant', 'wechat-deepread','wechat-jonyive'],
-  '技术阅读': ['wechat-anthropic', 'wired', 'wechat-medium', 'wechat-apple', 'ai-coder'],
-  '传统质感': ['kami-paper', 'wechat-paperpress','latepost-depth', 'wechat-ft', 'wechat-nyt', 'magazine', ],
-  '设计灵感': ['kenya-emptiness', 'hische-editorial', 'ando-concrete', 'gaudi-organic', 'guardian', 'nikkei', 'lemonde'],
+  '日常公众号': ['wechat-cv8g', 'wechat-default', 'wechat-lingxi', 'wechat-elegant', 'minimalism'],
+  '资讯与深读': ['wechat-city-news', 'latepost-depth', 'wechat-deepread', 'wechat-ft', 'wechat-nyt', 'lemonde'],
+  '产品与技术': ['wechat-product-update', 'wechat-lab-report', 'wechat-anthropic', 'wechat-tech', 'wechat-apple', 'wechat-medium'],
+  '观点与札记': ['wechat-founder-note', 'wechat-paperpress', 'kami-paper', 'wechat-jonyive'],
+  '设计与审美': ['kenya-emptiness', 'hische-editorial', 'ando-concrete', 'gaudi-organic', 'guardian', 'nikkei'],
 };
 
 /** 推荐主题列表 */
-const RECOMMENDED = ['wechat-default', 'wechat-anthropic','minimalism', 'wechat-paperpress','kenya-emptiness','wechat-jonyive', 'kami-paper'];
+const RECOMMENDED = ['wechat-default', 'wechat-cv8g', 'wechat-product-update', 'wechat-lingxi', 'wechat-lab-report', 'wechat-anthropic', 'wechat-paperpress'];
 
 /**
  * 获取所有主题列表

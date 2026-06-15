@@ -1,19 +1,17 @@
-# Rico MD PRD
+# OpenGZH PRD
 
 > 版本: vCurrent  
 > 更新日期: 2026-05-12
 
 ## 1. 产品定位
 
-Rico MD 是一个面向微信公众号写作与排版的纯前端 Markdown 编辑器。
+OpenGZH 是一个面向微信公众号写作与排版的纯前端 Markdown 编辑器。
 
 核心目标有三件事:
 
 1. 让用户能高效完成长文写作与排版。
 2. 让预览结果尽量接近最终粘贴到公众号后台后的效果。
 3. 在不依赖后端和构建系统的前提下，保证本地可用、可保存、可导出。
-
-**项目来源**：从 [huasheng_editor](https://github.com/alchaincyf/huasheng_editor)（花生）Fork 后二次开发。
 
 ## 2. 当前核心能力
 
@@ -82,7 +80,7 @@ Rico MD 是一个面向微信公众号写作与排版的纯前端 Markdown 编�
 ### 文件结构
 
 ```
-rico-md/
+OpenGZH/
 ├── index.html                    # 主页面（编辑器）
 ├── about.html                    # 关于页面
 ├── start.sh                      # 一键启动脚本
@@ -238,7 +236,7 @@ rico-md/
 
 ### 第一轮：项目重构
 
-**目标**：将花生的单文件项目重构为模块化结构
+**目标**：将早期单文件实现重构为模块化结构
 
 - 从 `app.js`（3279 行）按职责拆分为 `core/`、`export/`、`storage/`、`ui/` 四个目录
 - 内联样式从 `index.html` 抽离为独立 CSS 文件（base / editor / panel）

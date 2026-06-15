@@ -11,3 +11,18 @@ dist/
 docs/
 docs/DESIGN
 docs/THEMES
+
+# Claude / 本地 agent
+.claude/
+.canvas-meta.json
+
+# 临时设计稿 / 预览
+redesign-v2.html
+scheme-*.html
+fix_preview.py
+
+# 部署密钥（绝不入仓）
+deploy/.ssh-key
+deploy/*.pem
+deploy/*.key
+deploy/authorized_keys

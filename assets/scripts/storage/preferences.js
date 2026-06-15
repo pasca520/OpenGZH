@@ -19,8 +19,10 @@ const DEFAULT_CODE_BLOCK_SETTINGS = {
 };
 
 const FONT_SCALE_VALUES = [0.75, 0.85, 1, 1.15, 1.3, 1.5];
+const FONT_FAMILY_VALUES = ['theme', 'sans', 'serif', 'mono'];
 const IMAGE_STYLE_MODES = ['theme', 'custom'];
 const IMAGE_RADIUS_MODES = ['px', 'circle'];
+const IMAGE_EFFECT_VALUES = ['theme', 'clean', 'soft-shadow', 'paper', 'polaroid', 'rounded', 'circle', 'bordered', 'bleed', 'mono'];
 
 const LEGACY_IMAGE_SPACING_MAP = {
   compact: { top: 12, bottom: 16 },
@@ -45,7 +47,9 @@ const LEGACY_IMAGE_SHADOW_MAP = {
 
 const DEFAULT_DISPLAY_SETTINGS = {
   fontScale: 1,
+  fontFamily: 'theme',
   imageStyleMode: 'theme',
+  imageEffect: 'theme',
   imageMarginTop: 24,
   imageMarginBottom: 32,
   imageRadius: 8,
@@ -126,10 +130,16 @@ function normalizeDisplaySettings(settings) {
 
   const fontScale = Number(settings.fontScale);
   const validScale = FONT_SCALE_VALUES.includes(fontScale) ? fontScale : DEFAULT_DISPLAY_SETTINGS.fontScale;
+  const fontFamily = FONT_FAMILY_VALUES.includes(settings.fontFamily)
+    ? settings.fontFamily
+    : DEFAULT_DISPLAY_SETTINGS.fontFamily;
   const hasLegacyImageSettings = ['imageSpacing', 'imageRadius', 'imageShadow'].some((key) => Object.prototype.hasOwnProperty.call(settings, key));
+  const imageEffect = IMAGE_EFFECT_VALUES.includes(settings.imageEffect)
+    ? settings.imageEffect
+    : DEFAULT_DISPLAY_SETTINGS.imageEffect;
   const imageStyleMode = IMAGE_STYLE_MODES.includes(settings.imageStyleMode)
     ? settings.imageStyleMode
-    : (hasLegacyImageSettings ? 'custom' : DEFAULT_DISPLAY_SETTINGS.imageStyleMode);
+    : (hasLegacyImageSettings || imageEffect !== 'theme' ? 'custom' : DEFAULT_DISPLAY_SETTINGS.imageStyleMode);
   const legacySpacing = LEGACY_IMAGE_SPACING_MAP[settings.imageSpacing] || LEGACY_IMAGE_SPACING_MAP.normal;
   const legacyShadow = LEGACY_IMAGE_SHADOW_MAP[settings.imageShadow] || LEGACY_IMAGE_SHADOW_MAP.none;
   const imageRadiusMode = IMAGE_RADIUS_MODES.includes(settings.imageRadiusMode)
@@ -138,7 +148,9 @@ function normalizeDisplaySettings(settings) {
 
   return {
     fontScale: validScale,
+    fontFamily,
     imageStyleMode,
+    imageEffect,
     imageMarginTop: clampNumber(
       settings.imageMarginTop,
       0,

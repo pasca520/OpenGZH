@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# Rico MD - 公众号 Markdown 编辑器 - 启动脚本
+# OpenGZH - 公众号 Markdown 编辑器 - 启动脚本
 
-echo "📝 Rico MD - 公众号 Markdown 编辑器"
+echo "OpenGZH - 公众号 Markdown 编辑器"
 echo "================================"
 echo ""
-echo "🌐 服务器地址: http://localhost:8080/"
-echo "📌 按 Ctrl+C 停止服务器"
+echo "服务器地址: http://localhost:8080/"
+echo "按 Ctrl+C 停止服务器"
 echo "================================"
 echo ""
 

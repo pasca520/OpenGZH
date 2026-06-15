@@ -245,8 +245,8 @@ const PREVIEW_TOKENS = [
 ];
 
 export const CODE_THEMES = {
-  'github-light': createCodeTheme({
-    name: 'GitHub Light',
+  'classic-light': createCodeTheme({
+    name: 'Classic Light',
     description: 'Classic light theme',
     bg: '#f6f8fa',
     headerBg: '#e8ecf0',
@@ -260,9 +260,9 @@ export const CODE_THEMES = {
     comment: '#6e7781',
     type: '#953800'
   }),
-  'github-dark': createCodeTheme({
-    name: 'GitHub Dark',
-    description: 'GitHub dark mode',
+  'classic-dark': createCodeTheme({
+    name: 'Classic Dark',
+    description: 'Classic dark theme',
     bg: '#0d1117',
     headerBg: '#010409',
     textColor: '#c9d1d9',

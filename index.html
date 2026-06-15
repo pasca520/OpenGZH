@@ -3,15 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Rico MD - 公众号 Markdown 编辑器</title>
-  <meta name="description" content="Rico MD 是一个面向微信公众号写作的 Markdown 编辑器，支持实时预览、代码块主题、图片粘贴和富文本复制。">
-  <meta name="keywords" content="公众号编辑器,Markdown编辑器,微信排版,Markdown转公众号,富文本复制">
-  <meta name="author" content="Rico">
+  <title>OpenGZH - 公众号 Markdown 编辑器</title>
+  <meta name="description" content="OpenGZH 是一个面向微信公众号写作的 Markdown 编辑器，支持实时预览、代码块主题、图片粘贴和富文本复制。">
+  <meta name="keywords" content="公众号编辑器,Markdown编辑器,微信排版,Markdown转公众号,富文本复制,OpenGZH">
+  <meta name="author" content="OpenGZH">
 
-  <link rel="icon" type="image/png" href="assets/images/favicon.png">
+  <link rel="icon" type="image/svg+xml" href="assets/images/logo.svg">
   <link rel="stylesheet" href="assets/styles/base.css">
   <link rel="stylesheet" href="assets/styles/editor.css">
   <link rel="stylesheet" href="assets/styles/panel.css">
+  <link rel="stylesheet" href="assets/styles/cover.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.25/dist/katex.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/markdown-it-texmath@1.0.0/css/texmath.min.css">
 
@@ -20,12 +21,8 @@
   <script src="https://cdn.jsdelivr.net/npm/markdown-it-texmath@1.0.0/texmath.min.js"></script>
   <script>
     window.MathJax = {
-      startup: {
-        typeset: false
-      },
-      svg: {
-        fontCache: 'none'
-      }
+      startup: { typeset: false },
+      svg: { fontCache: 'none' }
     };
   </script>
   <script id="mathjax-script" defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg-full.js"></script>
@@ -34,132 +31,337 @@
   <script src="https://cdn.jsdelivr.net/npm/vue@3.4.15/dist/vue.global.prod.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@100..900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;500;600;700&family=LXGW+WenKai:wght@400;700&family=ZCOOL+XiaoWei&family=ZCOOL+KuaiLe&family=Ma+Shan+Zheng&display=swap" rel="stylesheet">
 </head>
 <body>
   <div id="app">
+    <!-- ═══ Header ═══ -->
     <header class="header">
       <div class="header-left">
-        <button class="sidebar-toggle" @click="sidebarOpen = !sidebarOpen" title="文档管理">
-          <svg class="lucide lucide-panel-left-open" style="width:22px;height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M9 3v18"></path><path d="m14 9 3 3-3 3"></path></svg>
-        </button>
         <div class="logo">
-          <img src="/assets/images/logo.png" alt="">
-          <span>Rico MD</span>
+          <img src="assets/images/logo.svg" alt="">
+          <span><span style="color:var(--color-accent);font-weight:700;">O</span>penGZH</span>
         </div>
       </div>
+
+      <div class="header-center">
+        <div class="header-tabs">
+          <button class="header-tab" :class="{ active: activeTab === 'cover' }" @click="activeTab = 'cover'">
+            <svg class="lucide lucide-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+            封面图
+          </button>
+          <button class="header-tab" :class="{ active: activeTab === 'editor' }" @click="activeTab = 'editor'">
+            <svg class="lucide lucide-file-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+            编辑器
+          </button>
+        </div>
+      </div>
+
       <div class="header-right">
-        <nav class="header-nav">
-          <button class="header-nav-btn" :class="{ active: activePanel === 'theme' }" @click="togglePanel('theme')">
-
-            <svg class="lucide lucide-palette"  xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-palette-icon lucide-palette"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/></svg>
-
-            主题
-          </button>
-          <button class="header-nav-btn" :class="{ active: activePanel === 'code' }" @click="togglePanel('code')">
-            <svg class="lucide lucide-code-xml" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 16 4-4-4-4"></path><path d="m6 8-4 4 4 4"></path><path d="m14.5 4-5 16"></path></svg>
-            代码
-          </button>
-          <button class="header-nav-btn" :class="{ active: activePanel === 'settings' }" @click="togglePanel('settings')">
-            <svg class="lucide lucide-settings-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7h-9"></path><path d="M14 17H5"></path><circle cx="17" cy="17" r="3"></circle><circle cx="7" cy="7" r="3"></circle></svg>
-            设置
-          </button>
-          <a class="header-nav-btn" href="about.html" title="关于">
-            <svg class="lucide lucide-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
-            关于
-          </a>
-        </nav>
-        <span class="header-divider"></span>
-        <a href="https://github.com/ricocc/rico-md" target="_blank" rel="noopener noreferrer" class="github-link" title="查看源码">
-          <svg class=" lucide-github" fill="var(--color-secondary)" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="4734" width="20" height="20"><path d="M512 42.666667A464.64 464.64 0 0 0 42.666667 502.186667 460.373333 460.373333 0 0 0 363.52 938.666667c23.466667 4.266667 32-9.813333 32-22.186667v-78.08c-130.56 27.733333-158.293333-61.44-158.293333-61.44a122.026667 122.026667 0 0 0-52.053334-67.413333c-42.666667-28.16 3.413333-27.733333 3.413334-27.733334a98.56 98.56 0 0 1 71.68 47.36 101.12 101.12 0 0 0 136.533333 37.973334 99.413333 99.413333 0 0 1 29.866667-61.44c-104.106667-11.52-213.333333-50.773333-213.333334-226.986667a177.066667 177.066667 0 0 1 47.36-124.16 161.28 161.28 0 0 1 4.693334-121.173333s39.68-12.373333 128 46.933333a455.68 455.68 0 0 1 234.666666 0c89.6-59.306667 128-46.933333 128-46.933333a161.28 161.28 0 0 1 4.693334 121.173333A177.066667 177.066667 0 0 1 810.666667 477.866667c0 176.64-110.08 215.466667-213.333334 226.986666a106.666667 106.666667 0 0 1 32 85.333334v125.866666c0 14.933333 8.533333 26.88 32 22.186667A460.8 460.8 0 0 0 981.333333 502.186667 464.64 464.64 0 0 0 512 42.666667" p-id="4735"></path></svg>
-        </a>
       </div>
     </header>
 
-    <div class="main-area" :class="{ 'has-right-panel': activePanel === 'theme' || activePanel === 'code' || activePanel === 'misc' }">
-      <transition name="sidebar">
-        <aside v-if="sidebarOpen" class="sidebar">
-          <div class="sidebar-section">
-            <button class="sidebar-action-btn primary" @click="createNewDocument('', '')">
-              <svg class="lucide lucide-file-plus-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path><path d="M12 18v-6"></path><path d="M9 15h6"></path></svg>
-              新增文档
-            </button>
+    <!-- ═══ Main Area ═══ -->
+    <div class="main-area">
+
+      <!-- ═══ Cover Tab ═══ -->
+      <div class="cover-layout" v-show="activeTab === 'cover'">
+        <!-- Left: Template Gallery -->
+        <aside class="cover-sidebar-left">
+          <div class="cover-sidebar-header">
+            <div class="cover-sidebar-title">模板 Templates</div>
+          </div>
+          <div class="cover-template-scroll">
+            <template v-for="cat in coverCategories" :key="cat.id">
+              <div class="cover-category-label">{{ cat.label }}</div>
+              <div class="cover-template-grid">
+                <div
+                  v-for="tpl in getCoverTemplatesByCategory(cat.id)"
+                  :key="tpl.id"
+                  class="cover-template-card"
+                  :class="{ active: coverTemplateId === tpl.id }"
+                  @click="selectCoverTemplate(tpl.id)"
+                >
+                  <div class="cover-template-thumb" v-html="renderCoverThumb(tpl.id)"></div>
+                  <div class="cover-template-name">{{ tpl.name }}</div>
+                  <div class="cover-template-info" v-if="getTemplateMeta(tpl.id)">
+                    <div class="cover-template-scenario">{{ getTemplateMeta(tpl.id).scenario }}</div>
+                    <div class="cover-template-tags">
+                      <span class="cover-template-tag" v-for="tag in getTemplateMeta(tpl.id).styleTags" :key="tag">{{ tag }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </aside>
+
+        <!-- Center: Preview + Toolbar -->
+        <div class="cover-center">
+          <!-- Top Toolbar -->
+          <div class="cover-toolbar">
+            <div class="cover-toolbar-left">
+              <!-- Undo / Redo / Reset -->
+              <button class="cover-tool-btn" title="撤销" @click="coverUndo" :disabled="coverUndoStack.length === 0">
+                <svg class="lucide lucide-undo-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>
+              </button>
+              <button class="cover-tool-btn" title="重做" @click="coverRedo" :disabled="coverRedoStack.length === 0">
+                <svg class="lucide lucide-redo-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13"/></svg>
+              </button>
+              <button class="cover-tool-btn" title="重置" @click="coverReset">
+                <svg class="lucide lucide-rotate-ccw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+              </button>
+
+              <div class="cover-tool-separator"></div>
+
+              <!-- Layer order -->
+              <button class="cover-layer-btn" @click="toggleCoverLayerOrder" :title="coverLayerOrder === 'text-top' ? '文字在上' : '图片在上'">
+                <svg class="lucide lucide-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>
+                {{ coverLayerOrder === 'text-top' ? '文字' : '图片' }}
+              </button>
+
+              <div class="cover-tool-separator"></div>
+
+              <!-- Opacity -->
+              <div class="cover-opacity-group">
+                <span class="cover-opacity-label">透明度</span>
+                <input type="range" class="cover-opacity-slider" min="10" max="100" :value="coverOpacity" @input="coverOpacity = Number($event.target.value)">
+                <span class="cover-opacity-value">{{ coverOpacity }}%</span>
+              </div>
+            </div>
+
+            <div class="cover-toolbar-right">
+              <!-- Export -->
+              <button class="cover-export-btn" @click="exportCoverPng">
+                <svg class="lucide lucide-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                导出 PNG
+              </button>
+            </div>
           </div>
 
-          <div class="sidebar-section">
-            <div class="sidebar-section-title">文档列表</div>
-            <input
-              v-model="documentSearch"
-              class="sidebar-search-input"
-              type="text"
-              placeholder="搜索文档"
-            >
-            <div class="sidebar-doc-list">
-              <div
-                v-for="doc in filteredDocuments"
-                :key="doc.id"
-                class="sidebar-doc-item"
-                :class="{ active: activeDocumentId === doc.id }"
-                @click="switchDocument(doc.id)"
-              >
-                <svg class="lucide lucide-file-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path><path d="M16 13H8"></path><path d="M16 17H8"></path><path d="M10 9H8"></path></svg>
-                <div class="sidebar-doc-meta">
-                  <div class="sidebar-doc-title-row">
-                    <span class="sidebar-doc-title">{{ getDocumentDisplayTitle(doc) }}</span>
-                    <span v-if="doc.dirty" class="sidebar-doc-dirty" title="未保存"></span>
+          <!-- Preview Area -->
+          <div class="cover-preview-area">
+            <div class="cover-preview-frame" :style="coverPreviewStyle">
+              <div v-html="coverSvgOutput"></div>
+            </div>
+          </div>
+
+          <!-- Bottom Area (reserved) -->
+          <div class="cover-bottom-area"></div>
+        </div>
+
+        <!-- Right: Content Editor -->
+        <aside class="cover-sidebar-right">
+          <div class="cover-sidebar-header">
+            <div class="cover-sidebar-title">内容 Content</div>
+          </div>
+          <div class="cover-editor-scroll">
+            <!-- Content Fields -->
+            <div class="cover-editor-section">
+              <div class="cover-field-group" v-if="coverTemplateSupports('tag')">
+                <label class="cover-field-label">标签 Tag</label>
+                <input type="text" class="cover-field-input" v-model="coverContent.tag" placeholder="输入标签...">
+              </div>
+
+              <div class="cover-field-group" v-if="coverTemplateSupports('title')">
+                <label class="cover-field-label">标题 Title</label>
+                <textarea class="cover-field-input" v-model="coverContent.title" placeholder="输入标题..." rows="2"></textarea>
+              </div>
+
+              <div class="cover-field-group" v-if="coverTemplateSupports('subtitle')">
+                <label class="cover-field-label">副标题 Subtitle</label>
+                <textarea class="cover-field-input" v-model="coverContent.subtitle" placeholder="输入副标题..." rows="2"></textarea>
+              </div>
+
+              <div class="cover-field-group" v-if="coverTemplateSupports('author')">
+                <label class="cover-field-label">作者 Author</label>
+                <input type="text" class="cover-field-input" v-model="coverContent.author" placeholder="输入作者名...">
+              </div>
+            </div>
+
+            <!-- Typography Controls -->
+            <div class="cover-editor-section">
+              <div class="cover-typo-section-title">排版 Typography</div>
+
+              <!-- Title Font Family -->
+              <div class="cover-typo-row" v-if="coverTemplateSupports('title')">
+                <div class="cover-typo-row-header">
+                  <span class="cover-typo-label">标题字体</span>
+                </div>
+                <select class="cover-font-select" v-model="coverTypography.titleFontFamily">
+                  <option v-for="font in coverFontOptions" :key="font.value" :value="font.value">{{ font.label }}</option>
+                </select>
+              </div>
+
+              <div class="cover-typo-row" v-if="coverTemplateSupports('title')">
+                <div class="cover-typo-row-header">
+                  <span class="cover-typo-label">标题字号</span>
+                  <span class="cover-typo-value">{{ coverTypography.titleSize }}px</span>
+                </div>
+                <div class="cover-typo-slider-row">
+                  <input type="range" min="20" max="80" :value="coverTypography.titleSize" @input="updateCoverTypo('titleSize', $event.target.value)">
+                  <input type="number" class="cover-typo-number-input" min="20" max="80" :value="coverTypography.titleSize" @input="updateCoverTypo('titleSize', $event.target.value)">
+                </div>
+              </div>
+
+              <div class="cover-typo-row" v-if="coverTemplateSupports('title')">
+                <div class="cover-typo-row-header">
+                  <span class="cover-typo-label">标题行高</span>
+                  <span class="cover-typo-value">{{ coverTypography.titleLineHeight }}</span>
+                </div>
+                <div class="cover-typo-slider-row">
+                  <input type="range" min="1" max="2.5" step="0.1" :value="coverTypography.titleLineHeight" @input="updateCoverTypo('titleLineHeight', $event.target.value)">
+                  <input type="number" class="cover-typo-number-input" min="1" max="2.5" step="0.1" :value="coverTypography.titleLineHeight" @input="updateCoverTypo('titleLineHeight', $event.target.value)">
+                </div>
+              </div>
+
+              <!-- Subtitle Font Family -->
+              <div class="cover-typo-row" v-if="coverTemplateSupports('subtitle')">
+                <div class="cover-typo-row-header">
+                  <span class="cover-typo-label">副标题字体</span>
+                </div>
+                <select class="cover-font-select" v-model="coverTypography.subtitleFontFamily">
+                  <option v-for="font in coverFontOptions" :key="font.value" :value="font.value">{{ font.label }}</option>
+                </select>
+              </div>
+
+              <div class="cover-typo-row" v-if="coverTemplateSupports('subtitle')">
+                <div class="cover-typo-row-header">
+                  <span class="cover-typo-label">副标题字号</span>
+                  <span class="cover-typo-value">{{ coverTypography.subtitleSize }}px</span>
+                </div>
+                <div class="cover-typo-slider-row">
+                  <input type="range" min="12" max="40" :value="coverTypography.subtitleSize" @input="updateCoverTypo('subtitleSize', $event.target.value)">
+                  <input type="number" class="cover-typo-number-input" min="12" max="40" :value="coverTypography.subtitleSize" @input="updateCoverTypo('subtitleSize', $event.target.value)">
+                </div>
+              </div>
+
+              <div class="cover-typo-row" v-if="coverTemplateSupports('subtitle')">
+                <div class="cover-typo-row-header">
+                  <span class="cover-typo-label">副标题行高</span>
+                  <span class="cover-typo-value">{{ coverTypography.subtitleLineHeight }}</span>
+                </div>
+                <div class="cover-typo-slider-row">
+                  <input type="range" min="1" max="2.5" step="0.1" :value="coverTypography.subtitleLineHeight" @input="updateCoverTypo('subtitleLineHeight', $event.target.value)">
+                  <input type="number" class="cover-typo-number-input" min="1" max="2.5" step="0.1" :value="coverTypography.subtitleLineHeight" @input="updateCoverTypo('subtitleLineHeight', $event.target.value)">
+                </div>
+              </div>
+
+              <div class="cover-typo-row" v-if="coverTemplateSupports('title')">
+                <div class="cover-typo-row-header">
+                  <span class="cover-typo-label">字间距</span>
+                  <span class="cover-typo-value">{{ coverTypography.titleLetterSpacing }}px</span>
+                </div>
+                <div class="cover-typo-slider-row">
+                  <input type="range" min="-5" max="20" :value="coverTypography.titleLetterSpacing" @input="updateCoverTypo('titleLetterSpacing', $event.target.value)">
+                  <input type="number" class="cover-typo-number-input" min="-5" max="20" :value="coverTypography.titleLetterSpacing" @input="updateCoverTypo('titleLetterSpacing', $event.target.value)">
+                </div>
+              </div>
+
+              <!-- Text Alignment -->
+              <div class="cover-typo-row">
+                <span class="cover-typo-label">对齐方式</span>
+                <div class="cover-align-group">
+                  <button class="cover-align-btn" :class="{ active: coverTypography.textAlign === 'left' }" @click="coverTypography.textAlign = 'left'" title="左对齐">
+                    <svg class="lucide lucide-align-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" x2="3" y1="6" y2="6"/><line x1="15" x2="3" y1="12" y2="12"/><line x1="17" x2="3" y1="18" y2="18"/></svg>
+                  </button>
+                  <button class="cover-align-btn" :class="{ active: coverTypography.textAlign === 'center' }" @click="coverTypography.textAlign = 'center'" title="居中">
+                    <svg class="lucide lucide-align-center" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" x2="3" y1="6" y2="6"/><line x1="17" x2="7" y1="12" y2="12"/><line x1="19" x2="5" y1="18" y2="18"/></svg>
+                  </button>
+                  <button class="cover-align-btn" :class="{ active: coverTypography.textAlign === 'right' }" @click="coverTypography.textAlign = 'right'" title="右对齐">
+                    <svg class="lucide lucide-align-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" x2="3" y1="6" y2="6"/><line x1="21" x2="9" y1="12" y2="12"/><line x1="21" x2="7" y1="18" y2="18"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Illustration Controls -->
+            <div class="cover-editor-section" v-if="coverTemplateSupports('illustration')">
+              <div class="cover-typo-section-title">插画 Illustration</div>
+
+              <!-- Category tabs -->
+              <div class="cover-illust-categories">
+                <button
+                  v-for="cat in illustrationCategories"
+                  :key="cat.id"
+                  class="cover-illust-cat-btn"
+                  :class="{ active: coverIllustCategory === cat.id }"
+                  @click="coverIllustCategory = cat.id"
+                >{{ cat.name }}</button>
+              </div>
+
+              <!-- Illustration grid -->
+              <div class="cover-illust-grid" v-if="filteredIllustrations.length > 0">
+                <button
+                  v-for="illust in filteredIllustrations"
+                  :key="illust.id"
+                  class="cover-illust-item"
+                  :class="{ active: coverIllustrationId === illust.id }"
+                  @click="selectIllustration(illust.id)"
+                  :title="illust.name"
+                >
+                  <img :src="illust.path" :alt="illust.name" class="cover-illust-thumb" loading="lazy">
+                  <span class="cover-illust-name">{{ illust.name }}</span>
+                </button>
+              </div>
+              <div class="cover-illust-empty" v-else>
+                当前分类暂无适配插画，请切换其他分类
+              </div>
+
+              <!-- Clear button -->
+              <button class="cover-illust-clear-btn" v-if="coverIllustrationId" @click="clearIllustration()">
+                清除插画
+              </button>
+
+              <!-- Color customization -->
+              <div class="cover-illust-color" v-if="coverIllustrationId">
+                <div class="cover-typo-row">
+                  <div class="cover-typo-row-header">
+                    <span class="cover-typo-label">插画色调</span>
+                    <span class="cover-typo-value">{{ coverIllustrationColor }}</span>
                   </div>
-                  <span class="sidebar-doc-time">保存于 {{ formatDateTime(doc.updatedAt) }}</span>
-                  <div class="sidebar-doc-actions">
-                    <button class="sidebar-icon-btn" @click.stop="duplicateDocument(doc.id)" title="复制文档">
-                      <svg class="lucide lucide-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                      </svg>
-                    </button>
-                    <button class="sidebar-icon-btn danger" @click.stop="showDeleteConfirm(doc)" title="删除文档">
-                      <svg class="lucide lucide-trash-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M3 6h18"></path>
-                        <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"></path>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path>
-                        <path d="M10 11v6"></path>
-                        <path d="M14 11v6"></path>
-                      </svg>
-                    </button>
+                  <div class="cover-illust-color-row">
+                    <input type="color" :value="coverIllustrationColor" @input="updateIllustrationColor($event.target.value)" class="cover-color-picker">
+                    <div class="cover-color-presets">
+                      <button
+                        v-for="color in illustrationColorPresets"
+                        :key="color"
+                        class="cover-color-preset"
+                        :style="{ background: color }"
+                        :class="{ active: coverIllustrationColor === color }"
+                        @click="updateIllustrationColor(color)"
+                      ></button>
+                    </div>
                   </div>
+                </div>
+              </div>
+
+              <!-- External marketplace links -->
+              <div class="cover-illust-markets">
+                <div class="cover-illust-markets-title">更多插画资源</div>
+                <div class="cover-illust-market-list">
+                  <a v-for="market in illustrationMarkets" :key="market.name" :href="market.url" target="_blank" class="cover-illust-market-link">
+                    <span class="cover-illust-market-name">{{ market.name }}</span>
+                    <span class="cover-illust-market-desc">{{ market.description }}</span>
+                  </a>
                 </div>
               </div>
             </div>
           </div>
-
-          <div class="sidebar-section">
-            <div class="sidebar-section-title">操作</div>
-            <button class="sidebar-action-btn" @click="$refs.mdUploadSidebar.click()">
-              <svg class="lucide lucide-file-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path><path d="m12 18 3-3"></path><path d="m12 18-3-3"></path><path d="M12 12v6"></path></svg>
-              导入 .md
-            </button>
-            <input ref="mdUploadSidebar" type="file" accept=".md,.markdown" @change="handleFileUpload" style="display: none;">
-
-            <button class="sidebar-action-btn" @click="exportMarkdown">
-              <svg class="lucide lucide-file-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path><path d="m12 12 3 3"></path><path d="m12 12-3 3"></path><path d="M12 18v-6"></path></svg>
-              导出 Markdown
-            </button>
-            <button class="sidebar-action-btn" @click="exportHTML">
-              <svg class="lucide lucide-code-xml" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 16 4-4-4-4"></path><path d="m6 8-4 4 4 4"></path><path d="m14.5 4-5 16"></path></svg>
-              导出 HTML
-            </button>
-          </div>
         </aside>
-      </transition>
+      </div>
+
+      <!-- ═══ Editor Tab ═══ -->
+      <template v-if="activeTab === 'editor'">
 
       <div class="editor-panel" :style="editorWidth ? { flex: 'none', width: editorWidth + '%' } : {}">
         <div class="editor-composer">
           <div class="editor-header">
-          <input
-            v-model="currentDocumentTitle"
-            class="document-title-input"
-            type="text"
-            placeholder="输入文档标题"
-          >
+          <button class="copy-btn export-btn" @click="$refs.mdUpload.click()">
+            <svg class="lucide lucide-file-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path><path d="m12 18 3-3"></path><path d="m12 18-3-3"></path><path d="M12 12v6"></path></svg>
+            导入 MD
+          </button>
+          <input ref="mdUpload" type="file" accept=".md,.markdown" @change="handleFileUpload" style="display: none;">
           <div class="editor-toolbar">
             <button class="editor-tool-btn" title="H1" @mousedown.prevent @click="insertHeading(1)"><svg class="lucide lucide-heading-1" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h8"></path><path d="M4 18V6"></path><path d="M12 18V6"></path><path d="m17 12 3-2v8"></path></svg></button>
             <button class="editor-tool-btn" title="H2" @mousedown.prevent @click="insertHeading(2)"><svg class="lucide lucide-heading-2" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h8"></path><path d="M4 18V6"></path><path d="M12 18V6"></path><path d="M21 18h-4c0-4 4-3 4-6 0-1.5-2-2.5-4-1"></path></svg></button>
@@ -167,18 +369,16 @@
             <button class="editor-tool-btn" title="加粗" @mousedown.prevent @click="wrapSelection('**', '**')"><svg class="lucide lucide-bold" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8"></path></svg></button>
             <button class="editor-tool-btn" title="斜体" @mousedown.prevent @click="wrapSelection('*', '*')"><svg class="lucide lucide-italic" viewBox="0 0 24 24" aria-hidden="true"><line x1="19" x2="10" y1="4" y2="4"></line><line x1="14" x2="5" y1="20" y2="20"></line><line x1="15" x2="9" y1="4" y2="20"></line></svg></button>
             <button class="editor-tool-btn" title="下划线" @mousedown.prevent @click="insertUnderline"><svg class="lucide lucide-underline" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4v6a6 6 0 0 0 12 0V4"></path><line x1="4" x2="20" y1="20" y2="20"></line></svg></button>
-            <button class="editor-tool-btn" title="行内代码" @mousedown.prevent @click="insertInlineCode"><svg class="lucide lucide-code" viewBox="0 0 24 24" aria-hidden="true"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg></button>
             <button class="editor-tool-btn" title="链接" @mousedown.prevent @click="insertLink"><svg class="lucide lucide-link" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg></button>
             <button class="editor-tool-btn" title="有序列表" @mousedown.prevent @click="insertOrderedList"><svg class="lucide lucide-list-ordered" viewBox="0 0 24 24" aria-hidden="true"><line x1="10" x2="21" y1="6" y2="6"></line><line x1="10" x2="21" y1="12" y2="12"></line><line x1="10" x2="21" y1="18" y2="18"></line><path d="M4 6h1v4"></path><path d="M4 10h2"></path><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"></path></svg></button>
             <button class="editor-tool-btn" title="无序列表" @mousedown.prevent @click="insertUnorderedList"><svg class="lucide lucide-list" viewBox="0 0 24 24" aria-hidden="true"><line x1="8" x2="21" y1="6" y2="6"></line><line x1="8" x2="21" y1="12" y2="12"></line><line x1="8" x2="21" y1="18" y2="18"></line><line x1="3" x2="3.01" y1="6" y2="6"></line><line x1="3" x2="3.01" y1="12" y2="12"></line><line x1="3" x2="3.01" y1="18" y2="18"></line></svg></button>
             <button class="editor-tool-btn" title="引用" @mousedown.prevent @click="insertQuote"><svg class="lucide lucide-quote" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"></path><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"></path></svg></button>
             <button class="editor-tool-btn" title="代码块" @mousedown.prevent @click="insertCodeBlock"><svg class="lucide lucide-file-code" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="M10 12.5 8 15l2 2.5"></path><path d="m14 12.5 2 2.5-2 2.5"></path></svg></button>
-            <button class="editor-tool-btn" title="图片语法" @mousedown.prevent @click="insertImageSyntax"><svg class="lucide lucide-image" viewBox="0 0 24 24" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path></svg></button>
             <button class="editor-tool-btn" title="上传图片" @mousedown.prevent @click="$refs.editorImageUpload.click()"><svg class="lucide lucide-image-up" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.3 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10l-3.1-3.1a2 2 0 0 0-2.814.014L6 21"></path><path d="m14 19.5 3-3 3 3"></path><path d="M17 22v-5.5"></path><circle cx="9" cy="9" r="2"></circle></svg></button>
             <button class="editor-tool-btn" title="表格" @mousedown.prevent @click="insertTable"><svg class="lucide lucide-table" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18"></path><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M3 9h18"></path><path d="M3 15h18"></path></svg></button>
           </div>
           <input ref="editorImageUpload" type="file" accept="image/*" @change="handleToolbarImageUpload" style="display:none;">
-        </div>
+          </div>
 
         <div class="markdown-input-container">
           <textarea
@@ -210,26 +410,211 @@
         <div class="preview-composer">
             <div class="preview-toolbar">
               <div class="preview-toolbar-left">
+                <!-- Template Picker (replaces old header 主题 button) -->
+                <div class="preview-picker-trigger" v-if="renderedContent">
+                  <button class="preview-picker-btn" :class="{ active: showTemplatePicker }" @click.stop="showTemplatePicker = !showTemplatePicker; showTypoPicker = false">
+                    <svg class="lucide lucide-palette" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/></svg>
+                    模板
+                    <svg class="lucide lucide-chevron-down chevron-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+                  </button>
+                  <!-- Template Dropdown -->
+                  <div class="preview-picker-dropdown template-dropdown" v-if="showTemplatePicker" @click.stop>
+                    <div class="template-dropdown-scroll">
+                      <template v-for="cat in categorizedThemes" :key="cat.category">
+                        <div class="theme-category-label">{{ cat.category }}</div>
+                        <div class="theme-grid-inline">
+                          <div
+                            v-for="theme in cat.themes"
+                            :key="theme.key"
+                            class="theme-card"
+                            :class="{ active: currentStyle === theme.key }"
+                            @click="selectTheme(theme.key)"
+                          >
+                            <span class="theme-card-name">{{ theme.name }}</span>
+                          </div>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Typography Picker -->
+                <div class="preview-picker-trigger" v-if="renderedContent">
+                  <button class="preview-picker-btn" :class="{ active: showTypoPicker }" @click.stop="showTypoPicker = !showTypoPicker; showTemplatePicker = false">
+                    <svg class="lucide lucide-type" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" x2="15" y1="20" y2="20"/><line x1="12" x2="12" y1="4" y2="20"/></svg>
+                    排版
+                    <svg class="lucide lucide-chevron-down chevron-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+                  </button>
+                  <!-- Typography Dropdown -->
+                  <div class="preview-picker-dropdown typo-dropdown" v-if="showTypoPicker" @click.stop>
+                    <div class="typo-dropdown-scroll">
+                      <!-- Font Scale -->
+                      <div class="misc-panel-section">
+                        <div class="code-panel-section-title">字号</div>
+                        <div class="misc-button-grid misc-button-grid-font">
+                          <button
+                            v-for="option in fontScaleOptions"
+                            :key="`font-scale-${option.value}`"
+                            class="segmented-option-btn"
+                            :class="{ active: displaySettings.fontScale === option.value }"
+                            @click="setFontScale(option.value)"
+                          >
+                            <span>{{ option.label }}</span>
+                            <small>{{ option.meta }}</small>
+                          </button>
+                        </div>
+                      </div>
+
+                      <!-- Font Family -->
+                      <div class="misc-panel-section">
+                        <div class="code-panel-section-title">字体</div>
+                        <div class="misc-button-grid misc-button-grid-family">
+                          <button
+                            v-for="option in fontFamilyOptions"
+                            :key="`font-family-${option.value}`"
+                            class="segmented-option-btn font-family-option"
+                            :class="{ active: displaySettings.fontFamily === option.value }"
+                            @click="setFontFamily(option.value)"
+                          >
+                            <span>{{ option.label }}</span>
+                            <small>{{ option.meta }}</small>
+                          </button>
+                        </div>
+                      </div>
+
+                      <!-- Code Block Theme -->
+                      <div class="misc-panel-section">
+                        <div class="code-panel-section-title">代码块样式</div>
+                        <div class="code-theme-grid code-theme-grid-inline">
+                          <button
+                            v-for="codeTheme in codeThemeList"
+                            :key="codeTheme.key"
+                            class="code-theme-card code-theme-card-compact"
+                            :class="{ active: currentCodeTheme === codeTheme.key }"
+                            @click="selectCodeTheme(codeTheme.key)"
+                          >
+                            <div
+                              class="code-theme-preview code-theme-preview-compact"
+                              :style="{ background: codeTheme.preview.bg, borderColor: codeTheme.preview.borderColor }"
+                            >
+                              <div class="code-theme-preview-topbar" :style="{ background: codeTheme.preview.headerBg }">
+                                <span class="code-theme-preview-dot dot-red"></span>
+                                <span class="code-theme-preview-dot dot-amber"></span>
+                                <span class="code-theme-preview-dot dot-green"></span>
+                              </div>
+                              <div class="code-theme-preview-code" :style="{ color: codeTheme.preview.textColor }">
+                                <div
+                                  v-for="(line, lineIndex) in codeTheme.preview.lines"
+                                  :key="`line-${codeTheme.key}-${lineIndex}`"
+                                  class="code-theme-preview-line"
+                                >
+                                  <span
+                                    v-for="(segment, segmentIndex) in line"
+                                    :key="`segment-${codeTheme.key}-${lineIndex}-${segmentIndex}`"
+                                    class="code-theme-preview-segment"
+                                    :style="{ color: segment.color }"
+                                  >{{ segment.text }}</span>
+                                </div>
+                              </div>
+                            </div>
+                            <span class="code-theme-name">{{ codeTheme.name }}</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <!-- Image Effects -->
+                      <div class="misc-panel-section">
+                        <div class="code-panel-section-title">图片效果</div>
+                        <div class="misc-setting-row">
+                          <div class="misc-setting-label">模式</div>
+                          <div class="misc-button-grid misc-button-grid-dual">
+                            <button
+                              v-for="option in imageStyleModeOptions"
+                              :key="`image-style-mode-${option.value}`"
+                              class="segmented-option-btn"
+                              :class="{ active: displaySettings.imageStyleMode === option.value }"
+                              @click="setImageStyleMode(option.value)"
+                            >
+                              <span>{{ option.label }}</span>
+                              <small>{{ option.meta }}</small>
+                            </button>
+                          </div>
+                        </div>
+                        <div class="misc-button-grid image-effect-grid">
+                          <button
+                            v-for="option in imageEffectOptions"
+                            :key="`image-effect-${option.value}`"
+                            class="segmented-option-btn image-effect-option"
+                            :class="{ active: displaySettings.imageEffect === option.value }"
+                            @click="setImageEffect(option.value)"
+                          >
+                            <span>{{ option.label }}</span>
+                            <small>{{ option.meta }}</small>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <div class="device-toggle">
                   <button class="device-toggle-btn" :class="{ active: previewMode === 'mobile' }" @click="previewMode = 'mobile'" title="手机预览">
                     <svg class="lucide lucide-smartphone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><path d="M12 18h.01"></path></svg>
-                  </button>
-                  <button class="device-toggle-btn" :class="{ active: previewMode === 'tablet' }" @click="previewMode = 'tablet'" title="iPad 预览">
-                    <svg class="lucide lucide-tablet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><path d="M12 18h.01"></path></svg>
                   </button>
                   <button class="device-toggle-btn" :class="{ active: previewMode === 'desktop' }" @click="previewMode = 'desktop'" title="桌面预览">
                     <svg class="lucide lucide-monitor" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"></rect><path d="M8 21h8"></path><path d="M12 17v4"></path></svg>
                   </button>
                 </div>
-                <button class="device-toggle-btn toc-toggle-btn" :class="{ active: tocVisible }" @click="toggleToc" title="内容目录">
-                  <svg class="lucide lucide-list-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 6H8"></path><path d="M21 12h-8"></path><path d="M21 18h-8"></path><path d="M3 6h1"></path><path d="M3 12h1"></path><path d="M3 18h1"></path></svg>
+
+                <!-- 手机型号选择器 -->
+                <div class="device-model-picker" v-if="previewMode === 'mobile'">
+                  <button class="device-model-trigger" @click.stop="showDevicePicker = !showDevicePicker">
+                    <span class="device-model-name">{{ selectedDeviceLabel }}</span>
+                    <svg class="lucide lucide-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+                  </button>
+                  <div class="device-model-dropdown" v-if="showDevicePicker">
+                    <template v-for="group in deviceGroups" :key="group.label">
+                      <div class="device-model-group-label">{{ group.label }}</div>
+                      <button
+                        v-for="device in group.devices"
+                        :key="device.key"
+                        class="device-model-option"
+                        :class="{ active: selectedDevice === device.key }"
+                        @click="selectDevice(device.key)"
+                      >
+                        <span class="device-model-option-name">{{ device.name }}</span>
+                        <span class="device-model-option-size">{{ device.width }}px</span>
+                      </button>
+                    </template>
+                  </div>
+                </div>
+
+                <!-- 深色/浅色模式切换 -->
+                <button class="preview-mode-toggle" :class="{ active: previewDarkMode }" @click="previewDarkMode = !previewDarkMode" :title="previewDarkMode ? '切换到浅色模式' : '切换到深色模式'">
+                  <svg v-if="!previewDarkMode" class="lucide lucide-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
+                  <svg v-else class="lucide lucide-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
                 </button>
               </div>
 
               <div class="copy-buttons">
-                <button class="copy-btn twitter-btn" :disabled="!renderedContent" @click="copyToTwitter" title="复制到 X">
-                  复制到 X
-                </button>
+                <!-- 更多导出下拉菜单 -->
+                <div class="export-dropdown" v-if="renderedContent">
+                  <button class="copy-btn export-btn" @click.stop="showExportMenu = !showExportMenu">
+                    <svg class="lucide lucide-more-horizontal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
+                    更多
+                    <svg class="lucide lucide-chevron-down chevron-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+                  </button>
+                  <div class="export-dropdown-menu" v-if="showExportMenu">
+                    <button class="export-dropdown-item" @click="exportMarkdown(); showExportMenu = false">
+                      <svg class="lucide lucide-file-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path><path d="m12 12 3 3"></path><path d="m12 12-3 3"></path><path d="M12 18v-6"></path></svg>
+                      导出 Markdown
+                    </button>
+                    <button class="export-dropdown-item" @click="exportHTML(); showExportMenu = false">
+                      <svg class="lucide lucide-code-xml" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 16 4-4-4-4"></path><path d="m6 8-4 4 4 4"></path><path d="m14.5 4-5 16"></path></svg>
+                      导出 HTML
+                    </button>
+                  </div>
+                </div>
                 <button class="copy-btn" :class="{ success: copySuccess }" :disabled="!renderedContent" @click="doCopy">
                   <svg class="lucide lucide-copy" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy-icon lucide-copy"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
                   {{ copySuccess ? '已复制' : '复制到公众号' }}
@@ -237,378 +622,21 @@
               </div>
             </div>
 
-            <div class="preview-content" :class="{ 'toc-open': tocVisible && renderedContent }">
+            <div class="preview-content" >
               <div v-if="!renderedContent" class="empty-state">
                 <svg class="lucide lucide-file-pen-line empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h-6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8l6 6v3"></path><path d="M14 2v6h6"></path><path d="M15 18.5 18.5 15"></path><path d="M18 14.5 20.5 17"></path><path d="M13 20l1.5-4.5"></path></svg>
                 <h3>开始编辑</h3>
                 <p>左侧输入 Markdown，右侧实时预览。</p>
               </div>
               <template v-else>
-                <div class="preview-container" :class="{ 'mobile-mode': previewMode === 'mobile', 'tablet-mode': previewMode === 'tablet' }" v-html="renderedContent"></div>
-                <aside v-if="tocVisible" class="preview-toc" aria-label="内容目录">
-                  <div class="preview-toc-title">目录</div>
-                  <div v-if="tocItems.length" class="preview-toc-list">
-                    <button
-                      v-for="item in tocItems"
-                      :key="item.id"
-                      class="preview-toc-item"
-                      :class="'level-' + item.level"
-                      @click="scrollToTocHeading(item.id)"
-                    >
-                      {{ item.text }}
-                    </button>
-                  </div>
-                  <p v-else class="preview-toc-empty">暂无 H1-H3 标题</p>
-                </aside>
+                <div class="preview-container" :class="{ 'mobile-mode': previewMode === 'mobile', 'dark-preview': previewDarkMode }" :style="previewMode === 'mobile' ? { maxWidth: mobilePreviewWidth + 'px' } : {}" v-html="renderedContent"></div>
               </template>
             </div>
         </div>
       </div>
 
-      <div class="resize-handle" data-handle="preview-right" v-if="activePanel === 'theme' || activePanel === 'code' || activePanel === 'misc'"></div>
+      </template>
 
-      <transition name="right-panel-slide">
-        <div v-if="activePanel === 'theme' || activePanel === 'code' || activePanel === 'misc'" class="right-panel" :style="rightPanelWidth ? { width: rightPanelWidth + 'px' } : {}">
-          <div class="right-panel-tabs">
-            <button class="right-panel-tab" :class="{ active: activePanel === 'theme' }" @click="togglePanel('theme')">
-              <svg class="lucide lucide-palette"  xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-palette-icon lucide-palette"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/></svg>
-              主题
-            </button>
-            <button class="right-panel-tab" :class="{ active: activePanel === 'code' }" @click="togglePanel('code')">
-              <svg class="lucide lucide-code-xml" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 16 4-4-4-4"></path><path d="m6 8-4 4 4 4"></path><path d="m14.5 4-5 16"></path></svg>
-              代码
-            </button>
-            <button class="right-panel-tab" :class="{ active: activePanel === 'misc' }" @click="togglePanel('misc')">
-              <svg class="lucide lucide-sliders-horizontal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="21" x2="14" y1="4" y2="4"></line><line x1="10" x2="3" y1="4" y2="4"></line><line x1="21" x2="12" y1="12" y2="12"></line><line x1="8" x2="3" y1="12" y2="12"></line><line x1="21" x2="16" y1="20" y2="20"></line><line x1="12" x2="3" y1="20" y2="20"></line><line x1="14" x2="14" y1="2" y2="6"></line><line x1="8" x2="8" y1="10" y2="14"></line><line x1="16" x2="16" y1="18" y2="22"></line></svg>
-              其他
-            </button>
-            <button class="right-panel-close" @click="togglePanel(activePanel)">
-              <svg class="lucide lucide-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>
-            </button>
-          </div>
-
-          <div class="right-panel-body">
-            <template v-if="activePanel === 'theme'">
-              <div class="theme-grid">
-                <template v-for="cat in categorizedThemes" :key="cat.category">
-                  <div class="theme-category-label">{{ cat.category }}</div>
-                  <div
-                    v-for="theme in cat.themes"
-                    :key="theme.key"
-                    class="theme-card"
-                    :class="{ active: currentStyle === theme.key }"
-                    @click="selectTheme(theme.key)"
-                  >
-                    <span class="theme-card-name">{{ theme.name }}</span>
-                    <span v-if="theme.recommended" class="theme-card-badge">推荐</span>
-                  </div>
-                </template>
-              </div>
-            </template>
-
-            <template v-if="activePanel === 'code'">
-              <div class="code-panel-stack">
-                <div class="code-panel-section">
-                  <div class="code-panel-section-title">代码块主题</div>
-                  <div class="code-theme-grid">
-                    <div
-                      v-for="ct in codeThemeList"
-                      :key="ct.key"
-                      class="code-theme-card"
-                      :class="{ active: currentCodeTheme === ct.key }"
-                      @click="selectCodeTheme(ct.key)"
-                    >
-                      <div
-                        class="code-theme-preview"
-                        :style="{
-                          background: ct.preview.bg,
-                          borderColor: ct.preview.borderColor,
-                          color: ct.preview.textColor
-                        }"
-                      >
-                        <div
-                          class="code-theme-preview-topbar"
-                          :style="{ background: ct.preview.headerBg }"
-                        >
-                          <span class="code-theme-preview-dot dot-red"></span>
-                          <span class="code-theme-preview-dot dot-amber"></span>
-                          <span class="code-theme-preview-dot dot-green"></span>
-                        </div>
-                        <div class="code-theme-preview-code">
-                          <div
-                            v-for="(line, lineIndex) in ct.preview.lines"
-                            :key="`${ct.key}-line-${lineIndex}`"
-                            class="code-theme-preview-line"
-                          >
-                            <span
-                              v-for="(segment, segmentIndex) in line"
-                              :key="`${ct.key}-seg-${lineIndex}-${segmentIndex}`"
-                              class="code-theme-preview-segment"
-                              :style="{ color: segment.color }"
-                            >{{ segment.text }}</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div class="code-theme-meta">
-                        <div class="code-theme-name">{{ ct.name }}</div>
-                        <div class="code-theme-desc">{{ ct.description }}</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-              </div>
-            </template>
-
-            <template v-if="activePanel === 'misc'">
-              <div class="misc-panel-stack">
-                <div class="misc-panel-section">
-                  <div class="code-panel-section-title">字号</div>
-                  <div class="misc-button-grid misc-button-grid-font">
-                    <button
-                      v-for="option in fontScaleOptions"
-                      :key="`font-scale-${option.value}`"
-                      class="segmented-option-btn"
-                      :class="{ active: displaySettings.fontScale === option.value }"
-                      @click="setFontScale(option.value)"
-                    >
-                      <span>{{ option.label }}</span>
-                      <small>{{ option.meta }}</small>
-                    </button>
-                  </div>
-                  <p class="misc-panel-note">作用于容器、标题和正文等字号，复制到公众号与导出 HTML 会保留当前比例。</p>
-                </div>
-
-                <div class="misc-panel-section">
-                  <div class="code-panel-section-title">图片属性</div>
-
-                  <div class="misc-setting-row">
-                    <div class="misc-setting-label">模式</div>
-                    <div class="misc-button-grid misc-button-grid-dual">
-                      <button
-                        v-for="option in imageStyleModeOptions"
-                        :key="`image-style-mode-${option.value}`"
-                        class="segmented-option-btn"
-                        :class="{ active: displaySettings.imageStyleMode === option.value }"
-                        @click="setImageStyleMode(option.value)"
-                      >
-                        <span>{{ option.label }}</span>
-                        <small>{{ option.meta }}</small>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div class="misc-control-stack" :class="{ disabled: !isImageStyleCustom }">
-                    <div class="misc-setting-row">
-                      <div class="misc-range-header">
-                        <div class="misc-setting-label">上间距</div>
-                        <span class="misc-range-value">{{ displaySettings.imageMarginTop }}px</span>
-                      </div>
-                      <div class="misc-range-input">
-                        <input
-                          type="range"
-                          min="0"
-                          max="200"
-                          :value="displaySettings.imageMarginTop"
-                          :disabled="!isImageStyleCustom"
-                          @input="updateImageMetric('imageMarginTop', $event.target.value, 0, 200)"
-                        >
-                        <input
-                          class="misc-number-input"
-                          type="number"
-                          min="0"
-                          max="200"
-                          :value="displaySettings.imageMarginTop"
-                          :disabled="!isImageStyleCustom"
-                          @input="updateImageMetric('imageMarginTop', $event.target.value, 0, 200)"
-                        >
-                      </div>
-                    </div>
-
-                    <div class="misc-setting-row">
-                      <div class="misc-range-header">
-                        <div class="misc-setting-label">下间距</div>
-                        <span class="misc-range-value">{{ displaySettings.imageMarginBottom }}px</span>
-                      </div>
-                      <div class="misc-range-input">
-                        <input
-                          type="range"
-                          min="0"
-                          max="200"
-                          :value="displaySettings.imageMarginBottom"
-                          :disabled="!isImageStyleCustom"
-                          @input="updateImageMetric('imageMarginBottom', $event.target.value, 0, 200)"
-                        >
-                        <input
-                          class="misc-number-input"
-                          type="number"
-                          min="0"
-                          max="200"
-                          :value="displaySettings.imageMarginBottom"
-                          :disabled="!isImageStyleCustom"
-                          @input="updateImageMetric('imageMarginBottom', $event.target.value, 0, 200)"
-                        >
-                      </div>
-                    </div>
-
-                    <div class="misc-setting-row">
-                      <div class="misc-setting-label">圆角模式</div>
-                      <div class="misc-button-grid misc-button-grid-dual">
-                        <button
-                          v-for="option in imageRadiusModeOptions"
-                          :key="`image-radius-mode-${option.value}`"
-                          class="segmented-option-btn compact"
-                          :class="{ active: displaySettings.imageRadiusMode === option.value }"
-                          :disabled="!isImageStyleCustom"
-                          @click="setImageRadiusMode(option.value)"
-                        >
-                          <span>{{ option.label }}</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    <div class="misc-setting-row">
-                      <div class="misc-range-header">
-                        <div class="misc-setting-label">圆角大小</div>
-                        <span class="misc-range-value">
-                          {{ displaySettings.imageRadiusMode === 'circle' ? '50%' : displaySettings.imageRadius + 'px' }}
-                        </span>
-                      </div>
-                      <div class="misc-range-input">
-                        <input
-                          type="range"
-                          min="0"
-                          max="360"
-                          :value="displaySettings.imageRadius"
-                          :disabled="!isImageStyleCustom || displaySettings.imageRadiusMode === 'circle'"
-                          @input="updateImageMetric('imageRadius', $event.target.value, 0, 360)"
-                        >
-                        <input
-                          class="misc-number-input"
-                          type="number"
-                          min="0"
-                          max="360"
-                          :value="displaySettings.imageRadius"
-                          :disabled="!isImageStyleCustom || displaySettings.imageRadiusMode === 'circle'"
-                          @input="updateImageMetric('imageRadius', $event.target.value, 0, 360)"
-                        >
-                      </div>
-                    </div>
-
-                    <div class="misc-setting-row">
-                      <div class="misc-setting-label">阴影</div>
-                      <div class="misc-shadow-grid">
-                        <label class="misc-shadow-field">
-                          <span>X</span>
-                          <input
-                            class="misc-number-input"
-                            type="number"
-                            min="-80"
-                            max="80"
-                            :value="displaySettings.imageShadowX"
-                            :disabled="!isImageStyleCustom"
-                            @input="updateImageMetric('imageShadowX', $event.target.value, -80, 80)"
-                          >
-                        </label>
-                        <label class="misc-shadow-field">
-                          <span>Y</span>
-                          <input
-                            class="misc-number-input"
-                            type="number"
-                            min="-80"
-                            max="80"
-                            :value="displaySettings.imageShadowY"
-                            :disabled="!isImageStyleCustom"
-                            @input="updateImageMetric('imageShadowY', $event.target.value, -80, 80)"
-                          >
-                        </label>
-                        <label class="misc-shadow-field">
-                          <span>Blur</span>
-                          <input
-                            class="misc-number-input"
-                            type="number"
-                            min="0"
-                            max="120"
-                            :value="displaySettings.imageShadowBlur"
-                            :disabled="!isImageStyleCustom"
-                            @input="updateImageMetric('imageShadowBlur', $event.target.value, 0, 120)"
-                          >
-                        </label>
-                        <label class="misc-shadow-field">
-                          <span>Spread</span>
-                          <input
-                            class="misc-number-input"
-                            type="number"
-                            min="-40"
-                            max="80"
-                            :value="displaySettings.imageShadowSpread"
-                            :disabled="!isImageStyleCustom"
-                            @input="updateImageMetric('imageShadowSpread', $event.target.value, -40, 80)"
-                          >
-                        </label>
-                      </div>
-                    </div>
-
-                    <div class="misc-setting-row">
-                      <div class="misc-range-header">
-                        <div class="misc-setting-label">阴影透明度</div>
-                        <span class="misc-range-value">{{ Math.round(displaySettings.imageShadowOpacity * 100) }}%</span>
-                      </div>
-                      <div class="misc-range-input">
-                        <input
-                          type="range"
-                          min="0"
-                          max="100"
-                          :value="Math.round(displaySettings.imageShadowOpacity * 100)"
-                          :disabled="!isImageStyleCustom"
-                          @input="updateImageShadowOpacity($event.target.value)"
-                        >
-                        <input
-                          class="misc-number-input"
-                          type="number"
-                          min="0"
-                          max="100"
-                          :value="Math.round(displaySettings.imageShadowOpacity * 100)"
-                          :disabled="!isImageStyleCustom"
-                          @input="updateImageShadowOpacity($event.target.value)"
-                        >
-                      </div>
-                    </div>
-
-                    <div class="misc-setting-row">
-                      <div class="misc-setting-label">阴影颜色</div>
-                      <div class="misc-color-row">
-                        <input
-                          class="misc-color-input"
-                          type="color"
-                          :value="displaySettings.imageShadowColor"
-                          :disabled="!isImageStyleCustom"
-                          @input="updateImageShadowColor($event.target.value)"
-                        >
-                        <input
-                          class="misc-text-input"
-                          type="text"
-                          :value="displaySettings.imageShadowColor"
-                          :disabled="!isImageStyleCustom"
-                          @input="updateImageShadowColor($event.target.value)"
-                        >
-                      </div>
-                    </div>
-
-                    <div class="misc-shadow-preview" :style="{
-                      boxShadow: `${displaySettings.imageShadowX}px ${displaySettings.imageShadowY}px ${displaySettings.imageShadowBlur}px ${displaySettings.imageShadowSpread}px ${displaySettings.imageShadowColor}${Math.round(displaySettings.imageShadowOpacity * 255).toString(16).padStart(2, '0')}`
-                    }">
-                      图片阴影预览
-                    </div>
-                  </div>
-                  <p class="misc-panel-note" v-if="!isImageStyleCustom">当前为默认模式，图片完全跟随主题本身样式，不受这里的自定义参数影响。</p>
-                  <p class="misc-panel-note" v-else>自定义模式会统一覆盖单图与多图拼版的上下间距、圆角和阴影效果。</p>
-                </div>
-              </div>
-            </template>
-          </div>
-        </div>
-      </transition>
     </div>
 
     <footer class="status-bar">
@@ -616,38 +644,6 @@
       <span class="status-item">{{ charCount }} 字符 · {{ wordCount }} 词 · 预计 {{ readTime }} 分钟</span>
       <span class="status-item">最后保存：{{ lastSavedTime }}</span>
     </footer>
-
-    <transition name="side-panel">
-      <div v-if="activePanel === 'settings'" class="settings-overlay">
-        <div class="settings-panel">
-          <div class="settings-panel-header">
-            <h3 class="settings-panel-title">设置</h3>
-            <button class="settings-panel-close" @click="togglePanel('settings')">
-              <svg class="lucide lucide-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>
-            </button>
-          </div>
-          <div class="settings-panel-body">
-            <div class="panel-settings-group">
-              <label class="settings-label">
-                <span>同步滚动</span>
-                <div class="toggle-switch" :class="{ active: syncScrollEnabled }" @click="syncScrollEnabled = !syncScrollEnabled"></div>
-              </label>
-              <div class="settings-note">自动保存间隔：5 秒（固定）</div>
-            </div>
-            <div class="panel-settings-group">
-              <div class="settings-label">快捷键</div>
-              <div class="settings-shortcuts">
-                <div><kbd>Ctrl</kbd>+<kbd>S</kbd> 保存</div>
-                <div><kbd>Ctrl</kbd>+<kbd>B</kbd> 加粗</div>
-                <div><kbd>Ctrl</kbd>+<kbd>I</kbd> 斜体</div>
-                <div><kbd>Ctrl</kbd>+<kbd>K</kbd> 链接</div>
-                <div><kbd>Tab</kbd> 缩进</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </transition>
 
     <transition name="toast-fade">
       <div v-if="toastState.show" class="toast-container">

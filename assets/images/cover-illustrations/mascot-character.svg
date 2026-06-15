@@ -1,0 +1,116 @@
+<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="mascot-body-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FBBF24"/>
+      <stop offset="100%" stop-color="#F59E0B"/>
+    </linearGradient>
+    <linearGradient id="megaphone-grad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#EF4444"/>
+      <stop offset="100%" stop-color="#DC2626"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Shadow under mascot -->
+  <ellipse cx="200" cy="370" rx="80" ry="12" fill="#000" opacity="0.1"/>
+
+  <!-- Mascot body (blocky/rounded rectangle character) -->
+  <g transform="translate(120, 80)">
+    <!-- Body -->
+    <rect x="20" y="80" width="120" height="140" rx="20" fill="url(#mascot-body-grad)"/>
+    <!-- Body highlight -->
+    <rect x="30" y="90" width="40" height="80" rx="10" fill="white" opacity="0.15"/>
+
+    <!-- Belly circle -->
+    <circle cx="80" cy="160" r="25" fill="#FDE68A" opacity="0.6"/>
+    <!-- Belly button -->
+    <circle cx="80" cy="165" r="4" fill="#D97706" opacity="0.4"/>
+
+    <!-- Head -->
+    <rect x="25" y="0" width="110" height="100" rx="25" fill="url(#mascot-body-grad)"/>
+    <!-- Head highlight -->
+    <rect x="35" y="10" width="30" height="50" rx="12" fill="white" opacity="0.12"/>
+
+    <!-- Eyes -->
+    <ellipse cx="55" cy="45" rx="16" ry="18" fill="white"/>
+    <ellipse cx="105" cy="45" rx="16" ry="18" fill="white"/>
+    <!-- Pupils -->
+    <circle cx="58" cy="48" r="9" fill="#1E293B"/>
+    <circle cx="108" cy="48" r="9" fill="#1E293B"/>
+    <!-- Eye highlights -->
+    <circle cx="62" cy="43" r="3.5" fill="white"/>
+    <circle cx="112" cy="43" r="3.5" fill="white"/>
+    <circle cx="55" cy="50" r="2" fill="white" opacity="0.5"/>
+    <circle cx="105" cy="50" r="2" fill="white" opacity="0.5"/>
+
+    <!-- Eyebrows -->
+    <path d="M 40 28 Q 55 22 70 28" stroke="#92400E" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <path d="M 90 28 Q 105 22 120 28" stroke="#92400E" stroke-width="3" fill="none" stroke-linecap="round"/>
+
+    <!-- Mouth (big happy smile) -->
+    <path d="M 55 68 Q 80 85 105 68" stroke="#92400E" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <!-- Tongue -->
+    <ellipse cx="80" cy="75" rx="10" ry="6" fill="#EF4444" opacity="0.6"/>
+
+    <!-- Cheek blush -->
+    <ellipse cx="35" cy="60" rx="10" ry="7" fill="#F97316" opacity="0.25"/>
+    <ellipse cx="125" cy="60" rx="10" ry="7" fill="#F97316" opacity="0.25"/>
+
+    <!-- Left arm (waving) -->
+    <path d="M 20 110 Q -10 90 -15 60 Q -18 45 -5 50 Q 5 55 10 75 Q 12 85 20 95" fill="url(#mascot-body-grad)" stroke="#D97706" stroke-width="1" opacity="0.9"/>
+    <!-- Left hand -->
+    <circle cx="-10" cy="55" r="12" fill="#FBBF24"/>
+    <circle cx="-10" cy="55" r="8" fill="#FDE68A" opacity="0.5"/>
+
+    <!-- Right arm (holding megaphone) -->
+    <path d="M 140 110 Q 160 100 170 85 Q 175 75 165 78 Q 155 82 148 95 Q 145 100 140 105" fill="url(#mascot-body-grad)" stroke="#D97706" stroke-width="1" opacity="0.9"/>
+    <!-- Right hand -->
+    <circle cx="168" cy="80" r="10" fill="#FBBF24"/>
+
+    <!-- Megaphone -->
+    <g transform="translate(160, 40) rotate(20)">
+      <path d="M 0 15 L 50 0 L 50 40 L 0 25 Z" fill="url(#megaphone-grad)"/>
+      <rect x="-10" y="12" width="14" height="16" rx="3" fill="#B91C1C"/>
+      <ellipse cx="50" cy="20" rx="6" ry="22" fill="#EF4444"/>
+      <ellipse cx="50" cy="20" rx="4" ry="18" fill="#FCA5A5" opacity="0.3"/>
+      <!-- Sound waves -->
+      <path d="M 58 10 Q 70 5 75 10" stroke="#FCA5A5" stroke-width="2" fill="none" opacity="0.6" stroke-linecap="round"/>
+      <path d="M 58 20 Q 75 15 82 20" stroke="#FCA5A5" stroke-width="2" fill="none" opacity="0.5" stroke-linecap="round"/>
+      <path d="M 58 30 Q 70 35 75 30" stroke="#FCA5A5" stroke-width="2" fill="none" opacity="0.4" stroke-linecap="round"/>
+      <!-- Handle -->
+      <rect x="10" y="28" width="4" height="18" rx="2" fill="#B91C1C"/>
+    </g>
+
+    <!-- Legs -->
+    <rect x="35" y="215" width="30" height="50" rx="12" fill="url(#mascot-body-grad)"/>
+    <rect x="95" y="215" width="30" height="50" rx="12" fill="url(#mascot-body-grad)"/>
+    <!-- Feet -->
+    <ellipse cx="50" cy="268" rx="22" ry="10" fill="#D97706"/>
+    <ellipse cx="110" cy="268" rx="22" ry="10" fill="#D97706"/>
+    <!-- Feet highlights -->
+    <ellipse cx="45" cy="265" rx="8" ry="4" fill="#FBBF24" opacity="0.4"/>
+    <ellipse cx="105" cy="265" rx="8" ry="4" fill="#FBBF24" opacity="0.4"/>
+  </g>
+
+  <!-- Decorative elements around mascot -->
+  <!-- Stars -->
+  <polygon points="60,60 63,68 72,68 65,73 67,81 60,76 53,81 55,73 48,68 57,68" fill="#FBBF24" opacity="0.5"/>
+  <polygon points="340,100 342,106 348,106 343,110 345,116 340,112 335,116 337,110 332,106 338,106" fill="#F59E0B" opacity="0.4"/>
+  <polygon points="50,200 52,206 58,206 53,210 55,216 50,212 45,216 47,210 42,206 48,206" fill="#FCD34D" opacity="0.3"/>
+
+  <!-- Exclamation marks -->
+  <g transform="translate(330, 180)" opacity="0.4">
+    <rect x="0" y="0" width="6" height="20" rx="3" fill="#EF4444"/>
+    <circle cx="3" cy="26" r="3" fill="#EF4444"/>
+  </g>
+
+  <!-- Small hearts -->
+  <path d="M 350 250 Q 350 244 355 244 Q 360 244 360 250 Q 360 256 355 260 Q 350 256 350 250" fill="#F472B6" opacity="0.35"/>
+  <path d="M 70 300 Q 70 296 73 296 Q 76 296 76 300 Q 76 304 73 306 Q 70 304 70 300" fill="#FB7185" opacity="0.3"/>
+
+  <!-- Confetti dots -->
+  <circle cx="90" cy="120" r="4" fill="#34D399" opacity="0.4"/>
+  <circle cx="310" cy="60" r="3" fill="#60A5FA" opacity="0.4"/>
+  <circle cx="370" cy="300" r="5" fill="#A78BFA" opacity="0.3"/>
+  <circle cx="40" cy="350" r="3" fill="#F472B6" opacity="0.35"/>
+  <circle cx="360" cy="360" r="4" fill="#38BDF8" opacity="0.3"/>
+</svg>

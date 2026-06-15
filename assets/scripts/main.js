@@ -9,7 +9,6 @@ import { createMarkdownEngine } from './core/markdown-engine.js';
 import { createTurndownService, createPasteHandler } from './core/paste-handler.js';
 import { renderPipeline } from './core/render-pipeline.js';
 import { copyToWechat } from './export/clipboard-exporter.js';
-import { copyToX } from './export/x-clipboard-exporter.js';
 import { getCategorizedThemes, getStyleName, isRecommended, getStarredStyles, toggleStarStyle } from './ui/theme-manager.js';
 import {
   getCodeThemeList,
@@ -21,8 +20,13 @@ import { createToast } from './ui/toast.js';
 import { createPanelManager } from './ui/panel-manager.js';
 import { loadPreferences, savePreferences, debounceSaveContent, getDefaultCodeBlockSettings, getDefaultDisplaySettings } from './storage/preferences.js';
 import { STYLES } from '../styles/themes/index.js';
+import { COVER_TEMPLATES, TEMPLATE_META } from './cover/templates.js';
+import { renderCover, getTemplates, getCategories, DEFAULT_TYPOGRAPHY, DEFAULT_COVER_CONTENT } from './cover/renderer.js';
+import { exportCoverPng as doExportCoverPng } from './cover/export-png.js';
+import { DEFAULT_ILLUSTRATIONS, ILLUSTRATION_CATEGORIES, ILLUSTRATION_MARKETS, getIllustration, getIllustrationsByCategory, getAllIllustrations } from './cover/illustration-registry.js';
+import { loadIllustrationSvg, replaceIllustrationColor, extractPrimaryColor } from './cover/illustration-color.js';
 
-const { createApp, ref, watch, nextTick, onMounted, computed } = window.Vue;
+const { createApp, ref, reactive, watch, nextTick, onMounted, computed } = window.Vue;
 
 const UNTITLED_PREFIX = '未命名文档';
 
@@ -39,6 +43,128 @@ const previewMode = ref('desktop');
 const tocVisible = ref(false);
 const isDraggingOver = ref(false);
 const copySuccess = ref(false);
+
+const showDevicePicker = ref(false);
+const showExportMenu = ref(false);
+const previewDarkMode = ref(false);
+const selectedDevice = ref('iphone-17-pro');
+
+// ── Tab State ──
+const activeTab = ref('editor');
+
+// ── Editor Toolbar Pickers ──
+const showTemplatePicker = ref(false);
+const showTypoPicker = ref(false);
+
+// ── Cover Editor State ──
+const coverTemplateId = ref('pure-white');
+const coverContent = reactive({
+  tag: '技术分享',
+  title: '用 AI 构建公众号封面工具',
+  subtitle: '开箱即用，亦可自由迭代',
+  author: '@OpenGZH'
+});
+const coverTypography = reactive({
+  titleSize: 48,
+  subtitleSize: 20,
+  tagSize: 14,
+  authorSize: 14,
+  titleLineHeight: 1.3,
+  subtitleLineHeight: 1.5,
+  titleLetterSpacing: 0,
+  subtitleLetterSpacing: 0,
+  textAlign: 'center',
+  titleFontFamily: "'Noto Sans SC', sans-serif",
+  subtitleFontFamily: "'Noto Sans SC', sans-serif"
+});
+const coverFontOptions = [
+  { label: '思源黑体', value: "'Noto Sans SC', sans-serif" },
+  { label: '思源宋体', value: "'Noto Serif SC', serif" },
+  { label: '霞鹜文楷', value: "'LXGW WenKai', cursive" },
+  { label: 'ZCOOL 小薇', value: "'ZCOOL XiaoWei', sans-serif" },
+  { label: '站酷快乐体', value: "'ZCOOL KuaiLe', sans-serif" },
+  { label: 'Ma Shan Zheng', value: "'Ma Shan Zheng', cursive" }
+];
+const coverUndoStack = ref([]);
+const coverRedoStack = ref([]);
+const coverLayerOrder = ref('text-top');
+const coverOpacity = ref(100);
+const coverIllustrationId = ref('');
+const coverIllustCategory = ref('tech');
+const coverIllustrationColor = ref('#6366F1');
+const coverIllustrationSvg = ref(''); // cached SVG string
+
+const deviceGroups = [
+  {
+    label: 'Apple',
+    devices: [
+      { key: 'iphone-17-pro-max', name: 'iPhone 17 Pro Max', width: 440 },
+      { key: 'iphone-17-air', name: 'iPhone 17 Air', width: 420 },
+      { key: 'iphone-17-pro', name: 'iPhone 17 Pro', width: 402 },
+      { key: 'iphone-17', name: 'iPhone 17', width: 402 },
+      { key: 'iphone-16-pro-max', name: 'iPhone 16 Pro Max', width: 440 },
+      { key: 'iphone-se', name: 'iPhone SE (3rd)', width: 375 }
+    ]
+  },
+  {
+    label: '小米 / Redmi',
+    devices: [
+      { key: 'xiaomi-17-pro-max', name: '小米 17 Pro Max', width: 412 },
+      { key: 'xiaomi-17-pro', name: '小米 17 Pro', width: 407 },
+      { key: 'xiaomi-17', name: '小米 17', width: 407 },
+      { key: 'xiaomi-15-pro', name: '小米 15 Pro', width: 412 },
+      { key: 'xiaomi-mix-fold4', name: '小米 MIX Fold 4 (展开)', width: 840 },
+      { key: 'xiaomi-mix-flip2', name: '小米 MIX Flip 2', width: 400 }
+    ]
+  },
+  {
+    label: '华为',
+    devices: [
+      { key: 'huawei-mate80-pro', name: '华为 Mate 80 Pro', width: 427 },
+      { key: 'huawei-mate70-pro-plus', name: '华为 Mate 70 Pro+', width: 412 },
+      { key: 'huawei-mate70-pro', name: '华为 Mate 70 Pro', width: 412 },
+      { key: 'huawei-mate70', name: '华为 Mate 70', width: 393 },
+      { key: 'huawei-pura80-ultra', name: '华为 Pura 80 Ultra', width: 425 },
+      { key: 'huawei-mate-x6', name: '华为 Mate X6 (展开)', width: 813 },
+      { key: 'huawei-mate-xt', name: '华为 Mate XT 三折叠 (展开)', width: 864 }
+    ]
+  },
+  {
+    label: 'vivo',
+    devices: [
+      { key: 'vivo-x200-pro', name: 'vivo X200 Pro', width: 420 },
+      { key: 'vivo-x200', name: 'vivo X200', width: 393 },
+      { key: 'vivo-x-fold4', name: 'vivo X Fold 4 (展开)', width: 827 },
+      { key: 'vivo-xflip2', name: 'vivo X Flip 2', width: 400 }
+    ]
+  },
+  {
+    label: 'OPPO',
+    devices: [
+      { key: 'oppo-find-x8-ultra', name: 'OPPO Find X8 Ultra', width: 412 },
+      { key: 'oppo-find-x8-pro', name: 'OPPO Find X8 Pro', width: 412 },
+      { key: 'oppo-find-n5', name: 'OPPO Find N5 (展开)', width: 827 },
+      { key: 'oppo-find-n5-flip', name: 'OPPO Find N5 Flip', width: 400 }
+    ]
+  }
+];
+
+const deviceList = deviceGroups.flatMap(g => g.devices);
+
+const selectedDeviceLabel = computed(() => {
+  const device = deviceList.find(d => d.key === selectedDevice.value);
+  return device ? device.name : '默认';
+});
+
+const mobilePreviewWidth = computed(() => {
+  const device = deviceList.find(d => d.key === selectedDevice.value);
+  return device ? device.width : 402;
+});
+
+function selectDevice(key) {
+  selectedDevice.value = key;
+  showDevicePicker.value = false;
+}
 
 const activePanel = ref(null);
 const toastState = ref({ show: false, message: '', type: 'success' });
@@ -68,9 +194,27 @@ const fontScaleOptions = [
   { label: '更大', value: 1.3, meta: '1.3x' },
   { label: '超大', value: 1.5, meta: '1.5x' }
 ];
+const fontFamilyOptions = [
+  { label: '跟随模板', value: 'theme', meta: '保留风格' },
+  { label: '非衬线', value: 'sans', meta: '现代清晰' },
+  { label: '衬线', value: 'serif', meta: '长文质感' },
+  { label: '等宽', value: 'mono', meta: '技术文档' }
+];
 const imageStyleModeOptions = [
   { label: '默认', value: 'theme', meta: '跟随主题' },
   { label: '自定义', value: 'custom', meta: '覆盖样式' }
+];
+const imageEffectOptions = [
+  { label: '跟随主题', value: 'theme', meta: '模板内置' },
+  { label: '干净', value: 'clean', meta: '无边框' },
+  { label: '柔影', value: 'soft-shadow', meta: '轻阴影' },
+  { label: '纸面', value: 'paper', meta: '白边纸感' },
+  { label: '拍立得', value: 'polaroid', meta: '宽白边' },
+  { label: '大圆角', value: 'rounded', meta: '柔和卡片' },
+  { label: '圆形', value: 'circle', meta: '头像/Logo' },
+  { label: '细边框', value: 'bordered', meta: '产品截图' },
+  { label: '通栏', value: 'bleed', meta: '沉浸图片' },
+  { label: '黑白', value: 'mono', meta: '纪实质感' }
 ];
 const imageRadiusModeOptions = [
   { label: '圆角', value: 'px' },
@@ -676,15 +820,6 @@ async function doCopy() {
   }
 }
 
-async function copyToTwitter() {
-  if (!renderedContent.value) return;
-
-  await copyToX({
-    renderedHTML: renderedContent.value,
-    showToast: (message, type) => toast.show(message, type)
-  });
-}
-
 function selectTheme(key) {
   currentStyle.value = key;
 }
@@ -725,14 +860,32 @@ function setFontScale(value) {
   updateDisplaySettings({ fontScale: value });
 }
 
+function setFontFamily(value) {
+  if (!['theme', 'sans', 'serif', 'mono'].includes(value)) return;
+  updateDisplaySettings({ fontFamily: value });
+}
+
 function setImageStyleMode(value) {
   if (!['theme', 'custom'].includes(value)) return;
-  updateDisplaySettings({ imageStyleMode: value });
+  updateDisplaySettings({
+    imageStyleMode: value,
+    imageEffect: value === 'theme' ? 'theme' : displaySettings.value.imageEffect
+  });
+}
+
+function setImageEffect(value) {
+  const validEffects = imageEffectOptions.map((option) => option.value);
+  if (!validEffects.includes(value)) return;
+  updateDisplaySettings({
+    imageEffect: value,
+    imageStyleMode: value === 'theme' ? 'theme' : 'custom'
+  });
 }
 
 function updateImageDisplaySettings(nextSettings) {
   updateDisplaySettings({
     imageStyleMode: 'custom',
+    imageEffect: nextSettings.imageEffect || displaySettings.value.imageEffect || 'theme',
     ...nextSettings
   });
 }
@@ -994,38 +1147,128 @@ function setupSyncScroll() {
 }
 
 function loadDefaultExample() {
-  return `# 公众号 Markdown 编辑器
+  return `# OpenGZH — 微信公众号 Markdown 排版编辑器
 
-欢迎使用这款专为**微信公众号**设计的 Markdown 编辑器。
+![写作工作区](https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=800&q=80)
 
-## 核心能力
+**OpenGZH** 是一款专为微信公众号打造的 Markdown 排版工具。左侧写作，右侧实时预览，一键复制到公众号编辑器，所有样式完整保留。
 
-### 1. 智能图片处理
+> 纯前端架构，无需登录，数据不出浏览器。打开即用，用完即走。
 
-![](https://assets.uiineed.com/public/417b95fd3e60c3fbe181dd32f99ffbec.webp)
+---
 
-- 支持截图、浏览器、文件管理器等来源的图片粘贴
-- 自动压缩并本地持久化保存
-- 刷新页面后图片不会丢失
+## 产品核心能力
 
-### 2. 多图排版
+### 文章排版
 
-![](https://assets.uiineed.com/public/955d2dd359b24822f6d56df4a5e5d81c.webp)
+1. 左侧 Markdown 输入，右侧 **实时预览**，支持同步滚动
+2. **27 套文章主题** — 日常公众号、资讯深读、产品技术、观点札记、设计审美五类场景一键切换
+3. **17 种代码高亮主题** — 支持跟随文章主题自动联动
+4. 支持 **手机预览**，覆盖 iPhone 17、华为 Mate 80、小米 17 等 29 款主流机型
+5. 截图粘贴、拖拽上传、**自动压缩**，刷新页面图片不丢失
 
-![](https://assets.uiineed.com/public/fa83e8f33ccf35e0a9186188b7fb01d6.webp)
+### 封面图设计
 
-![](https://assets.uiineed.com/public/34f30f548deb1351b0ac4fb9d681af25.webp)
+切换到顶部 **「封面图」** 标签页，快速生成公众号封面：
 
-### 3. 代码块示例
+- **35 套精选模板**，涵盖深色、浅色、渐变、几何、插画等风格
+- **73 幅精选插画**，支持自定义颜色替换
+- 自由调整标题、副标题、标签的 **字体、字号、行高、字间距**
+- 导出 **2400 × 960** 高清 PNG
+
+### 一键发布
+
+点击右上角 **「复制到公众号」**，所有样式自动转为内联 CSS，图片自动转 Base64，完美兼容微信公众号编辑器。
+
+---
+
+## Markdown 排版示例
+
+### 文字样式
+
+**加粗重点**、*斜体强调*、~~删除线~~，以及 \`行内代码\` 标记技术名词。还可以插入 [超链接](https://example.com) 引导读者跳转。
+
+### 引用
+
+> 好的排版让阅读成为一种享受，让内容被更多人看到。
+
+### 列表
+
+OpenGZH 的核心特性：
+
+- **CJK 专项优化** — 中文加粗、斜体、标点断行均经过适配
+- **智能粘贴** — 从网页复制富文本，自动转为 Markdown
+- **数学公式** — KaTeX 预览 + MathJax SVG 导出
+- **深色模式** — 一键切换预览区深浅色
+
+### 代码块
+
+支持 17+ 编程语言的语法高亮：
 
 \`\`\`javascript
-const compressedBlob = await imageCompressor.compress(file);
-await imageStore.saveImage(imageId, compressedBlob);
-
-const markdown = \`![图片](img://\${imageId})\`;
+// OpenGZH 渲染管道核心流程
+async function renderPipeline(markdown, theme) {
+  const html = markdownEngine.render(markdown);
+  const styled = applyInlineStyles(html, theme);
+  const images = await convertToBase64(styled);
+  return copyToClipboard(images);
+}
 \`\`\`
 
-> 试试切换不同主题和代码块设置，观察预览变化。
+\`\`\`python
+# 公众号文章阅读数据分析
+import pandas as pd
+
+def analyze_articles(df):
+    """统计各主题文章的阅读表现"""
+    return (df.groupby('topic')
+              .agg(views='mean', likes='sum')
+              .sort_values('views', ascending=False))
+\`\`\`
+
+### 表格
+
+| 功能 | 说明 | 亮点 |
+|------|------|------|
+| 文章主题 | 27 套风格主题 | 五类场景分类 |
+| 代码主题 | 17 种高亮方案 | 跟随文章主题联动 |
+| 封面模板 | 35 套 + 73 幅插画 | 场景标签辅助选择 |
+| 手机预览 | 29 款机型 | 含折叠屏 |
+| 数学公式 | LaTeX 渲染 | 导出自动转 SVG |
+
+### 数学公式
+
+行内公式：$E = mc^2$，独立公式块：
+
+$$
+\\sum_{i=1}^{n} x_i = x_1 + x_2 + \\cdots + x_n
+$$
+
+### 图片
+
+![代码编辑器](https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&q=80)
+
+单张图片自动居中展示。多张连续图片自动组合为网格布局：
+
+![移动设备](https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?w=600&q=80)
+
+![简洁桌面](https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=600&q=80)
+
+支持自定义图片边距、圆角和阴影效果。
+
+---
+
+## 关于 OpenGZH
+
+OpenGZH 是一款 **纯前端** 的公众号排版工具。无需注册登录，所有数据保存在浏览器本地，不会上传到任何服务器。
+
+### 关注公众号
+
+欢迎关注微信公众号 **「进击的零度」**，获取 OpenGZH 最新更新、排版技巧和公众号运营干货。
+
+![关注进击的零度](https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=600&q=80)
+
+> 用 OpenGZH 写好每一篇文章，让优质内容被更多人看到。
 `;
 }
 
@@ -1087,6 +1330,182 @@ function initResizeHandles() {
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
   });
+}
+
+// ═══ Cover Editor Logic ═══
+
+const coverSvgOutput = computed(() => {
+  return renderCover(
+    coverTemplateId.value,
+    {
+      ...coverContent,
+      illustrationSvg: coverIllustrationSvg.value,
+      illustrationOpacity: coverOpacity.value / 100,
+      layerOrder: coverLayerOrder.value
+    },
+    { ...coverTypography }
+  );
+});
+
+const coverCategories = computed(() => getCategories());
+
+const coverPreviewStyle = computed(() => {
+  return { aspectRatio: '1200 / 480' };
+});
+
+function getCoverTemplatesByCategory(category) {
+  return getTemplates(category);
+}
+
+function renderCoverThumb(templateId) {
+  return renderCover(templateId, { tag: '标签', title: '标题预览', subtitle: '副标题', author: '作者' }, { ...DEFAULT_TYPOGRAPHY, titleSize: 36, subtitleSize: 16, tagSize: 10, authorSize: 10 }, '5:2');
+}
+
+function getTemplateMeta(templateId) {
+  return TEMPLATE_META[templateId] || null;
+}
+
+function coverTemplateSupports(field) {
+  const tpl = COVER_TEMPLATES.find(t => t.id === coverTemplateId.value);
+  return tpl ? tpl.elements[field] : false;
+}
+
+const currentTemplateIllustFit = computed(() => {
+  const tpl = COVER_TEMPLATES.find(t => t.id === coverTemplateId.value);
+  return tpl?.illustFit || null;
+});
+
+const filteredIllustrations = computed(() => {
+  let list = getIllustrationsByCategory(coverIllustCategory.value);
+  const fit = currentTemplateIllustFit.value;
+  if (fit) {
+    list = list.filter(item => item.fit && item.fit.includes(fit));
+  }
+  return list;
+});
+
+const illustrationColorPresets = [
+  '#6366F1', '#8B5CF6', '#EC4899', '#F43F5E', '#F97316',
+  '#EAB308', '#22C55E', '#14B8A6', '#06B6D4', '#3B82F6',
+  '#1E293B', '#64748B'
+];
+
+async function selectIllustration(id) {
+  pushCoverUndo();
+  coverIllustrationId.value = id;
+  const illust = getIllustration(id);
+  if (illust) {
+    coverIllustrationColor.value = illust.defaultColor || '#6366F1';
+    const svgStr = await loadIllustrationSvg(illust.path);
+    coverIllustrationSvg.value = svgStr;
+  }
+}
+
+function clearIllustration() {
+  pushCoverUndo();
+  coverIllustrationId.value = '';
+  coverIllustrationSvg.value = '';
+}
+
+async function updateIllustrationColor(color) {
+  coverIllustrationColor.value = color;
+  if (coverIllustrationId.value) {
+    const illust = getIllustration(coverIllustrationId.value);
+    if (illust) {
+      const originalSvg = await loadIllustrationSvg(illust.path);
+      coverIllustrationSvg.value = replaceIllustrationColor(originalSvg, color);
+    }
+  }
+}
+
+function getCoverStateSnapshot() {
+  return {
+    templateId: coverTemplateId.value,
+    content: { ...coverContent },
+    typography: { ...coverTypography },
+    illustrationId: coverIllustrationId.value,
+    illustrationColor: coverIllustrationColor.value,
+    layerOrder: coverLayerOrder.value,
+    opacity: coverOpacity.value
+  };
+}
+
+function restoreCoverState(state) {
+  coverTemplateId.value = state.templateId || 'pure-white';
+  Object.assign(coverContent, state.content || DEFAULT_COVER_CONTENT);
+  Object.assign(coverTypography, state.typography || DEFAULT_TYPOGRAPHY);
+  coverIllustrationId.value = state.illustrationId || '';
+  coverIllustrationColor.value = state.illustrationColor || coverIllustrationColor.value;
+  coverLayerOrder.value = state.layerOrder || 'text-top';
+  coverOpacity.value = Number.isFinite(Number(state.opacity)) ? Number(state.opacity) : 100;
+
+  if (coverIllustrationId.value) {
+    const illust = getIllustration(coverIllustrationId.value);
+    if (illust) {
+      loadIllustrationSvg(illust.path).then(svg => {
+        coverIllustrationSvg.value = replaceIllustrationColor(svg, coverIllustrationColor.value);
+      });
+    }
+  } else {
+    coverIllustrationSvg.value = '';
+  }
+}
+
+function pushCoverUndo() {
+  coverUndoStack.value.push(getCoverStateSnapshot());
+  if (coverUndoStack.value.length > 50) coverUndoStack.value.shift();
+  coverRedoStack.value = [];
+}
+
+function selectCoverTemplate(id) {
+  pushCoverUndo();
+  coverTemplateId.value = id;
+}
+
+function updateCoverTypo(field, value) {
+  pushCoverUndo();
+  coverTypography[field] = Number(value);
+}
+
+function coverUndo() {
+  if (coverUndoStack.value.length === 0) return;
+  coverRedoStack.value.push(getCoverStateSnapshot());
+  const state = coverUndoStack.value.pop();
+  restoreCoverState(state);
+}
+
+function coverRedo() {
+  if (coverRedoStack.value.length === 0) return;
+  coverUndoStack.value.push(getCoverStateSnapshot());
+  const state = coverRedoStack.value.pop();
+  restoreCoverState(state);
+}
+
+function coverReset() {
+  pushCoverUndo();
+  coverTemplateId.value = 'pure-white';
+  Object.assign(coverContent, DEFAULT_COVER_CONTENT);
+  Object.assign(coverTypography, DEFAULT_TYPOGRAPHY);
+  coverLayerOrder.value = 'text-top';
+  coverOpacity.value = 100;
+  coverIllustrationId.value = '';
+  coverIllustrationSvg.value = '';
+}
+
+function toggleCoverLayerOrder() {
+  coverLayerOrder.value = coverLayerOrder.value === 'text-top' ? 'image-top' : 'text-top';
+}
+
+async function exportCoverPngAction() {
+  const svg = coverSvgOutput.value;
+  if (!svg) return;
+  try {
+    await doExportCoverPng(svg, coverContent.title || 'cover');
+    toast.show('封面已导出', 'success');
+  } catch (err) {
+    console.error('导出失败:', err);
+    toast.show('导出失败: ' + err.message, 'error');
+  }
 }
 
 const app = createApp({
@@ -1158,6 +1577,20 @@ const app = createApp({
 
       initResizeHandles();
 
+      // 点击外部关闭下拉菜单
+      document.addEventListener('click', (event) => {
+        if (!event.target.closest('.device-model-picker')) {
+          showDevicePicker.value = false;
+        }
+        if (!event.target.closest('.export-dropdown')) {
+          showExportMenu.value = false;
+        }
+        if (!event.target.closest('.preview-picker-trigger')) {
+          showTemplatePicker.value = false;
+          showTypoPicker.value = false;
+        }
+      });
+
       imageStore = new ImageStore();
       try {
         await imageStore.init();
@@ -1187,6 +1620,50 @@ const app = createApp({
     });
 
     return {
+      // ── Tab State ──
+      activeTab,
+      showTemplatePicker,
+      showTypoPicker,
+
+      // ── Cover Editor ──
+      coverTemplateId,
+      coverContent,
+      coverTypography,
+      coverFontOptions,
+      coverUndoStack,
+      coverRedoStack,
+      coverLayerOrder,
+      coverOpacity,
+      coverSvgOutput,
+      coverCategories,
+      coverPreviewStyle,
+      selectCoverTemplate,
+      updateCoverTypo: (field, value) => updateCoverTypo(field, value),
+      coverUndo,
+      coverRedo,
+      coverReset,
+      toggleCoverLayerOrder,
+      exportCoverPng: exportCoverPngAction,
+      getCoverTemplatesByCategory,
+      getTemplateMeta,
+      renderCoverThumb,
+      coverTemplateSupports,
+
+      // ── Illustration Picker ──
+      coverIllustrationId,
+      coverIllustCategory,
+      coverIllustrationColor,
+      coverIllustrationSvg,
+      currentTemplateIllustFit,
+      filteredIllustrations,
+      illustrationCategories: ILLUSTRATION_CATEGORIES,
+      illustrationMarkets: ILLUSTRATION_MARKETS,
+      illustrationColorPresets,
+      selectIllustration,
+      clearIllustration,
+      updateIllustrationColor,
+
+      // ── Editor State ──
       markdownInput,
       renderedContent,
       currentStyle,
@@ -1218,16 +1695,25 @@ const app = createApp({
       categorizedThemes,
       codeThemeList,
       fontScaleOptions,
+      fontFamilyOptions,
       imageStyleModeOptions,
+      imageEffectOptions,
       imageRadiusModeOptions,
       codeBlockSettings,
       displaySettings,
+      showDevicePicker,
+      showExportMenu,
+      previewDarkMode,
+      selectedDevice,
+      deviceGroups,
+      deviceList,
+      selectedDeviceLabel,
+      mobilePreviewWidth,
       STYLES,
       renderMarkdown,
       toggleToc,
       scrollToTocHeading,
       doCopy,
-      copyToTwitter,
       onPaste,
       handleDrop,
       handleDragOver,
@@ -1240,8 +1726,11 @@ const app = createApp({
       selectTheme,
       toggleStar,
       selectCodeTheme,
+      selectDevice,
       setImageStyleMode,
       setFontScale,
+      setFontFamily,
+      setImageEffect,
       setImageRadiusMode,
       updateImageMetric,
       updateImageShadowOpacity,
