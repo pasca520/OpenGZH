@@ -11,6 +11,9 @@ const KEY_ACTIVE_DOCUMENT_ID = 'activeDocumentId';
 const KEY_CODE_BLOCK_SETTINGS = 'codeBlockSettings';
 const KEY_TOC_VISIBLE = 'tocVisible';
 const KEY_DISPLAY_SETTINGS = 'displaySettings';
+const KEY_APP_VERSION = 'appVersion';
+
+const APP_VERSION = 1;
 
 const DEFAULT_CODE_BLOCK_SETTINGS = {
   showLanguageLabel: true,
@@ -180,16 +183,23 @@ function normalizeDisplaySettings(settings) {
 }
 
 export function loadPreferences() {
+  const storedVersion = parseInt(localStorage.getItem(KEY_APP_VERSION), 10) || 0;
+  const needsMigration = storedVersion < APP_VERSION;
+
   try {
-    return {
+    const prefs = {
       currentStyle: localStorage.getItem(KEY_STYLE) || 'wechat-default',
-      content: localStorage.getItem(KEY_CONTENT),
-      documents: normalizeDocuments(parseJSON(localStorage.getItem(KEY_DOCUMENTS), [])),
-      activeDocumentId: localStorage.getItem(KEY_ACTIVE_DOCUMENT_ID),
+      content: needsMigration ? null : localStorage.getItem(KEY_CONTENT),
+      documents: needsMigration ? [] : normalizeDocuments(parseJSON(localStorage.getItem(KEY_DOCUMENTS), [])),
+      activeDocumentId: needsMigration ? null : localStorage.getItem(KEY_ACTIVE_DOCUMENT_ID),
       codeBlockSettings: normalizeCodeBlockSettings(parseJSON(localStorage.getItem(KEY_CODE_BLOCK_SETTINGS), null)),
       tocVisible: localStorage.getItem(KEY_TOC_VISIBLE) === 'true',
       displaySettings: normalizeDisplaySettings(parseJSON(localStorage.getItem(KEY_DISPLAY_SETTINGS), null))
     };
+    if (needsMigration) {
+      localStorage.setItem(KEY_APP_VERSION, String(APP_VERSION));
+    }
+    return prefs;
   } catch (_error) {
     return {
       currentStyle: 'wechat-default',
@@ -205,6 +215,7 @@ export function loadPreferences() {
 
 export function savePreferences(currentStyle, content, documents = null, activeDocumentId = null, codeBlockSettings = null, tocVisible = false, displaySettings = null) {
   try {
+    localStorage.setItem(KEY_APP_VERSION, String(APP_VERSION));
     localStorage.setItem(KEY_STYLE, currentStyle);
     localStorage.setItem(KEY_CONTENT, content);
     localStorage.setItem(KEY_TOC_VISIBLE, tocVisible ? 'true' : 'false');
