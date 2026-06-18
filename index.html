@@ -31,7 +31,7 @@
   <script src="https://cdn.jsdelivr.net/npm/vue@3.4.15/dist/vue.global.prod.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;500;600;700&family=LXGW+WenKai:wght@400;700&family=ZCOOL+XiaoWei&family=ZCOOL+KuaiLe&family=Ma+Shan+Zheng&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;500;600;700&family=LXGW+WenKai:wght@400;700&family=ZCOOL+XiaoWei&family=ZCOOL+KuaiLe&family=ZCOOL+QingKe+HuangYou&family=Ma+Shan+Zheng&family=Liu+Jian+Mao+Cao&family=Long+Cang&display=swap" rel="stylesheet">
 </head>
 <body>
   <div id="app">
@@ -177,73 +177,133 @@
                 <label class="cover-field-label">作者 Author</label>
                 <input type="text" class="cover-field-input" v-model="coverContent.author" placeholder="输入作者名...">
               </div>
+
+              <div class="cover-field-group" v-if="coverTemplateSupports('issue')">
+                <label class="cover-field-label">期号 Issue No.</label>
+                <input type="text" class="cover-field-input" v-model="coverContent.issueNumber" placeholder="例如: No.01">
+              </div>
             </div>
 
             <!-- Typography Controls -->
             <div class="cover-editor-section">
               <div class="cover-typo-section-title">排版 Typography</div>
 
-              <!-- Title Font Family -->
-              <div class="cover-typo-row" v-if="coverTemplateSupports('title')">
-                <div class="cover-typo-row-header">
-                  <span class="cover-typo-label">标题字体</span>
+              <!-- Title Group -->
+              <div class="cover-typo-group" v-if="coverTemplateSupports('title')">
+                <div class="cover-typo-group-title">标题 Title</div>
+
+                <div class="cover-typo-row">
+                  <span class="cover-typo-label">字体</span>
+                  <select class="cover-font-select" v-model="coverTypography.titleFontFamily">
+                    <option v-for="font in coverFontOptions" :key="font.value" :value="font.value">{{ font.label }}</option>
+                  </select>
                 </div>
-                <select class="cover-font-select" v-model="coverTypography.titleFontFamily">
-                  <option v-for="font in coverFontOptions" :key="font.value" :value="font.value">{{ font.label }}</option>
-                </select>
+
+                <div class="cover-typo-row">
+                  <div class="cover-typo-row-header">
+                    <span class="cover-typo-label">字号</span>
+                    <span class="cover-typo-value">{{ coverTypography.titleSize }}px</span>
+                  </div>
+                  <div class="cover-typo-slider-row">
+                    <input type="range" min="20" max="80" :value="coverTypography.titleSize" @input="updateCoverTypo('titleSize', $event.target.value)">
+                    <input type="number" class="cover-typo-number-input" min="20" max="80" :value="coverTypography.titleSize" @input="updateCoverTypo('titleSize', $event.target.value)">
+                  </div>
+                </div>
+
+                <div class="cover-typo-row">
+                  <div class="cover-typo-row-header">
+                    <span class="cover-typo-label">行高</span>
+                    <span class="cover-typo-value">{{ coverTypography.titleLineHeight }}</span>
+                  </div>
+                  <div class="cover-typo-slider-row">
+                    <input type="range" min="1" max="2.5" step="0.1" :value="coverTypography.titleLineHeight" @input="updateCoverTypo('titleLineHeight', $event.target.value)">
+                    <input type="number" class="cover-typo-number-input" min="1" max="2.5" step="0.1" :value="coverTypography.titleLineHeight" @input="updateCoverTypo('titleLineHeight', $event.target.value)">
+                  </div>
+                </div>
+
+                <div class="cover-typo-row">
+                  <span class="cover-typo-label">偏移 Offset</span>
+                  <div class="cover-typo-offset-row">
+                    <div class="cover-typo-offset-col">
+                      <span class="cover-typo-offset-label">X</span>
+                      <div class="cover-typo-offset-slider-row">
+                        <input type="range" min="-200" max="200" :value="coverTypography.titleOffsetX" @input="updateCoverTypo('titleOffsetX', $event.target.value)">
+                        <input type="number" class="cover-typo-offset-number" min="-200" max="200" :value="coverTypography.titleOffsetX" @input="updateCoverTypo('titleOffsetX', $event.target.value)">
+                      </div>
+                    </div>
+                    <div class="cover-typo-offset-col">
+                      <span class="cover-typo-offset-label">Y</span>
+                      <div class="cover-typo-offset-slider-row">
+                        <input type="range" min="-100" max="100" :value="coverTypography.titleOffsetY" @input="updateCoverTypo('titleOffsetY', $event.target.value)">
+                        <input type="number" class="cover-typo-offset-number" min="-100" max="100" :value="coverTypography.titleOffsetY" @input="updateCoverTypo('titleOffsetY', $event.target.value)">
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <div class="cover-typo-row" v-if="coverTemplateSupports('title')">
+              <!-- Subtitle Group -->
+              <div class="cover-typo-group" v-if="coverTemplateSupports('subtitle')">
+                <div class="cover-typo-group-title">副标题 Subtitle</div>
+
+                <div class="cover-typo-row">
+                  <span class="cover-typo-label">字体</span>
+                  <select class="cover-font-select" v-model="coverTypography.subtitleFontFamily">
+                    <option v-for="font in coverFontOptions" :key="font.value" :value="font.value">{{ font.label }}</option>
+                  </select>
+                </div>
+
+                <div class="cover-typo-row">
+                  <div class="cover-typo-row-header">
+                    <span class="cover-typo-label">字号</span>
+                    <span class="cover-typo-value">{{ coverTypography.subtitleSize }}px</span>
+                  </div>
+                  <div class="cover-typo-slider-row">
+                    <input type="range" min="12" max="64" :value="coverTypography.subtitleSize" @input="updateCoverTypo('subtitleSize', $event.target.value)">
+                    <input type="number" class="cover-typo-number-input" min="12" max="64" :value="coverTypography.subtitleSize" @input="updateCoverTypo('subtitleSize', $event.target.value)">
+                  </div>
+                </div>
+
+                <div class="cover-typo-row">
+                  <div class="cover-typo-row-header">
+                    <span class="cover-typo-label">行高</span>
+                    <span class="cover-typo-value">{{ coverTypography.subtitleLineHeight }}</span>
+                  </div>
+                  <div class="cover-typo-slider-row">
+                    <input type="range" min="1" max="2.5" step="0.1" :value="coverTypography.subtitleLineHeight" @input="updateCoverTypo('subtitleLineHeight', $event.target.value)">
+                    <input type="number" class="cover-typo-number-input" min="1" max="2.5" step="0.1" :value="coverTypography.subtitleLineHeight" @input="updateCoverTypo('subtitleLineHeight', $event.target.value)">
+                  </div>
+                </div>
+
+                <div class="cover-typo-row">
+                  <span class="cover-typo-label">偏移 Offset</span>
+                  <div class="cover-typo-offset-row">
+                    <div class="cover-typo-offset-col">
+                      <span class="cover-typo-offset-label">X</span>
+                      <div class="cover-typo-offset-slider-row">
+                        <input type="range" min="-200" max="200" :value="coverTypography.subtitleOffsetX" @input="updateCoverTypo('subtitleOffsetX', $event.target.value)">
+                        <input type="number" class="cover-typo-offset-number" min="-200" max="200" :value="coverTypography.subtitleOffsetX" @input="updateCoverTypo('subtitleOffsetX', $event.target.value)">
+                      </div>
+                    </div>
+                    <div class="cover-typo-offset-col">
+                      <span class="cover-typo-offset-label">Y</span>
+                      <div class="cover-typo-offset-slider-row">
+                        <input type="range" min="-100" max="100" :value="coverTypography.subtitleOffsetY" @input="updateCoverTypo('subtitleOffsetY', $event.target.value)">
+                        <input type="number" class="cover-typo-offset-number" min="-100" max="100" :value="coverTypography.subtitleOffsetY" @input="updateCoverTypo('subtitleOffsetY', $event.target.value)">
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="cover-typo-row" v-if="coverTemplateSupports('tag')">
                 <div class="cover-typo-row-header">
-                  <span class="cover-typo-label">标题字号</span>
-                  <span class="cover-typo-value">{{ coverTypography.titleSize }}px</span>
+                  <span class="cover-typo-label">标签字号</span>
+                  <span class="cover-typo-value">{{ coverTypography.tagSize }}px</span>
                 </div>
                 <div class="cover-typo-slider-row">
-                  <input type="range" min="20" max="80" :value="coverTypography.titleSize" @input="updateCoverTypo('titleSize', $event.target.value)">
-                  <input type="number" class="cover-typo-number-input" min="20" max="80" :value="coverTypography.titleSize" @input="updateCoverTypo('titleSize', $event.target.value)">
-                </div>
-              </div>
-
-              <div class="cover-typo-row" v-if="coverTemplateSupports('title')">
-                <div class="cover-typo-row-header">
-                  <span class="cover-typo-label">标题行高</span>
-                  <span class="cover-typo-value">{{ coverTypography.titleLineHeight }}</span>
-                </div>
-                <div class="cover-typo-slider-row">
-                  <input type="range" min="1" max="2.5" step="0.1" :value="coverTypography.titleLineHeight" @input="updateCoverTypo('titleLineHeight', $event.target.value)">
-                  <input type="number" class="cover-typo-number-input" min="1" max="2.5" step="0.1" :value="coverTypography.titleLineHeight" @input="updateCoverTypo('titleLineHeight', $event.target.value)">
-                </div>
-              </div>
-
-              <!-- Subtitle Font Family -->
-              <div class="cover-typo-row" v-if="coverTemplateSupports('subtitle')">
-                <div class="cover-typo-row-header">
-                  <span class="cover-typo-label">副标题字体</span>
-                </div>
-                <select class="cover-font-select" v-model="coverTypography.subtitleFontFamily">
-                  <option v-for="font in coverFontOptions" :key="font.value" :value="font.value">{{ font.label }}</option>
-                </select>
-              </div>
-
-              <div class="cover-typo-row" v-if="coverTemplateSupports('subtitle')">
-                <div class="cover-typo-row-header">
-                  <span class="cover-typo-label">副标题字号</span>
-                  <span class="cover-typo-value">{{ coverTypography.subtitleSize }}px</span>
-                </div>
-                <div class="cover-typo-slider-row">
-                  <input type="range" min="12" max="40" :value="coverTypography.subtitleSize" @input="updateCoverTypo('subtitleSize', $event.target.value)">
-                  <input type="number" class="cover-typo-number-input" min="12" max="40" :value="coverTypography.subtitleSize" @input="updateCoverTypo('subtitleSize', $event.target.value)">
-                </div>
-              </div>
-
-              <div class="cover-typo-row" v-if="coverTemplateSupports('subtitle')">
-                <div class="cover-typo-row-header">
-                  <span class="cover-typo-label">副标题行高</span>
-                  <span class="cover-typo-value">{{ coverTypography.subtitleLineHeight }}</span>
-                </div>
-                <div class="cover-typo-slider-row">
-                  <input type="range" min="1" max="2.5" step="0.1" :value="coverTypography.subtitleLineHeight" @input="updateCoverTypo('subtitleLineHeight', $event.target.value)">
-                  <input type="number" class="cover-typo-number-input" min="1" max="2.5" step="0.1" :value="coverTypography.subtitleLineHeight" @input="updateCoverTypo('subtitleLineHeight', $event.target.value)">
+                  <input type="range" min="14" max="48" :value="coverTypography.tagSize" @input="updateCoverTypo('tagSize', $event.target.value)">
+                  <input type="number" class="cover-typo-number-input" min="14" max="48" :value="coverTypography.tagSize" @input="updateCoverTypo('tagSize', $event.target.value)">
                 </div>
               </div>
 

@@ -7,9 +7,9 @@ import { STYLES } from '../../styles/themes/index.js';
 
 /** 主题分类定义 */
 export const THEME_CATEGORIES = {
-  '日常公众号': ['wechat-cv8g', 'wechat-default', 'wechat-lingxi', 'wechat-elegant', 'minimalism'],
+  '日常公众号': ['wechat-default', 'wechat-lingxi', 'wechat-elegant', 'minimalism'],
   '资讯与深读': ['wechat-city-news', 'latepost-depth', 'wechat-deepread', 'wechat-ft', 'wechat-nyt', 'lemonde'],
-  '产品与技术': ['wechat-product-update', 'wechat-lab-report', 'wechat-anthropic', 'wechat-tech', 'wechat-apple', 'wechat-medium'],
+  '产品与技术': ['wechat-product-update', 'wechat-lab-report', 'wechat-anthropic', 'wechat-tech', 'wechat-apple', 'wechat-medium', 'wechat-cv8g'],
   '观点与札记': ['wechat-founder-note', 'wechat-paperpress', 'kami-paper', 'wechat-jonyive'],
   '设计与审美': ['kenya-emptiness', 'hische-editorial', 'ando-concrete', 'gaudi-organic', 'guardian', 'nikkei'],
 };

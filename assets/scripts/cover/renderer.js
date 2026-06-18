@@ -8,13 +8,17 @@ import { COVER_TEMPLATES } from './templates.js';
 /** Default typography settings for cover images */
 export const DEFAULT_TYPOGRAPHY = {
   titleSize: 48,
-  subtitleSize: 20,
-  tagSize: 14,
+  subtitleSize: 40,
+  tagSize: 28,
   authorSize: 14,
   titleLineHeight: 1.3,
-  subtitleLineHeight: 1.5,
+  subtitleLineHeight: 1.35,
   titleLetterSpacing: 0,
   subtitleLetterSpacing: 0,
+  titleOffsetY: 0,
+  subtitleOffsetY: 0,
+  titleOffsetX: 0,
+  subtitleOffsetX: 0,
   textAlign: 'center',
   titleFontFamily: "'Noto Sans SC', sans-serif",
   subtitleFontFamily: "'Noto Sans SC', sans-serif"
@@ -26,6 +30,7 @@ export const DEFAULT_COVER_CONTENT = {
   title: '在此输入标题',
   subtitle: '副标题文字',
   author: '',
+  issueNumber: 'No.01',
   illustrationSvg: ''
 };
 
@@ -90,6 +95,7 @@ export function renderCover(templateId, content, typography = {}) {
     title: content.title || '',
     subtitle: content.subtitle || '',
     author: content.author || '',
+    issueNumber: content.issueNumber || 'No.01',
     illustrationSvg: content.illustrationSvg || '',
     illustrationOpacity: content.illustrationOpacity ?? 1,
     layerOrder: content.layerOrder || 'text-top'

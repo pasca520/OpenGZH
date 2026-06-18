@@ -1,5 +1,5 @@
 /**
- * Theme: 车厘子红
+ * Theme: 小米
  * Key: wechat-cv8g
  * Source: https://mp.weixin.qq.com/s/Cv8GxLQD5I5LQWgVBLpEpA
  * Extracted traits: Xiaomi Auto article, 15px body, 1.8 line-height,
@@ -7,7 +7,7 @@
  */
 
 export const theme = {
-  "name": "车厘子红",
+  "name": "小米",
   "styles": {
     "container": "max-width: 100%; margin: 0 auto; padding: 16px 14px 48px 14px; font-family: -apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Noto Sans SC\", \"Helvetica Neue\", Arial, sans-serif; font-size: 15px; line-height: 1.8 !important; letter-spacing: 1.8px; color: #3e3e3e !important; background-color: #ffffff !important; word-wrap: break-word; text-rendering: optimizeLegibility;",
     "h1": "font-size: 24px; font-weight: 700; color: #161616 !important; line-height: 1.45 !important; margin: 30px 0 18px; padding: 0; text-align: center; letter-spacing: 1.8px;",

@@ -343,14 +343,7 @@
   align-items: center;
   justify-content: center;
   padding: var(--space-8);
-  background:
-    linear-gradient(45deg, rgba(0, 0, 0, 0.035) 25%, transparent 25%),
-    linear-gradient(-45deg, rgba(0, 0, 0, 0.035) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, rgba(0, 0, 0, 0.035) 75%),
-    linear-gradient(-45deg, transparent 75%, rgba(0, 0, 0, 0.035) 75%),
-    var(--color-surface-base);
-  background-size: 24px 24px;
-  background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+  background: var(--color-surface-base);
   overflow: auto;
   min-height: 0;
 }
@@ -459,11 +452,35 @@ textarea.cover-field-input {
   margin-bottom: var(--space-4);
 }
 
+/* Typography group card */
+.cover-typo-group {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.cover-typo-group-title {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
 .cover-typo-row {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-3);
+}
+
+.cover-typo-row:last-child {
+  margin-bottom: 0;
 }
 
 .cover-typo-row-header {
@@ -495,6 +512,56 @@ textarea.cover-field-input {
 .cover-typo-slider-row input[type="range"] {
   width: 100%;
   accent-color: var(--color-accent);
+}
+
+/* Offset row: two columns (X / Y) side by side */
+.cover-typo-offset-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.cover-typo-offset-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.cover-typo-offset-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-tertiary);
+  font-family: var(--font-mono);
+}
+
+.cover-typo-offset-slider-row {
+  display: grid;
+  grid-template-columns: 1fr 44px;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.cover-typo-offset-slider-row input[type="range"] {
+  width: 100%;
+  accent-color: var(--color-accent);
+}
+
+.cover-typo-offset-number {
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-xs);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  text-align: center;
+}
+
+.cover-typo-offset-number:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent-light);
 }
 
 .cover-typo-number-input {

@@ -62,28 +62,39 @@ const coverContent = reactive({
   tag: '技术分享',
   title: '用 AI 构建公众号封面工具',
   subtitle: '开箱即用，亦可自由迭代',
-  author: '@OpenGZH'
+  author: '@OpenGZH',
+  issueNumber: 'No.01'
 });
 const coverTypography = reactive({
   titleSize: 48,
-  subtitleSize: 20,
-  tagSize: 14,
+  subtitleSize: 40,
+  tagSize: 28,
   authorSize: 14,
   titleLineHeight: 1.3,
-  subtitleLineHeight: 1.5,
+  subtitleLineHeight: 1.4,
   titleLetterSpacing: 0,
   subtitleLetterSpacing: 0,
+  titleOffsetY: 0,
+  subtitleOffsetY: 0,
+  titleOffsetX: 0,
+  subtitleOffsetX: 0,
   textAlign: 'center',
   titleFontFamily: "'Noto Sans SC', sans-serif",
   subtitleFontFamily: "'Noto Sans SC', sans-serif"
 });
 const coverFontOptions = [
+  { label: '系统默认', value: "system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif" },
   { label: '思源黑体', value: "'Noto Sans SC', sans-serif" },
   { label: '思源宋体', value: "'Noto Serif SC', serif" },
   { label: '霞鹜文楷', value: "'LXGW WenKai', cursive" },
   { label: 'ZCOOL 小薇', value: "'ZCOOL XiaoWei', sans-serif" },
   { label: '站酷快乐体', value: "'ZCOOL KuaiLe', sans-serif" },
-  { label: 'Ma Shan Zheng', value: "'Ma Shan Zheng', cursive" }
+  { label: '站酷庆黄油', value: "'ZCOOL QingKe HuangYou', sans-serif" },
+  { label: 'Ma Shan Zheng', value: "'Ma Shan Zheng', cursive" },
+  { label: '刘健毛草', value: "'Liu Jian Mao Cao', cursive" },
+  { label: '龙藏体', value: "'Long Cang', cursive" },
+  { label: 'Fraunces', value: "'Fraunces', 'Noto Serif SC', serif" },
+  { label: 'Plus Jakarta Sans', value: "'Plus Jakarta Sans', 'Noto Sans SC', sans-serif" }
 ];
 const coverUndoStack = ref([]);
 const coverRedoStack = ref([]);
