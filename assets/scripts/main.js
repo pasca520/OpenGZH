@@ -25,6 +25,7 @@ import { renderCover, getTemplates, getCategories, DEFAULT_TYPOGRAPHY, DEFAULT_C
 import { exportCoverPng as doExportCoverPng } from './cover/export-png.js';
 import { DEFAULT_ILLUSTRATIONS, ILLUSTRATION_CATEGORIES, ILLUSTRATION_MARKETS, getIllustration, getIllustrationsByCategory, getAllIllustrations } from './cover/illustration-registry.js';
 import { loadIllustrationSvg, replaceIllustrationColor, extractPrimaryColor } from './cover/illustration-color.js';
+import { resolveLocalImages } from './core/markdown-image-resolver.js';
 
 const { createApp, ref, reactive, watch, nextTick, onMounted, computed } = window.Vue;
 
@@ -775,18 +776,59 @@ function handleDragLeave(event) {
   }
 }
 
-function handleFileUpload(event) {
+async function handleFileUpload(event) {
   const file = event.target.files[0];
   if (!file) return;
 
-  const reader = new FileReader();
-  reader.onload = (loadEvent) => {
-    const content = loadEvent.target.result || '';
-    const fileTitle = file.name.replace(/\.(md|markdown)$/i, '');
+  const fileTitle = file.name.replace(/\.(md|markdown)$/i, '');
+  let content;
+
+  try {
+    content = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result || '');
+      reader.onerror = () => reject(new Error('文件读取失败'));
+      reader.readAsText(file);
+    });
+  } catch (_error) {
+    toast.show('文件读取失败', 'error');
+    event.target.value = '';
+    return;
+  }
+
+  if (!imageStore) {
     createNewDocument(content, fileTitle);
-  };
-  reader.onerror = () => toast.show('文件读取失败', 'error');
-  reader.readAsText(file);
+    event.target.value = '';
+    return;
+  }
+
+  try {
+    const result = await resolveLocalImages(content, {
+      imageStore,
+      imageCompressor,
+      createImageId: () => createDocumentId('img'),
+    });
+
+    if (result.total > 0) {
+      if (result.cancelled) {
+        toast.show(`检测到 ${result.total} 张本地图片，已跳过导入`, 'info');
+      } else if (result.unmatched.length === 0) {
+        toast.show(`已导入 ${result.matched.length} 张本地图片`, 'success');
+      } else {
+        toast.show(
+          `已导入 ${result.matched.length} 张图片，${result.unmatched.length} 张未在目录中找到`,
+          'info'
+        );
+      }
+    }
+
+    createNewDocument(result.resolvedMarkdown, fileTitle);
+  } catch (error) {
+    console.error('图片解析失败:', error);
+    toast.show(`图片解析失败: ${error.message}`, 'error');
+    createNewDocument(content, fileTitle);
+  }
+
   event.target.value = '';
 }
 
@@ -816,6 +858,7 @@ function exportHTML() {
 
 function resetEditor() {
   markdownInput.value = '';
+  persistDocumentState();
   toast.show('已清空编辑器内容', 'info');
 }
 
@@ -853,6 +896,7 @@ function resetToDefault() {
   coverOpacity.value = 100;
   coverUndoStack.value = [];
   coverRedoStack.value = [];
+  persistDocumentState();
   toast.show('已恢复默认设置', 'info');
 }
 
