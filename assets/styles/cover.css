@@ -84,8 +84,13 @@
 }
 
 .cover-template-card {
+  position: relative;
   aspect-ratio: 900 / 383;
   border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: border-color var(--motion-instant), box-shadow var(--motion-instant), transform var(--motion-instant);
+  overflow: hidden;
 }
 
 .cover-template-card:hover {

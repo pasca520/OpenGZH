@@ -20,8 +20,8 @@ export const DEFAULT_TYPOGRAPHY = {
   titleOffsetX: 0,
   subtitleOffsetX: 0,
   textAlign: 'center',
-  titleFontFamily: "'Noto Sans SC', sans-serif",
-  subtitleFontFamily: "'Noto Sans SC', sans-serif"
+  titleFontFamily: "system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif",
+  subtitleFontFamily: "system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif"
 };
 
 /** Default cover content */
