@@ -45,6 +45,11 @@
   border-bottom: none;
 }
 
+.editor-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .document-title-input {
   width: 100%;
   padding: var(--space-5) var(--space-5) var(--space-6);

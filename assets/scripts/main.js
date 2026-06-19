@@ -819,7 +819,8 @@ function resetEditor() {
   toast.show('已清空编辑器内容', 'info');
 }
 
-function resetCoverToDefault() {
+function resetToDefault() {
+  markdownInput.value = loadDefaultExample();
   coverTemplateId.value = 'pure-white';
   Object.assign(coverContent, {
     tag: '技术分享',
@@ -852,7 +853,7 @@ function resetCoverToDefault() {
   coverOpacity.value = 100;
   coverUndoStack.value = [];
   coverRedoStack.value = [];
-  toast.show('封面已恢复默认设置', 'info');
+  toast.show('已恢复默认设置', 'info');
 }
 
 async function doCopy() {
@@ -1774,7 +1775,7 @@ const app = createApp({
       handleFileUpload,
       handleToolbarImageUpload,
       resetEditor,
-      resetCoverToDefault,
+      resetToDefault,
       exportMarkdown,
       exportHTML,
       selectTheme,
