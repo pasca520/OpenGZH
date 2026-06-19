@@ -1145,7 +1145,7 @@ const illustCard = {
   <line x1="910" y1="428" x2="940" y2="428" stroke="#C7D2FE" stroke-width="1.5" opacity="0.4"/>
   <line x1="270" y1="290" x2="930" y2="290" stroke="#F1F5F9" stroke-width="1"/>
   ${illustInner}
-  ${renderTextLines(content.title, cx, 330, Math.min(typo.titleSize, 36), typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#0F172A', '700', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${renderTextLines(content.title, cx, 330, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#0F172A', '700', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
   ${content.subtitle ? renderTextLines(content.subtitle, cx, 310, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#64748B', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
@@ -1317,7 +1317,7 @@ const techNeuralGrid = {
   <rect x="80" y="58" width="${Math.max(92, tagW(content.tag, typo.tagSize) + 34)}" height="38" rx="8" fill="none" stroke="#67E8F9" stroke-width="0.8" opacity="0.34"/>
   ${renderTextLines(content.tag, 97, 84, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#67E8F9', '700', typo.subtitleFontFamily)}` : ''}
   ${renderTextLines(content.title, 80, 170, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#F8FAFC', '800', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 80, 282, Math.min(typo.subtitleSize, 30), typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#A7F3D0', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${content.subtitle ? renderTextLines(content.subtitle, 80, 282, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#A7F3D0', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -1356,7 +1356,7 @@ const techLabConsole = {
   ${illustBlock}
   ${content.tag ? renderTextLines(content.tag, 80, 88, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#1D4ED8', '700', typo.subtitleFontFamily) : ''}
   ${renderTextLines(content.title, 80, 172, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#111827', '800', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 80, 284, Math.min(typo.subtitleSize, 30), typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#475569', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${content.subtitle ? renderTextLines(content.subtitle, 80, 284, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#475569', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -1396,7 +1396,7 @@ const productLaunchPad = {
   ${content.tag ? `<rect x="80" y="58" width="${Math.max(86, tagW(content.tag, typo.tagSize) + 34)}" height="38" rx="19" fill="#DBEAFE"/>
   ${renderTextLines(content.tag, 97, 84, typo.tagSize, typo.tagSize * 1.2, 1.8, 'left', '#2563EB', '700', typo.subtitleFontFamily)}` : ''}
   ${renderTextLines(content.title, 80, 172, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#0F172A', '850', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 80, 284, Math.min(typo.subtitleSize, 30), typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#475569', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${content.subtitle ? renderTextLines(content.subtitle, 80, 284, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#475569', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -1435,7 +1435,7 @@ const productCanvas = {
   ${illustBlock}
   ${content.tag ? renderTextLines(content.tag, 80, 88, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#C2410C', '700', typo.subtitleFontFamily) : ''}
   ${renderTextLines(content.title, 80, 172, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#1F2937', '850', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 80, 284, Math.min(typo.subtitleSize, 30), typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#6B7280', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${content.subtitle ? renderTextLines(content.subtitle, 80, 284, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#6B7280', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -1464,7 +1464,7 @@ const techBlueprint = {
   <circle cx="632" cy="90" r="9" fill="#0284C7" opacity="0.12"/><circle cx="1080" cy="412" r="14" fill="#65A30D" opacity="0.12"/>
   ${content.tag ? renderTextLines(content.tag, 80, 90, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#365314', '700', typo.subtitleFontFamily) : ''}
   ${renderTextLines(content.title, 80, 172, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#18181B', '850', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 80, 284, Math.min(typo.subtitleSize, 30), typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#475569', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${content.subtitle ? renderTextLines(content.subtitle, 80, 284, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#475569', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -1496,7 +1496,7 @@ const techTerminalMap = {
   <path d="M1148 436L1148 398M1148 436L1110 436" stroke="#38BDF8" stroke-width="1.2" opacity="0.22"/>
   ${content.tag ? renderTextLines(content.tag, 80, 90, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#93C5FD', '700', typo.subtitleFontFamily) : ''}
   ${renderTextLines(content.title, 80, 172, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#F8FAFC', '850', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 80, 284, Math.min(typo.subtitleSize, 30), typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#A7F3D0', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${content.subtitle ? renderTextLines(content.subtitle, 80, 284, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#A7F3D0', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -1527,7 +1527,7 @@ const productRoadmap = {
   <path d="M144 396H412" stroke="#F97316" stroke-width="4" opacity="0.36"/>
   ${content.tag ? renderTextLines(content.tag, 80, 90, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#C2410C', '700', typo.subtitleFontFamily) : ''}
   ${renderTextLines(content.title, 80, 172, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#1F2937', '850', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 80, 284, Math.min(typo.subtitleSize, 30), typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#6B7280', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${content.subtitle ? renderTextLines(content.subtitle, 80, 284, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#6B7280', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -1559,7 +1559,7 @@ const productDecisionBoard = {
   <circle cx="638" cy="80" r="10" fill="#0F766E" opacity="0.11"/><circle cx="1088" cy="92" r="14" fill="#DB2777" opacity="0.09"/>
   ${content.tag ? renderTextLines(content.tag, 80, 90, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#0F766E', '700', typo.subtitleFontFamily) : ''}
   ${renderTextLines(content.title, 80, 172, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#111827', '850', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 80, 284, Math.min(typo.subtitleSize, 30), typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#4B5563', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${content.subtitle ? renderTextLines(content.subtitle, 80, 284, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#4B5563', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
