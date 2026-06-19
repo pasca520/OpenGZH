@@ -20,6 +20,7 @@ docs/THEMES
 redesign-v2.html
 scheme-*.html
 fix_preview.py
+social-card-opengzh-markdown/
 
 # 部署密钥（绝不入仓）
 deploy/.ssh-key
