@@ -814,6 +814,11 @@ function exportHTML() {
   toast.show('已导出 HTML', 'success');
 }
 
+function resetEditor() {
+  markdownInput.value = '';
+  toast.show('已清空编辑器内容', 'info');
+}
+
 async function doCopy() {
   const styleConfig = STYLES[currentStyle.value];
   const success = await copyToWechat({
@@ -1732,6 +1737,7 @@ const app = createApp({
       handleDragLeave,
       handleFileUpload,
       handleToolbarImageUpload,
+      resetEditor,
       exportMarkdown,
       exportHTML,
       selectTheme,
