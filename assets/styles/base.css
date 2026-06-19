@@ -352,7 +352,6 @@ body {
 .preview-panel {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
   min-height: 0;
   flex: 1;
   min-width: 300px;
