@@ -101,7 +101,7 @@ export function renderCover(templateId, content, typography = {}) {
     layerOrder: content.layerOrder || 'text-top'
   };
 
-  // Template always renders at 1200x480 (5:2 ratio)
+  // Template renders at 1200x510 (~900:383 ratio for WeChat covers)
   const svg = template.render(safeContent, mergedTypo);
   if (safeContent.layerOrder !== 'image-top') return svg;
 

@@ -819,6 +819,42 @@ function resetEditor() {
   toast.show('已清空编辑器内容', 'info');
 }
 
+function resetCoverToDefault() {
+  coverTemplateId.value = 'pure-white';
+  Object.assign(coverContent, {
+    tag: '技术分享',
+    title: '用 AI 构建公众号封面工具',
+    subtitle: '开箱即用，亦可自由迭代',
+    author: '@OpenGZH',
+    issueNumber: 'No.01'
+  });
+  Object.assign(coverTypography, {
+    titleSize: 48,
+    subtitleSize: 40,
+    tagSize: 28,
+    authorSize: 14,
+    titleLineHeight: 1.3,
+    subtitleLineHeight: 1.4,
+    titleLetterSpacing: 0,
+    subtitleLetterSpacing: 0,
+    titleOffsetY: 0,
+    subtitleOffsetY: 0,
+    titleOffsetX: 0,
+    subtitleOffsetX: 0,
+    textAlign: 'center',
+    titleFontFamily: "'Noto Sans SC', sans-serif",
+    subtitleFontFamily: "'Noto Sans SC', sans-serif"
+  });
+  coverIllustrationId.value = '';
+  coverIllustrationSvg.value = '';
+  coverIllustrationColor.value = '#6366F1';
+  coverLayerOrder.value = 'text-top';
+  coverOpacity.value = 100;
+  coverUndoStack.value = [];
+  coverRedoStack.value = [];
+  toast.show('封面已恢复默认设置', 'info');
+}
+
 async function doCopy() {
   const styleConfig = STYLES[currentStyle.value];
   const success = await copyToWechat({
@@ -1366,7 +1402,7 @@ const coverSvgOutput = computed(() => {
 const coverCategories = computed(() => getCategories());
 
 const coverPreviewStyle = computed(() => {
-  return { aspectRatio: '1200 / 480' };
+  return { aspectRatio: '900 / 383' };
 });
 
 function getCoverTemplatesByCategory(category) {
@@ -1374,7 +1410,7 @@ function getCoverTemplatesByCategory(category) {
 }
 
 function renderCoverThumb(templateId) {
-  return renderCover(templateId, { tag: '标签', title: '标题预览', subtitle: '副标题', author: '作者' }, { ...DEFAULT_TYPOGRAPHY, titleSize: 36, subtitleSize: 16, tagSize: 10, authorSize: 10 }, '5:2');
+  return renderCover(templateId, { tag: '标签', title: '标题预览', subtitle: '副标题', author: '作者' }, { ...DEFAULT_TYPOGRAPHY, titleSize: 36, subtitleSize: 16, tagSize: 10, authorSize: 10 });
 }
 
 function getTemplateMeta(templateId) {
@@ -1738,6 +1774,7 @@ const app = createApp({
       handleFileUpload,
       handleToolbarImageUpload,
       resetEditor,
+      resetCoverToDefault,
       exportMarkdown,
       exportHTML,
       selectTheme,

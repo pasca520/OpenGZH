@@ -5,7 +5,7 @@
 
 /** Supported aspect ratios with their pixel dimensions */
 export const COVER_RATIOS = {
-  '5:2': { width: 1200, height: 480, label: '5:2 · 公众号封面' }
+  '900×383': { width: 900, height: 383, label: '900×383 · 公众号封面' }
 };
 
 /**
@@ -70,7 +70,7 @@ export async function exportCoverPng(svgString, filename = 'cover') {
   const serializer = new XMLSerializer();
   svgString = serializer.serializeToString(svgEl);
 
-  const viewBox = (svgEl.getAttribute('viewBox') || '0 0 1200 480').split(' ').map(Number);
+  const viewBox = (svgEl.getAttribute('viewBox') || '0 0 1200 510').split(' ').map(Number);
   const width = viewBox[2] || 1200;
   const height = viewBox[3] || 480;
 

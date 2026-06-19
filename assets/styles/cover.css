@@ -84,15 +84,8 @@
 }
 
 .cover-template-card {
-  aspect-ratio: 5 / 2;
+  aspect-ratio: 900 / 383;
   border-radius: var(--radius-sm);
-  cursor: pointer;
-  border: 1px solid var(--color-border-default);
-  transition: border-color var(--motion-instant), transform var(--motion-instant), box-shadow var(--motion-instant);
-  position: relative;
-  background: var(--color-surface-raised);
-  overflow: hidden;
-  box-shadow: var(--shadow-1);
 }
 
 .cover-template-card:hover {
@@ -351,7 +344,7 @@
 .cover-preview-frame {
   width: 100%;
   max-width: 720px;
-  aspect-ratio: 5 / 2;
+  aspect-ratio: 900 / 383;
   border-radius: var(--radius-sm);
   overflow: hidden;
   box-shadow: var(--shadow-4);

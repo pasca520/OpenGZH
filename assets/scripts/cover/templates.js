@@ -91,17 +91,17 @@ const blackGold = {
   elements: { tag: false, title: true, subtitle: true, author: true, image: false },
   render(content, typo) {
     const cx = 600;
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="bg-gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#D4AF37" stop-opacity="0.1"/><stop offset="50%" stop-color="#D4AF37" stop-opacity="0"/><stop offset="100%" stop-color="#D4AF37" stop-opacity="0.05"/></linearGradient>
     <linearGradient id="gold-shine" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#D4AF37" stop-opacity="0"/><stop offset="50%" stop-color="#FFD700" stop-opacity="0.15"/><stop offset="100%" stop-color="#D4AF37" stop-opacity="0"/></linearGradient>
     <radialGradient id="gold-glow1" cx="0.2" cy="0.3"><stop offset="0%" stop-color="#D4AF37" stop-opacity="0.08"/><stop offset="100%" stop-color="#D4AF37" stop-opacity="0"/></radialGradient>
     <radialGradient id="gold-glow2" cx="0.8" cy="0.7"><stop offset="0%" stop-color="#D4AF37" stop-opacity="0.06"/><stop offset="100%" stop-color="#D4AF37" stop-opacity="0"/></radialGradient>
   </defs>
-  <rect width="1200" height="480" fill="#111111"/>
-  <rect width="1200" height="480" fill="url(#bg-gold)"/>
-  <rect width="1200" height="480" fill="url(#gold-glow1)"/>
-  <rect width="1200" height="480" fill="url(#gold-glow2)"/>
+  <rect width="1200" height="510" fill="#111111"/>
+  <rect width="1200" height="510" fill="url(#bg-gold)"/>
+  <rect width="1200" height="510" fill="url(#gold-glow1)"/>
+  <rect width="1200" height="510" fill="url(#gold-glow2)"/>
   <rect x="0" y="200" width="1200" height="80" fill="url(#gold-shine)"/>
   <rect x="40" y="40" width="1120" height="400" fill="none" stroke="#D4AF37" stroke-width="1" opacity="0.4"/>
   <rect x="50" y="50" width="1100" height="380" fill="none" stroke="#D4AF37" stroke-width="0.5" opacity="0.2"/>
@@ -136,9 +136,9 @@ const pureWhite = {
   id: 'pure-white', name: '素白纯净', category: 'solid-light',
   elements: { tag: true, title: true, subtitle: true, author: false, image: false },
   render(content, typo) {
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs><linearGradient id="pw-ov" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#4F46E5" stop-opacity="0.02"/><stop offset="100%" stop-color="#7C3AED" stop-opacity="0.04"/></linearGradient></defs>
-  <rect width="1200" height="480" fill="#FAFAFA"/><rect width="1200" height="480" fill="url(#pw-ov)"/>
+  <rect width="1200" height="510" fill="#FAFAFA"/><rect width="1200" height="510" fill="url(#pw-ov)"/>
   <rect x="80" y="80" width="5" height="320" fill="#4F46E5"/><rect x="80" y="80" width="5" height="60" fill="#7C3AED"/>
   <circle cx="1050" cy="100" r="60" fill="#EEF2FF" opacity="0.8"/>
   <circle cx="1050" cy="100" r="40" fill="none" stroke="#C7D2FE" stroke-width="1" opacity="0.6"/>
@@ -166,13 +166,13 @@ const warmCream = {
   elements: { tag: false, title: true, subtitle: true, author: true, image: false },
   render(content, typo) {
     const cx = 600;
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <radialGradient id="wc-g1" cx="0.85" cy="0.15"><stop offset="0%" stop-color="#FFECD2" stop-opacity="0.6"/><stop offset="100%" stop-color="#FFECD2" stop-opacity="0"/></radialGradient>
     <radialGradient id="wc-g2" cx="0.1" cy="0.85"><stop offset="0%" stop-color="#FFECD2" stop-opacity="0.5"/><stop offset="100%" stop-color="#FFECD2" stop-opacity="0"/></radialGradient>
   </defs>
-  <rect width="1200" height="480" fill="#FFF8F0"/>
-  <rect width="1200" height="480" fill="url(#wc-g1)"/><rect width="1200" height="480" fill="url(#wc-g2)"/>
+  <rect width="1200" height="510" fill="#FFF8F0"/>
+  <rect width="1200" height="510" fill="url(#wc-g1)"/><rect width="1200" height="510" fill="url(#wc-g2)"/>
   <path d="M1050 50Q1080 20 1100 50Q1080 40 1060 60Z" fill="#A8D5BA" opacity="0.3"/>
   <path d="M1050 50Q1070 45 1090 55" stroke="#86C9A0" stroke-width="0.8" fill="none" opacity="0.4"/>
   <path d="M1080 70Q1110 50 1120 80Q1100 65 1085 80Z" fill="#B5D8C7" opacity="0.25"/>
@@ -202,12 +202,12 @@ const lavenderLight = {
   id: 'lavender-light', name: '淡紫轻语', category: 'solid-light',
   elements: { tag: true, title: true, subtitle: true, author: false, image: false },
   render(content, typo) {
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="lav-ac" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#7C3AED"/><stop offset="100%" stop-color="#A78BFA"/></linearGradient>
     <radialGradient id="lav-orb" cx="0.5" cy="0.5"><stop offset="0%" stop-color="#C4B5FD" stop-opacity="0.3"/><stop offset="100%" stop-color="#C4B5FD" stop-opacity="0"/></radialGradient>
   </defs>
-  <rect width="1200" height="480" fill="#F3E8FF"/>
+  <rect width="1200" height="510" fill="#F3E8FF"/>
   <circle cx="1080" cy="100" r="160" fill="#DDD6FE" opacity="0.4"/>
   <circle cx="1080" cy="100" r="120" fill="#C4B5FD" opacity="0.2"/>
   <circle cx="1080" cy="100" r="80" fill="none" stroke="#A78BFA" stroke-width="1" opacity="0.3"/>
@@ -239,7 +239,7 @@ const indigoViolet = {
   elements: { tag: true, title: true, subtitle: true, author: true, image: false },
   render(content, typo) {
     const cx = 600;
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="iv-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#4F46E5"/><stop offset="100%" stop-color="#7C3AED"/></linearGradient>
     <radialGradient id="iv-o1" cx="0.15" cy="0.8"><stop offset="0%" stop-color="white" stop-opacity="0.06"/><stop offset="100%" stop-color="white" stop-opacity="0"/></radialGradient>
@@ -247,10 +247,10 @@ const indigoViolet = {
     <radialGradient id="iv-glow" cx="0.5" cy="0.45"><stop offset="0%" stop-color="#A78BFA" stop-opacity="0.18"/><stop offset="60%" stop-color="#7C3AED" stop-opacity="0.05"/><stop offset="100%" stop-color="#4F46E5" stop-opacity="0"/></radialGradient>
     <pattern id="iv-grid" width="60" height="60" patternUnits="userSpaceOnUse"><path d="M60 0L0 0 0 60" fill="none" stroke="white" stroke-width="0.3" opacity="0.06"/></pattern>
   </defs>
-  <rect width="1200" height="480" fill="url(#iv-bg)"/>
-  <rect width="1200" height="480" fill="url(#iv-o1)"/><rect width="1200" height="480" fill="url(#iv-o2)"/>
-  <rect width="1200" height="480" fill="url(#iv-glow)"/>
-  <rect width="1200" height="480" fill="url(#iv-grid)"/>
+  <rect width="1200" height="510" fill="url(#iv-bg)"/>
+  <rect width="1200" height="510" fill="url(#iv-o1)"/><rect width="1200" height="510" fill="url(#iv-o2)"/>
+  <rect width="1200" height="510" fill="url(#iv-glow)"/>
+  <rect width="1200" height="510" fill="url(#iv-grid)"/>
   <!-- Organic blob shapes -->
   <path d="M120 380Q180 300 280 340Q360 370 340 440Q320 490 220 470Q130 450 120 380" fill="white" opacity="0.03"/>
   <path d="M880 60Q960 20 1060 80Q1140 130 1100 220Q1060 290 960 260Q870 230 880 140Z" fill="white" opacity="0.035"/>
@@ -307,14 +307,14 @@ const darkFade = {
   id: 'dark-fade', name: '暗夜渐变', category: 'gradient',
   elements: { tag: false, title: true, subtitle: true, author: false, image: false },
   render(content, typo) {
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="df-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#0F172A"/><stop offset="100%" stop-color="#1E1B4B"/></linearGradient>
     <radialGradient id="df-o1" cx="0.7" cy="0.3"><stop offset="0%" stop-color="#6366F1" stop-opacity="0.15"/><stop offset="100%" stop-color="#6366F1" stop-opacity="0"/></radialGradient>
     <radialGradient id="df-o2" cx="0.2" cy="0.7"><stop offset="0%" stop-color="#818CF8" stop-opacity="0.1"/><stop offset="100%" stop-color="#818CF8" stop-opacity="0"/></radialGradient>
   </defs>
-  <rect width="1200" height="480" fill="url(#df-bg)"/>
-  <rect width="1200" height="480" fill="url(#df-o1)"/><rect width="1200" height="480" fill="url(#df-o2)"/>
+  <rect width="1200" height="510" fill="url(#df-bg)"/>
+  <rect width="1200" height="510" fill="url(#df-o1)"/><rect width="1200" height="510" fill="url(#df-o2)"/>
   <circle cx="850" cy="120" r="150" fill="#6366F1" opacity="0.06"/>
   <circle cx="850" cy="120" r="100" fill="none" stroke="#818CF8" stroke-width="0.5" opacity="0.1"/>
   <circle cx="200" cy="380" r="120" fill="#818CF8" opacity="0.04"/>
@@ -347,12 +347,12 @@ const dawnLight = {
   elements: { tag: true, title: true, subtitle: true, author: false, image: false },
   render(content, typo) {
     const cx = 600;
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="dl-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#C4B5FD"/><stop offset="50%" stop-color="#DDD6FE"/><stop offset="100%" stop-color="#EDE9FE"/></linearGradient>
     <radialGradient id="dl-sun" cx="0.8" cy="0.1"><stop offset="0%" stop-color="#FDE68A" stop-opacity="0.3"/><stop offset="50%" stop-color="#FDE68A" stop-opacity="0.1"/><stop offset="100%" stop-color="#FDE68A" stop-opacity="0"/></radialGradient>
   </defs>
-  <rect width="1200" height="480" fill="url(#dl-bg)"/><rect width="1200" height="480" fill="url(#dl-sun)"/>
+  <rect width="1200" height="510" fill="url(#dl-bg)"/><rect width="1200" height="510" fill="url(#dl-sun)"/>
   <line x1="960" y1="40" x2="900" y2="150" stroke="#FDE68A" stroke-width="1" opacity="0.2"/>
   <line x1="960" y1="40" x2="850" y2="100" stroke="#FDE68A" stroke-width="0.8" opacity="0.15"/>
   <line x1="960" y1="40" x2="1050" y2="150" stroke="#FDE68A" stroke-width="1" opacity="0.2"/>
@@ -383,7 +383,7 @@ const aurora = {
   elements: { tag: false, title: true, subtitle: true, author: false, image: false },
   render(content, typo) {
     const cx = 600;
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="au-bg" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#2DD4BF"/><stop offset="50%" stop-color="#6366F1"/><stop offset="100%" stop-color="#A855F7"/></linearGradient>
     <linearGradient id="au-s1" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#34D399" stop-opacity="0"/><stop offset="30%" stop-color="#34D399" stop-opacity="0.15"/><stop offset="70%" stop-color="#60A5FA" stop-opacity="0.1"/><stop offset="100%" stop-color="#60A5FA" stop-opacity="0"/></linearGradient>
@@ -392,12 +392,12 @@ const aurora = {
     <radialGradient id="au-glow2" cx="0.7" cy="0.7"><stop offset="0%" stop-color="#A78BFA" stop-opacity="0.12"/><stop offset="100%" stop-color="#A78BFA" stop-opacity="0"/></radialGradient>
     <pattern id="au-mesh" width="40" height="40" patternUnits="userSpaceOnUse" patternTransform="rotate(30)"><line x1="0" y1="0" x2="40" y2="0" stroke="white" stroke-width="0.2" opacity="0.04"/><line x1="0" y1="0" x2="0" y2="40" stroke="white" stroke-width="0.2" opacity="0.04"/></pattern>
   </defs>
-  <rect width="1200" height="480" fill="url(#au-bg)"/>
-  <rect width="1200" height="480" fill="url(#au-glow1)"/><rect width="1200" height="480" fill="url(#au-glow2)"/>
-  <rect width="1200" height="480" fill="url(#au-mesh)"/>
+  <rect width="1200" height="510" fill="url(#au-bg)"/>
+  <rect width="1200" height="510" fill="url(#au-glow1)"/><rect width="1200" height="510" fill="url(#au-glow2)"/>
+  <rect width="1200" height="510" fill="url(#au-mesh)"/>
   <!-- Aurora bands - more layers for richness -->
   <ellipse cx="300" cy="0" rx="400" ry="200" fill="white" opacity="0.04"/>
-  <ellipse cx="900" cy="480" rx="500" ry="200" fill="white" opacity="0.04"/>
+  <ellipse cx="900" cy="510" rx="500" ry="200" fill="white" opacity="0.04"/>
   <path d="M0 80Q200 40 400 70Q600 100 800 60Q1000 20 1200 50" stroke="white" stroke-width="30" fill="none" opacity="0.04"/>
   <rect x="0" y="50" width="1200" height="80" fill="url(#au-s1)"/>
   <rect x="0" y="350" width="1200" height="80" fill="url(#au-s2)"/>
@@ -458,8 +458,8 @@ const dotMatrix = {
         dots += `<circle cx="${x}" cy="${y}" r="${r.toFixed(1)}" fill="#4F46E5" opacity="${op.toFixed(2)}"/>`;
       }
     }
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
-  <rect width="1200" height="480" fill="#FFFFFF"/>${dots}
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="510" fill="#FFFFFF"/>${dots}
   <circle cx="50" cy="50" r="40" fill="none" stroke="#C7D2FE" stroke-width="0.8" opacity="0.3"/>
   <circle cx="50" cy="50" r="25" fill="none" stroke="#A5B4FC" stroke-width="0.5" opacity="0.25"/>
   <circle cx="1150" cy="430" r="50" fill="none" stroke="#C7D2FE" stroke-width="0.8" opacity="0.25"/>
@@ -483,9 +483,9 @@ const geoOverlap = {
   elements: { tag: false, title: true, subtitle: true, author: false, image: false },
   render(content, typo) {
     const cx = 600;
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs><linearGradient id="go-ov" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#FAFAFA"/><stop offset="100%" stop-color="#F3F4F6"/></linearGradient></defs>
-  <rect width="1200" height="480" fill="url(#go-ov)"/>
+  <rect width="1200" height="510" fill="url(#go-ov)"/>
   <circle cx="200" cy="120" r="180" fill="#6366F1" opacity="0.08"/>
   <circle cx="200" cy="120" r="130" fill="none" stroke="#818CF8" stroke-width="1" opacity="0.12"/>
   <circle cx="350" cy="300" r="140" fill="#A855F7" opacity="0.08"/>
@@ -517,14 +517,14 @@ const triangleComp = {
   elements: { tag: false, title: true, subtitle: true, author: false, image: false },
   render(content, typo) {
     const cx = 600;
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="tc-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#0F172A"/><stop offset="100%" stop-color="#1E293B"/></linearGradient>
     <linearGradient id="tc-ac" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#4F46E5" stop-opacity="0.15"/><stop offset="100%" stop-color="#4F46E5" stop-opacity="0"/></linearGradient>
   </defs>
-  <rect width="1200" height="480" fill="url(#tc-bg)"/>
-  <polygon points="0,480 400,200 800,480" fill="#1E293B" stroke="#334155" stroke-width="1" opacity="0.6"/>
-  <polygon points="10,480 400,210 790,480" fill="none" stroke="#475569" stroke-width="0.5" opacity="0.3"/>
+  <rect width="1200" height="510" fill="url(#tc-bg)"/>
+  <polygon points="0,510 400,200 800,480" fill="#1E293B" stroke="#334155" stroke-width="1" opacity="0.6"/>
+  <polygon points="10,510 400,210 790,480" fill="none" stroke="#475569" stroke-width="0.5" opacity="0.3"/>
   <polygon points="600,0 1200,300 1200,0" fill="#1E293B" stroke="#334155" stroke-width="1" opacity="0.4"/>
   <polygon points="610,10 1190,295 1190,10" fill="none" stroke="#475569" stroke-width="0.5" opacity="0.2"/>
   <polygon points="900,480 1100,300 1200,480" fill="#4F46E5" opacity="0.08"/>
@@ -555,14 +555,14 @@ const frostedGlass = {
   elements: { tag: true, title: true, subtitle: true, author: false, image: false },
   render(content, typo) {
     const cx = 600;
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="fg-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#312E81"/><stop offset="100%" stop-color="#4F46E5"/></linearGradient>
     <radialGradient id="fg-center" cx="0.5" cy="0.5"><stop offset="0%" stop-color="#7C3AED" stop-opacity="0.2"/><stop offset="100%" stop-color="#4F46E5" stop-opacity="0"/></radialGradient>
     <filter id="fg-noise"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="3" stitchTiles="stitch" result="n"/><feColorMatrix type="saturate" values="0" in="n" result="g"/><feBlend in="SourceGraphic" in2="g" mode="multiply"/></filter>
   </defs>
-  <rect width="1200" height="480" fill="url(#fg-bg)"/>
-  <rect width="1200" height="480" fill="url(#fg-center)"/>
+  <rect width="1200" height="510" fill="url(#fg-bg)"/>
+  <rect width="1200" height="510" fill="url(#fg-center)"/>
   <!-- Rich color orbs with layering -->
   <circle cx="250" cy="100" r="200" fill="#6366F1" opacity="0.3"/>
   <circle cx="250" cy="100" r="140" fill="#818CF8" opacity="0.15"/>
@@ -584,7 +584,7 @@ const frostedGlass = {
   <path d="M80 280Q120 240 180 270Q220 290 200 340Q180 380 120 360Q70 340 80 280" fill="#A78BFA" opacity="0.08"/>
   <path d="M1020 180Q1070 150 1120 190Q1150 220 1120 260Q1080 290 1040 260Q1010 230 1020 180" fill="#818CF8" opacity="0.06"/>
   <!-- Noise texture overlay -->
-  <rect width="1200" height="480" fill="#7C3AED" filter="url(#fg-noise)" opacity="0.04"/>
+  <rect width="1200" height="510" fill="#7C3AED" filter="url(#fg-noise)" opacity="0.04"/>
   <!-- Scattered light particles -->
   <circle cx="200" cy="200" r="3" fill="white" opacity="0.3"/><circle cx="450" cy="150" r="2.5" fill="white" opacity="0.25"/>
   <circle cx="750" cy="350" r="3" fill="white" opacity="0.2"/><circle cx="900" cy="200" r="2.5" fill="white" opacity="0.25"/>
@@ -617,10 +617,10 @@ const paperTexture = {
   elements: { tag: false, title: true, subtitle: true, author: true, image: false },
   render(content, typo) {
     const cx = 600;
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs><filter id="pn"><feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="4" stitchTiles="stitch" result="n"/><feColorMatrix type="saturate" values="0" in="n" result="g"/><feBlend in="SourceGraphic" in2="g" mode="multiply"/></filter></defs>
-  <rect width="1200" height="480" fill="#F5F0E8"/>
-  <rect width="1200" height="480" fill="#EDE8DC" filter="url(#pn)" opacity="0.3"/>
+  <rect width="1200" height="510" fill="#F5F0E8"/>
+  <rect width="1200" height="510" fill="#EDE8DC" filter="url(#pn)" opacity="0.3"/>
   <g opacity="0.25">
     <path d="M100 60Q120 40 140 55Q160 70 180 50Q200 30 220 45" stroke="#8B7D6B" stroke-width="1" fill="none"/>
     <path d="M130 50Q125 35 135 30" stroke="#8B7D6B" stroke-width="0.8" fill="none"/>
@@ -655,9 +655,9 @@ const frameBorder = {
   elements: { tag: true, title: true, subtitle: true, author: false, image: false },
   render(content, typo) {
     const cx = 600;
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs><linearGradient id="fb-ac" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#4F46E5" stop-opacity="0"/><stop offset="50%" stop-color="#4F46E5" stop-opacity="1"/><stop offset="100%" stop-color="#4F46E5" stop-opacity="0"/></linearGradient></defs>
-  <rect width="1200" height="480" fill="#FFFFFF"/>
+  <rect width="1200" height="510" fill="#FFFFFF"/>
   <rect x="60" y="40" width="1080" height="400" fill="none" stroke="#E5E7EB" stroke-width="1.5"/>
   <rect x="80" y="55" width="1040" height="370" fill="none" stroke="#E5E7EB" stroke-width="0.5"/>
   <path d="M60 55L60 40L75 40" fill="none" stroke="#4F46E5" stroke-width="2" opacity="0.5"/>
@@ -689,15 +689,15 @@ const splitScreen = {
   id: 'split-screen', name: '分割构成', category: 'editorial',
   elements: { tag: true, title: true, subtitle: true, author: true, image: false },
   render(content, typo) {
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="ss-l" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#4F46E5"/><stop offset="100%" stop-color="#3730A3"/></linearGradient>
     <linearGradient id="ss-d" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#6366F1"/><stop offset="50%" stop-color="#818CF8"/><stop offset="100%" stop-color="#6366F1"/></linearGradient>
     <pattern id="ss-lines" width="20" height="20" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="20" stroke="white" stroke-width="0.2" opacity="0.04"/></pattern>
   </defs>
-  <rect width="1200" height="480" fill="#FAFAFA"/>
-  <rect x="0" y="0" width="420" height="480" fill="url(#ss-l)"/>
-  <rect x="0" y="0" width="420" height="480" fill="url(#ss-lines)"/>
+  <rect width="1200" height="510" fill="#FAFAFA"/>
+  <rect x="0" y="0" width="420" height="510" fill="url(#ss-l)"/>
+  <rect x="0" y="0" width="420" height="510" fill="url(#ss-lines)"/>
   <!-- Left panel organic shapes -->
   <circle cx="210" cy="240" r="120" fill="white" opacity="0.05"/>
   <circle cx="210" cy="240" r="80" fill="none" stroke="white" stroke-width="1" opacity="0.1"/>
@@ -711,7 +711,7 @@ const splitScreen = {
   <circle cx="80" cy="100" r="2.5" fill="white" opacity="0.2"/><circle cx="340" cy="80" r="2" fill="white" opacity="0.15"/>
   <circle cx="100" cy="380" r="2" fill="white" opacity="0.15"/><circle cx="320" cy="400" r="2" fill="white" opacity="0.12"/>
   <!-- Gradient divider with accents -->
-  <rect x="420" y="0" width="4" height="480" fill="url(#ss-d)" opacity="0.5"/>
+  <rect x="420" y="0" width="4" height="510" fill="url(#ss-d)" opacity="0.5"/>
   <circle cx="422" cy="120" r="4" fill="#818CF8" opacity="0.3"/>
   <circle cx="422" cy="240" r="3" fill="#6366F1" opacity="0.25"/>
   <circle cx="422" cy="360" r="4" fill="#818CF8" opacity="0.3"/>
@@ -743,29 +743,29 @@ const digitalScene = {
   illustFit: 'side',
   elements: { tag: true, title: true, subtitle: true, author: false, image: false, illustration: true },
   render(content, typo) {
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <radialGradient id="ds-gl" cx="0.75" cy="0.5"><stop offset="0%" stop-color="#1E40AF" stop-opacity="0.3"/><stop offset="100%" stop-color="#0A192F" stop-opacity="0"/></radialGradient>
     <radialGradient id="ds-gl2" cx="0.2" cy="0.8"><stop offset="0%" stop-color="#3B82F6" stop-opacity="0.1"/><stop offset="100%" stop-color="#0A192F" stop-opacity="0"/></radialGradient>
     <linearGradient id="ds-ln" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#60A5FA" stop-opacity="0"/><stop offset="50%" stop-color="#60A5FA" stop-opacity="0.6"/><stop offset="100%" stop-color="#60A5FA" stop-opacity="0"/></linearGradient>
     <linearGradient id="ds-holo" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#60A5FA" stop-opacity="0.05"/><stop offset="50%" stop-color="#A78BFA" stop-opacity="0.03"/><stop offset="100%" stop-color="#60A5FA" stop-opacity="0.05"/></linearGradient>
   </defs>
-  <rect width="1200" height="480" fill="#0A192F"/>
-  <rect width="1200" height="480" fill="url(#ds-gl)"/>
-  <rect width="1200" height="480" fill="url(#ds-gl2)"/>
-  <rect width="1200" height="480" fill="url(#ds-holo)"/>
+  <rect width="1200" height="510" fill="#0A192F"/>
+  <rect width="1200" height="510" fill="url(#ds-gl)"/>
+  <rect width="1200" height="510" fill="url(#ds-gl2)"/>
+  <rect width="1200" height="510" fill="url(#ds-holo)"/>
   <image href="assets/images/cover-illustrations/isometric-devices.svg" x="620" y="30" width="560" height="420" opacity="0.85"/>
   <!-- Connection lines -->
   <line x1="500" y1="200" x2="650" y2="180" stroke="url(#ds-ln)" stroke-width="1"/>
   <line x1="500" y1="280" x2="650" y2="300" stroke="url(#ds-ln)" stroke-width="0.8"/>
   <!-- Enhanced perspective grid -->
   <g opacity="0.06">
-    <line x1="80" y1="0" x2="80" y2="480" stroke="#60A5FA" stroke-width="0.5"/>
-    <line x1="160" y1="0" x2="160" y2="480" stroke="#60A5FA" stroke-width="0.5"/>
-    <line x1="240" y1="0" x2="240" y2="480" stroke="#60A5FA" stroke-width="0.5"/>
-    <line x1="320" y1="0" x2="320" y2="480" stroke="#60A5FA" stroke-width="0.5"/>
-    <line x1="400" y1="0" x2="400" y2="480" stroke="#60A5FA" stroke-width="0.5"/>
-    <line x1="480" y1="0" x2="480" y2="480" stroke="#60A5FA" stroke-width="0.3"/>
+    <line x1="80" y1="0" x2="80" y2="510" stroke="#60A5FA" stroke-width="0.5"/>
+    <line x1="160" y1="0" x2="160" y2="510" stroke="#60A5FA" stroke-width="0.5"/>
+    <line x1="240" y1="0" x2="240" y2="510" stroke="#60A5FA" stroke-width="0.5"/>
+    <line x1="320" y1="0" x2="320" y2="510" stroke="#60A5FA" stroke-width="0.5"/>
+    <line x1="400" y1="0" x2="400" y2="510" stroke="#60A5FA" stroke-width="0.5"/>
+    <line x1="480" y1="0" x2="480" y2="510" stroke="#60A5FA" stroke-width="0.3"/>
     <line x1="0" y1="80" x2="560" y2="80" stroke="#60A5FA" stroke-width="0.5"/>
     <line x1="0" y1="160" x2="560" y2="160" stroke="#60A5FA" stroke-width="0.5"/>
     <line x1="0" y1="240" x2="560" y2="240" stroke="#60A5FA" stroke-width="0.5"/>
@@ -774,9 +774,9 @@ const digitalScene = {
   </g>
   <!-- Perspective vanishing lines -->
   <g opacity="0.04">
-    <line x1="0" y1="480" x2="300" y2="0" stroke="#60A5FA" stroke-width="0.5"/>
-    <line x1="0" y1="480" x2="500" y2="100" stroke="#3B82F6" stroke-width="0.3"/>
-    <line x1="560" y1="480" x2="300" y2="0" stroke="#60A5FA" stroke-width="0.5"/>
+    <line x1="0" y1="510" x2="300" y2="0" stroke="#60A5FA" stroke-width="0.5"/>
+    <line x1="0" y1="510" x2="500" y2="100" stroke="#3B82F6" stroke-width="0.3"/>
+    <line x1="560" y1="510" x2="300" y2="0" stroke="#60A5FA" stroke-width="0.5"/>
   </g>
   <!-- Grid intersection nodes -->
   <circle cx="160" cy="160" r="4" fill="#60A5FA" opacity="0.15"/><circle cx="160" cy="160" r="2" fill="#93C5FD" opacity="0.4"/>
@@ -816,13 +816,13 @@ const warmShowcase = {
   elements: { tag: true, title: true, subtitle: true, author: true, image: false },
   render(content, typo) {
     const cx = 600;
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="ws-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#C2410C"/><stop offset="50%" stop-color="#B45309"/><stop offset="100%" stop-color="#92400E"/></linearGradient>
     <radialGradient id="ws-gl" cx="0.3" cy="0.5"><stop offset="0%" stop-color="#F97316" stop-opacity="0.2"/><stop offset="100%" stop-color="#C2410C" stop-opacity="0"/></radialGradient>
   </defs>
-  <rect width="1200" height="480" fill="url(#ws-bg)"/>
-  <rect width="1200" height="480" fill="url(#ws-gl)"/>
+  <rect width="1200" height="510" fill="url(#ws-bg)"/>
+  <rect width="1200" height="510" fill="url(#ws-gl)"/>
   <circle cx="200" cy="100" r="150" fill="white" opacity="0.04"/>
   <circle cx="100" cy="400" r="100" fill="white" opacity="0.03"/>
   <path d="M0 350Q200 310 400 340Q600 370 800 330" stroke="white" stroke-width="1" fill="none" opacity="0.06"/>
@@ -851,13 +851,13 @@ const playfulMascot = {
   id: 'playful-mascot', name: '趣味吉祥物', category: 'gradient',
   elements: { tag: true, title: true, subtitle: true, author: true, image: false },
   render(content, typo) {
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="pm-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#0D9488"/><stop offset="100%" stop-color="#10B981"/></linearGradient>
     <radialGradient id="pm-gl" cx="0.3" cy="0.4"><stop offset="0%" stop-color="#14B8A6" stop-opacity="0.3"/><stop offset="100%" stop-color="#0D9488" stop-opacity="0"/></radialGradient>
   </defs>
-  <rect width="1200" height="480" fill="url(#pm-bg)"/>
-  <rect width="1200" height="480" fill="url(#pm-gl)"/>
+  <rect width="1200" height="510" fill="url(#pm-bg)"/>
+  <rect width="1200" height="510" fill="url(#pm-gl)"/>
   <circle cx="200" cy="80" r="120" fill="white" opacity="0.04"/>
   <circle cx="100" cy="350" r="80" fill="white" opacity="0.03"/>
   <circle cx="500" cy="450" r="60" fill="white" opacity="0.03"/>
@@ -903,13 +903,13 @@ const illustRight = {
         </g>
         <circle cx="860" cy="200" r="100" fill="none" stroke="#C7D2FE" stroke-width="1" opacity="0.3"/>
         <circle cx="860" cy="200" r="60" fill="none" stroke="#A5B4FC" stroke-width="0.5" opacity="0.25"/>`;
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <pattern id="ir-dots" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="10" cy="10" r="0.8" fill="#C7D2FE" opacity="0.35"/></pattern>
   </defs>
-  <rect width="1200" height="480" fill="#F8FAFC"/>
-  <rect x="0" y="0" width="600" height="480" fill="white" opacity="0.5"/>
-  <rect x="0" y="0" width="600" height="480" fill="url(#ir-dots)"/>
+  <rect width="1200" height="510" fill="#F8FAFC"/>
+  <rect x="0" y="0" width="600" height="510" fill="white" opacity="0.5"/>
+  <rect x="0" y="0" width="600" height="510" fill="url(#ir-dots)"/>
   <path d="M620 60 Q640 40 660 60 Q680 80 660 100 Q640 120 620 100 Q600 80 620 60Z" fill="#EEF2FF" opacity="0.5"/>
   <path d="M560 380 Q580 360 600 380 Q610 400 590 410 Q570 420 560 400Z" fill="#E0E7FF" opacity="0.35"/>
   <line x1="600" y1="40" x2="600" y2="440" stroke="#E2E8F0" stroke-width="0.5" opacity="0.5"/>
@@ -917,7 +917,7 @@ const illustRight = {
   <path d="M1170 30 L1170 50 M1170 30 L1150 30" stroke="#C7D2FE" stroke-width="1.5" fill="none" opacity="0.4"/>
   <path d="M620 450 L620 430 M620 450 L640 450" stroke="#C7D2FE" stroke-width="1.5" fill="none" opacity="0.4"/>
   <path d="M1170 450 L1170 430 M1170 450 L1150 450" stroke="#C7D2FE" stroke-width="1.5" fill="none" opacity="0.4"/>
-  <rect x="80" y="100" width="6" height="50" rx="3" fill="#4F46E5"/>
+  <rect x="80" y="65" width="6" height="30" rx="3" fill="#4F46E5"/>
   ${content.tag ? `<rect x="80" y="100" width="${Math.max(60, tagW(content.tag, typo.tagSize) + 28)}" height="36" rx="18" fill="#EEF2FF"/>
   <rect x="80" y="100" width="${Math.max(60, tagW(content.tag, typo.tagSize) + 28)}" height="36" rx="18" fill="none" stroke="#C7D2FE" stroke-width="1" opacity="0.6"/>
   ${renderTextLines(content.tag, 94, 124, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#4F46E5', '600', typo.subtitleFontFamily)}` : ''}
@@ -955,8 +955,8 @@ const illustLeft = {
         <circle cx="280" cy="240" r="40" fill="#6366F1" opacity="0.06"/>
         <circle cx="200" cy="160" r="3" fill="#818CF8" opacity="0.3"/>
         <circle cx="360" cy="320" r="2.5" fill="#A78BFA" opacity="0.25"/>`;
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
-  <rect width="1200" height="480" fill="#0F172A"/>
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="510" fill="#0F172A"/>
   <circle cx="100" cy="80" r="2" fill="#818CF8" opacity="0.2"/><circle cx="300" cy="50" r="1.5" fill="#A78BFA" opacity="0.15"/>
   <circle cx="500" cy="430" r="2" fill="#6366F1" opacity="0.2"/><circle cx="150" cy="400" r="1.5" fill="#818CF8" opacity="0.15"/>
   ${illustBlock}
@@ -991,8 +991,8 @@ const illustCenterTop = {
         <circle cx="680" cy="80" r="4" fill="#FBBF24" opacity="0.2"/>
         <circle cx="500" cy="160" r="3" fill="#F59E0B" opacity="0.15"/>
         <circle cx="700" cy="160" r="3" fill="#F59E0B" opacity="0.15"/>`;
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
-  <rect width="1200" height="480" fill="#FFF8F0"/>
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="510" fill="#FFF8F0"/>
   <circle cx="200" cy="80" r="80" fill="#FFECD2" opacity="0.4"/>
   <circle cx="1000" cy="80" r="80" fill="#FFECD2" opacity="0.4"/>
   <circle cx="200" cy="80" r="50" fill="none" stroke="#F5DEB3" stroke-width="0.5" opacity="0.3"/>
@@ -1028,11 +1028,11 @@ const illustSplit = {
         </g>
         <circle cx="300" cy="220" r="80" fill="none" stroke="white" stroke-width="1" opacity="0.15"/>
         <circle cx="300" cy="220" r="40" fill="none" stroke="white" stroke-width="0.5" opacity="0.1"/>`;
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="is-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#7C3AED"/><stop offset="100%" stop-color="#4338CA"/></linearGradient>
   </defs>
-  <rect width="1200" height="480" fill="url(#is-bg)"/>
+  <rect width="1200" height="510" fill="url(#is-bg)"/>
   <circle cx="100" cy="60" r="2" fill="white" opacity="0.2"/><circle cx="300" cy="40" r="1.5" fill="white" opacity="0.15"/>
   <circle cx="500" cy="450" r="2" fill="white" opacity="0.15"/>
   <rect x="20" y="20" width="570" height="440" rx="16" fill="white" opacity="0.1"/>
@@ -1065,13 +1065,13 @@ const illustHero = {
           <rect x="740" y="280" width="200" height="120" rx="16" fill="white"/>
         </g>
         <circle cx="860" cy="220" r="100" fill="none" stroke="white" stroke-width="1" opacity="0.12"/>`;
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="ih-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#0D9488"/><stop offset="100%" stop-color="#10B981"/></linearGradient>
     <linearGradient id="ih-btm" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0D9488" stop-opacity="0"/><stop offset="100%" stop-color="#064E3B" stop-opacity="0.5"/></linearGradient>
   </defs>
-  <rect width="1200" height="480" fill="url(#ih-bg)"/>
-  <rect width="1200" height="480" fill="url(#ih-btm)"/>
+  <rect width="1200" height="510" fill="url(#ih-bg)"/>
+  <rect width="1200" height="510" fill="url(#ih-btm)"/>
   <circle cx="200" cy="80" r="120" fill="white" opacity="0.04"/>
   <circle cx="100" cy="350" r="80" fill="white" opacity="0.03"/>
   <path d="M40 200 Q60 170 90 190 Q120 210 100 240 Q80 270 50 250 Q20 230 40 200Z" fill="white" opacity="0.03"/>
@@ -1116,15 +1116,15 @@ const illustCard = {
           <circle cx="520" cy="180" r="30" fill="#A78BFA"/>
         </g>
         <circle cx="600" cy="160" r="50" fill="none" stroke="#C7D2FE" stroke-width="0.8" opacity="0.2"/>`;
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <filter id="ic-shadow"><feDropShadow dx="0" dy="4" stdDeviation="12" flood-color="#000" flood-opacity="0.08"/></filter>
     <filter id="ic-shadow2"><feDropShadow dx="0" dy="8" stdDeviation="20" flood-color="#4F46E5" flood-opacity="0.06"/></filter>
     <pattern id="ic-dots" x="0" y="0" width="30" height="30" patternUnits="userSpaceOnUse"><circle cx="15" cy="15" r="1" fill="#E2E8F0" opacity="0.5"/></pattern>
     <pattern id="ic-dots2" x="0" y="0" width="16" height="16" patternUnits="userSpaceOnUse"><circle cx="8" cy="8" r="0.6" fill="#C7D2FE" opacity="0.3"/></pattern>
   </defs>
-  <rect width="1200" height="480" fill="#F8FAFC"/>
-  <rect width="1200" height="480" fill="url(#ic-dots)"/>
+  <rect width="1200" height="510" fill="#F8FAFC"/>
+  <rect width="1200" height="510" fill="url(#ic-dots)"/>
   <path d="M100 400 Q130 370 160 395 Q190 420 160 445 Q130 470 100 445 Q70 420 100 400Z" fill="#EEF2FF" opacity="0.4"/>
   <path d="M1050 30 Q1080 10 1100 35 Q1120 60 1095 75 Q1070 90 1050 70 Q1030 50 1050 30Z" fill="#E0E7FF" opacity="0.3"/>
   <path d="M180 80 Q200 60 220 80 Q235 100 215 115 Q195 130 180 110 Q165 90 180 80Z" fill="#EEF2FF" opacity="0.25"/>
@@ -1167,11 +1167,11 @@ const illustWave = {
           <rect x="920" y="140" width="80" height="80" rx="12" fill="#7DD3FC"/>
         </g>
         <circle cx="880" cy="220" r="80" fill="none" stroke="#BAE6FD" stroke-width="0.8" opacity="0.2"/>`;
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="iw-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#E0F2FE"/><stop offset="100%" stop-color="#FFFFFF"/></linearGradient>
   </defs>
-  <rect width="1200" height="480" fill="url(#iw-bg)"/>
+  <rect width="1200" height="510" fill="url(#iw-bg)"/>
   <path d="M0 60Q200 20 400 50Q600 80 800 40Q1000 0 1200 30" stroke="#BAE6FD" stroke-width="2" fill="none" opacity="0.4"/>
   <path d="M0 80Q200 40 400 70Q600 100 800 60Q1000 20 1200 50" stroke="#7DD3FC" stroke-width="1" fill="none" opacity="0.3"/>
   <path d="M0 420Q200 450 400 430Q600 410 800 440Q1000 470 1200 450" stroke="#BAE6FD" stroke-width="2" fill="none" opacity="0.3"/>
@@ -1209,15 +1209,15 @@ const illustDarkGlow = {
         <circle cx="900" cy="220" r="180" fill="url(#idg-glow)" filter="url(#idg-blur)"/>
         <circle cx="900" cy="220" r="80" fill="none" stroke="#A855F7" stroke-width="1" opacity="0.2"/>
         <circle cx="900" cy="220" r="40" fill="#A855F7" opacity="0.06"/>`;
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="idg-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#0A0A1A"/><stop offset="100%" stop-color="#1A1A3E"/></linearGradient>
     <radialGradient id="idg-glow2" cx="0.3" cy="0.7"><stop offset="0%" stop-color="#7C3AED" stop-opacity="0.12"/><stop offset="100%" stop-color="#7C3AED" stop-opacity="0"/></radialGradient>
     <radialGradient id="idg-glow3" cx="0.15" cy="0.3"><stop offset="0%" stop-color="#C084FC" stop-opacity="0.08"/><stop offset="100%" stop-color="#C084FC" stop-opacity="0"/></radialGradient>
   </defs>
-  <rect width="1200" height="480" fill="url(#idg-bg)"/>
-  <rect width="1200" height="480" fill="url(#idg-glow2)"/>
-  <rect width="1200" height="480" fill="url(#idg-glow3)"/>
+  <rect width="1200" height="510" fill="url(#idg-bg)"/>
+  <rect width="1200" height="510" fill="url(#idg-glow2)"/>
+  <rect width="1200" height="510" fill="url(#idg-glow3)"/>
   <circle cx="200" cy="100" r="2" fill="#A855F7" opacity="0.3"/><circle cx="400" cy="60" r="1.5" fill="#C084FC" opacity="0.25"/>
   <circle cx="100" cy="380" r="2" fill="#7C3AED" opacity="0.2"/><circle cx="500" cy="430" r="1.5" fill="#A855F7" opacity="0.2"/>
   <circle cx="300" cy="30" r="1.8" fill="#D8B4FE" opacity="0.2"/><circle cx="550" cy="100" r="1.2" fill="#E9D5FF" opacity="0.18"/>
@@ -1261,8 +1261,8 @@ const illustMagazine = {
         </g>
         <circle cx="900" cy="220" r="80" fill="none" stroke="#D1D5DB" stroke-width="0.8" opacity="0.2"/>
         <line x1="820" y1="220" x2="980" y2="220" stroke="#D1D5DB" stroke-width="0.5" opacity="0.15"/>`;
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
-  <rect width="1200" height="480" fill="#FAFAFA"/>
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="510" fill="#FAFAFA"/>
   <text x="80" y="80" font-size="72" font-family="${SERIF_FAMILY}" fill="#E5E7EB" font-weight="700" letter-spacing="-2">${esc(content.issueNumber || 'No.01')}</text>
   <line x1="80" y1="100" x2="580" y2="100" stroke="#111827" stroke-width="2"/>
   <line x1="80" y1="106" x2="400" y2="106" stroke="#D1D5DB" stroke-width="0.5"/>
@@ -1296,15 +1296,15 @@ const techNeuralGrid = {
           <path d="M802 172L950 248L864 324L802 172" stroke="#67E8F9" stroke-width="2.6" fill="none" opacity="0.42"/>
           <circle cx="802" cy="172" r="8" fill="#67E8F9"/><circle cx="950" cy="248" r="8" fill="#A3E635"/><circle cx="864" cy="324" r="8" fill="#38BDF8"/>
         </g>`;
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="tng-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#07111F"/><stop offset="58%" stop-color="#10213C"/><stop offset="100%" stop-color="#0F2F3B"/></linearGradient>
     <pattern id="tng-grid" width="52" height="52" patternUnits="userSpaceOnUse"><path d="M52 0H0V52" fill="none" stroke="#67E8F9" stroke-width="0.9" opacity="0.13"/></pattern>
     <radialGradient id="tng-glow" cx="0.76" cy="0.47" r="0.5"><stop offset="0%" stop-color="#22D3EE" stop-opacity="0.32"/><stop offset="100%" stop-color="#22D3EE" stop-opacity="0"/></radialGradient>
   </defs>
-  <rect width="1200" height="480" fill="url(#tng-bg)"/>
-  <rect width="1200" height="480" fill="url(#tng-grid)"/>
-  <rect width="1200" height="480" fill="url(#tng-glow)"/>
+  <rect width="1200" height="510" fill="url(#tng-bg)"/>
+  <rect width="1200" height="510" fill="url(#tng-grid)"/>
+  <rect width="1200" height="510" fill="url(#tng-glow)"/>
   <path d="M70 50H220M70 68H156" stroke="#67E8F9" stroke-width="1" opacity="0.16"/>
   <circle cx="160" cy="128" r="3" fill="#67E8F9" opacity="0.3"/><circle cx="310" cy="92" r="2" fill="#A3E635" opacity="0.24"/>
   <circle cx="515" cy="390" r="2.5" fill="#38BDF8" opacity="0.18"/><circle cx="95" cy="375" r="2" fill="#67E8F9" opacity="0.2"/>
@@ -1341,14 +1341,14 @@ const techLabConsole = {
           <path d="M744 316C802 236 864 270 916 220C970 170 1024 204 1076 152" stroke="url(#tlc-line)" stroke-width="6" fill="none" opacity="0.76"/>
           <circle cx="744" cy="316" r="10" fill="#2563EB"/><circle cx="916" cy="220" r="10" fill="#16A34A"/><circle cx="1076" cy="152" r="10" fill="#2563EB"/>
         </g>`;
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="tlc-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#F8FAFC"/><stop offset="48%" stop-color="#EEF2FF"/><stop offset="100%" stop-color="#DCFCE7"/></linearGradient>
     <linearGradient id="tlc-line" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#2563EB"/><stop offset="100%" stop-color="#16A34A"/></linearGradient>
     <pattern id="tlc-dots" width="32" height="32" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.2" fill="#1D4ED8" opacity="0.08"/></pattern>
   </defs>
-  <rect width="1200" height="480" fill="url(#tlc-bg)"/>
-  <rect width="1200" height="480" fill="url(#tlc-dots)"/>
+  <rect width="1200" height="510" fill="url(#tlc-bg)"/>
+  <rect width="1200" height="510" fill="url(#tlc-dots)"/>
   <path d="M112 88H312M112 108H224" stroke="#1D4ED8" stroke-width="1.2" opacity="0.18"/>
   <path d="M108 408H384" stroke="#2563EB" stroke-width="4" opacity="0.24"/>
   <circle cx="1068" cy="384" r="68" fill="#22C55E" opacity="0.08"/>
@@ -1382,12 +1382,12 @@ const productLaunchPad = {
           <rect x="772" y="284" width="168" height="16" rx="8" fill="#94A3B8" opacity="0.18"/>
           <circle cx="1010" cy="204" r="30" fill="url(#plp-accent)" opacity="0.86"/>
         </g>`;
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="plp-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#F8FAFC"/><stop offset="58%" stop-color="#EFF6FF"/><stop offset="100%" stop-color="#ECFEFF"/></linearGradient>
     <linearGradient id="plp-accent" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#2563EB"/><stop offset="100%" stop-color="#14B8A6"/></linearGradient>
   </defs>
-  <rect width="1200" height="480" fill="url(#plp-bg)"/>
+  <rect width="1200" height="510" fill="url(#plp-bg)"/>
   <circle cx="104" cy="92" r="28" fill="#DBEAFE" opacity="0.7"/>
   <circle cx="604" cy="392" r="18" fill="#CCFBF1" opacity="0.9"/>
   <path d="M180 404C292 356 424 356 564 404" stroke="#14B8A6" stroke-width="4" fill="none" opacity="0.35"/>
@@ -1422,12 +1422,12 @@ const productCanvas = {
           <circle cx="760" cy="188" r="28" fill="#F97316" opacity="0.72"/>
           <circle cx="832" cy="188" r="28" fill="#0F766E" opacity="0.72"/>
         </g>`;
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="pc-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FFF7ED"/><stop offset="50%" stop-color="#FFFFFF"/><stop offset="100%" stop-color="#ECFDF5"/></linearGradient>
     <linearGradient id="pc-ribbon" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#F97316"/><stop offset="100%" stop-color="#0F766E"/></linearGradient>
   </defs>
-  <rect width="1200" height="480" fill="url(#pc-bg)"/>
+  <rect width="1200" height="510" fill="url(#pc-bg)"/>
   <path d="M128 84C220 48 332 62 396 128" stroke="#F97316" stroke-width="2.8" fill="none" opacity="0.26"/>
   <path d="M144 404H444" stroke="#0F766E" stroke-width="4" opacity="0.28"/>
   <circle cx="620" cy="76" r="10" fill="#F97316" opacity="0.12"/>
@@ -1447,13 +1447,13 @@ const techBlueprint = {
   id: 'tech-blueprint', name: '架构蓝图', category: 'geometric',
   elements: { tag: true, title: true, subtitle: true, author: false, image: false },
   render(content, typo) {
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="tbp-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#F8FAFC"/><stop offset="52%" stop-color="#F7FEE7"/><stop offset="100%" stop-color="#E0F2FE"/></linearGradient>
     <pattern id="tbp-dots" width="36" height="36" patternUnits="userSpaceOnUse"><circle cx="4" cy="4" r="2.2" fill="#0F172A" opacity="0.12"/></pattern>
   </defs>
-  <rect width="1200" height="480" fill="url(#tbp-bg)"/>
-  <rect width="1200" height="480" fill="url(#tbp-dots)"/>
+  <rect width="1200" height="510" fill="url(#tbp-bg)"/>
+  <rect width="1200" height="510" fill="url(#tbp-dots)"/>
   <path d="M702 72L1096 128L1032 408L640 348Z" fill="#18181B" opacity="0.055"/>
   <path d="M744 116L1048 158L998 352L694 308Z" fill="none" stroke="#18181B" stroke-width="2.4" opacity="0.2"/>
   <path d="M788 164H972M768 216H1012M744 268H924" stroke="#18181B" stroke-width="2" opacity="0.23"/>
@@ -1476,13 +1476,13 @@ const techTerminalMap = {
   id: 'tech-terminal-map', name: '终端地图', category: 'solid-dark',
   elements: { tag: true, title: true, subtitle: true, author: false, image: false },
   render(content, typo) {
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="ttm-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#0F172A"/><stop offset="60%" stop-color="#111827"/><stop offset="100%" stop-color="#172554"/></linearGradient>
     <pattern id="ttm-grid" width="60" height="60" patternUnits="userSpaceOnUse"><path d="M60 0H0V60" stroke="#93C5FD" stroke-width="0.9" fill="none" opacity="0.12"/></pattern>
   </defs>
-  <rect width="1200" height="480" fill="url(#ttm-bg)"/>
-  <rect width="1200" height="480" fill="url(#ttm-grid)"/>
+  <rect width="1200" height="510" fill="url(#ttm-bg)"/>
+  <rect width="1200" height="510" fill="url(#ttm-grid)"/>
   <rect x="692" y="96" width="352" height="236" rx="26" fill="#020617" opacity="0.52" stroke="#38BDF8" stroke-opacity="0.28" stroke-width="1.5"/>
   <circle cx="732" cy="140" r="8" fill="#38BDF8" opacity="0.76"/>
   <circle cx="764" cy="140" r="8" fill="#22C55E" opacity="0.72"/>
@@ -1508,12 +1508,12 @@ const productRoadmap = {
   id: 'product-roadmap', name: '路线图卡片', category: 'editorial',
   elements: { tag: true, title: true, subtitle: true, author: false, image: false },
   render(content, typo) {
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="prm-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FFF7ED"/><stop offset="48%" stop-color="#FFFFFF"/><stop offset="100%" stop-color="#FEF3C7"/></linearGradient>
     <linearGradient id="prm-accent" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#F97316"/><stop offset="100%" stop-color="#0F766E"/></linearGradient>
   </defs>
-  <rect width="1200" height="480" fill="url(#prm-bg)"/>
+  <rect width="1200" height="510" fill="url(#prm-bg)"/>
   <rect x="740" y="90" width="308" height="264" rx="44" fill="#FFFFFF" stroke="#FED7AA" stroke-width="2.4"/>
   <rect x="784" y="148" width="140" height="24" rx="12" fill="#FB923C" opacity="0.28"/>
   <rect x="784" y="212" width="208" height="18" rx="9" fill="#64748B" opacity="0.16"/>
@@ -1539,11 +1539,11 @@ const productDecisionBoard = {
   id: 'product-decision-board', name: '决策看板', category: 'editorial',
   elements: { tag: true, title: true, subtitle: true, author: false, image: false },
   render(content, typo) {
-    return `<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="pdb-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#F9FAFB"/><stop offset="54%" stop-color="#F0FDFA"/><stop offset="100%" stop-color="#FDF2F8"/></linearGradient>
   </defs>
-  <rect width="1200" height="480" fill="url(#pdb-bg)"/>
+  <rect width="1200" height="510" fill="url(#pdb-bg)"/>
   <rect x="708" y="84" width="140" height="224" rx="28" fill="#FFFFFF" stroke="#99F6E4" stroke-width="2"/>
   <rect x="876" y="144" width="172" height="208" rx="28" fill="#FFFFFF" stroke="#FBCFE8" stroke-width="2"/>
   <rect x="756" y="140" width="48" height="48" rx="16" fill="#14B8A6" opacity="0.2"/>
