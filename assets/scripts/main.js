@@ -105,6 +105,28 @@ const coverIllustrationId = ref('');
 const coverIllustCategory = ref('tech');
 const coverIllustrationColor = ref('#6366F1');
 const coverIllustrationSvg = ref(''); // cached SVG string
+const coverSidebarCollapsed = ref(false);
+const coverInlineEdit = reactive({
+  active: false,
+  field: null,
+  value: '',
+  x: 0, y: 0, width: 0, minHeight: 0,
+  fontSize: '16px', fontFamily: 'inherit', fontWeight: 'normal',
+  color: '#000', textAlign: 'center',
+  letterSpacing: '0px', lineHeight: '1.3'
+});
+
+const coverFieldOffsets = reactive({
+  tag: { x: 0, y: 0 },
+  title: { x: 0, y: 0 },
+  subtitle: { x: 0, y: 0 },
+  author: { x: 0, y: 0 },
+  issueNumber: { x: 0, y: 0 }
+});
+
+// Drag tracking (plain variable for performance during rapid mousemove)
+let coverDrag = null;
+const DRAG_THRESHOLD = 3;
 
 const deviceGroups = [
   {
@@ -1431,6 +1453,213 @@ function initResizeHandles() {
 
 // ═══ Cover Editor Logic ═══
 
+// ── Inline Text Editing ──
+
+function handleCoverTextClick(event) {
+  const target = event.target.closest('[data-field]');
+  if (!target) return;
+
+  const svg = target.closest('svg');
+  if (!svg) return;
+
+  const field = target.getAttribute('data-field');
+  if (!['tag', 'title', 'subtitle', 'author', 'issueNumber'].includes(field)) return;
+
+  const allLines = svg.querySelectorAll(`[data-field="${field}"]`);
+  if (allLines.length === 0) return;
+
+  const previewArea = document.querySelector('.cover-preview-area');
+  if (!previewArea) return;
+
+  const previewAreaRect = previewArea.getBoundingClientRect();
+
+  const svgRect = svg.getBoundingClientRect();
+  const svgToScreenX = svgRect.width / 1200;
+  const svgToScreenY = svgRect.height / 510;
+
+  const firstEl = allLines[0];
+  const textAnchor = firstEl.getAttribute('text-anchor') || 'start';
+  const svgFontSize = parseFloat(firstEl.getAttribute('font-size')) || 48;
+  const svgLetterSpacing = parseFloat(firstEl.getAttribute('letter-spacing')) || 0;
+  const rawLineHeight = parseFloat(firstEl.getAttribute('data-line-height')) || svgFontSize * 1.3;
+
+  // Compute left, top, width, height from SVG attributes — avoiding
+  // getBoundingClientRect which is unreliable for SVG <text> in Chromium.
+  let leftSvg = Infinity, topSvg = Infinity, bottomSvg = -Infinity, maxTextLen = 0;
+  allLines.forEach(el => {
+    const tx = parseFloat(el.getAttribute('x')) || 0;
+    const ty = parseFloat(el.getAttribute('y')) || 0;
+    const fs = parseFloat(el.getAttribute('font-size')) || svgFontSize;
+    const textLen = el.getComputedTextLength();
+    maxTextLen = Math.max(maxTextLen, textLen);
+
+    let lineLeft;
+    if (textAnchor === 'middle') lineLeft = tx - textLen / 2;
+    else if (textAnchor === 'end') lineLeft = tx - textLen;
+    else lineLeft = tx;
+
+    leftSvg = Math.min(leftSvg, lineLeft);
+    topSvg = Math.min(topSvg, ty - fs);       // y is baseline; top ≈ y - font-size
+    bottomSvg = Math.max(bottomSvg, ty + fs * 0.2);
+  });
+
+  const relX = svgRect.left + (leftSvg + (coverFieldOffsets[field]?.x || 0)) * svgToScreenX - previewAreaRect.left;
+  const relY = svgRect.top + (topSvg + (coverFieldOffsets[field]?.y || 0)) * svgToScreenY - previewAreaRect.top;
+  const textW = maxTextLen * svgToScreenX;
+  const boxH = (bottomSvg - topSvg) * svgToScreenY;
+
+  const textAlignMap = { start: 'left', middle: 'center', end: 'right' };
+
+  Object.assign(coverInlineEdit, {
+    active: true,
+    field,
+    value: coverContent[field] || '',
+    x: relX,
+    y: relY,
+    width: textW,
+    minHeight: boxH,
+    fontSize: (svgFontSize * Math.min(svgToScreenX, svgToScreenY)) + 'px',
+    fontFamily: firstEl.getAttribute('font-family') || 'inherit',
+    fontWeight: firstEl.getAttribute('font-weight') || 'normal',
+    color: firstEl.getAttribute('fill') || '#000',
+    textAlign: textAlignMap[textAnchor] || 'left',
+    letterSpacing: (svgLetterSpacing * svgToScreenX) + 'px',
+    lineHeight: (rawLineHeight / svgFontSize).toFixed(2)
+  });
+
+  nextTick(() => {
+    const input = document.querySelector('.cover-inline-editor textarea');
+    if (input) {
+      input.style.height = 'auto';
+      input.style.height = input.scrollHeight + 'px';
+      input.focus();
+      input.select();
+    }
+  });
+}
+
+function applyInlineEdit() {
+  if (!coverInlineEdit.active) return;
+  pushCoverUndo();
+  coverContent[coverInlineEdit.field] = coverInlineEdit.value;
+  coverInlineEdit.active = false;
+}
+
+function cancelInlineEdit() {
+  coverInlineEdit.active = false;
+}
+
+// ── Cover Text Drag ──
+
+function applyFieldOffsetsToDom() {
+  const svg = document.querySelector('.cover-preview-frame svg');
+  if (!svg) return;
+  for (const [field, offset] of Object.entries(coverFieldOffsets)) {
+    const els = svg.querySelectorAll(`[data-field="${field}"]`);
+    els.forEach(el => {
+      if (offset.x === 0 && offset.y === 0) {
+        el.removeAttribute('transform');
+      } else {
+        el.setAttribute('transform', `translate(${offset.x}, ${offset.y})`);
+      }
+    });
+  }
+}
+
+function handleCoverMouseDown(event) {
+  const target = event.target.closest('[data-field]');
+  if (!target) return;
+  const field = target.getAttribute('data-field');
+  if (!['tag', 'title', 'subtitle', 'author', 'issueNumber'].includes(field)) return;
+
+  event.preventDefault();
+  coverDrag = {
+    field,
+    startMouseX: event.clientX,
+    startMouseY: event.clientY,
+    startOffset: { x: coverFieldOffsets[field].x, y: coverFieldOffsets[field].y },
+    moved: false
+  };
+  document.addEventListener('mousemove', onDragMouseMove);
+  document.addEventListener('mouseup', onDragMouseUp);
+}
+
+function onDragMouseMove(event) {
+  if (!coverDrag) return;
+  const dx = event.clientX - coverDrag.startMouseX;
+  const dy = event.clientY - coverDrag.startMouseY;
+
+  if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
+
+  if (!coverDrag.moved) {
+    coverDrag.moved = true;
+    coverInlineEdit.active = false;
+  }
+
+  const svg = document.querySelector('.cover-preview-frame svg');
+  if (!svg) return;
+  const svgRect = svg.getBoundingClientRect();
+  const svgToScreenX = svgRect.width / 1200;
+  const svgToScreenY = svgRect.height / 510;
+
+  const offsetX = coverDrag.startOffset.x + dx / svgToScreenX;
+  const offsetY = coverDrag.startOffset.y + dy / svgToScreenY;
+
+  const els = svg.querySelectorAll(`[data-field="${coverDrag.field}"]`);
+  els.forEach(el => {
+    el.setAttribute('transform', `translate(${offsetX}, ${offsetY})`);
+  });
+}
+
+function onDragMouseUp(event) {
+  document.removeEventListener('mousemove', onDragMouseMove);
+  document.removeEventListener('mouseup', onDragMouseUp);
+
+  if (!coverDrag) return;
+  const drag = coverDrag;
+  coverDrag = null;
+
+  if (drag.moved) {
+    pushCoverUndo();
+    const svg = document.querySelector('.cover-preview-frame svg');
+    if (svg) {
+      const svgRect = svg.getBoundingClientRect();
+      const svgToScreenX = svgRect.width / 1200;
+      const svgToScreenY = svgRect.height / 510;
+      const dx = event.clientX - drag.startMouseX;
+      const dy = event.clientY - drag.startMouseY;
+      coverFieldOffsets[drag.field].x = Math.round(drag.startOffset.x + dx / svgToScreenX);
+      coverFieldOffsets[drag.field].y = Math.round(drag.startOffset.y + dy / svgToScreenY);
+    }
+    applyFieldOffsetsToDom();
+  } else {
+    handleCoverTextClick(event);
+  }
+}
+
+function resetCoverFieldOffsets() {
+  for (const key of Object.keys(coverFieldOffsets)) {
+    coverFieldOffsets[key].x = 0;
+    coverFieldOffsets[key].y = 0;
+  }
+}
+
+function handleInlineEditKeydown(event) {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    applyInlineEdit();
+  } else if (event.key === 'Escape') {
+    event.preventDefault();
+    cancelInlineEdit();
+  }
+}
+
+function toggleCoverSidebar() {
+  coverSidebarCollapsed.value = !coverSidebarCollapsed.value;
+}
+
+// ── Cover SVG Output ──
+
 const coverSvgOutput = computed(() => {
   return renderCover(
     coverTemplateId.value,
@@ -1520,6 +1749,7 @@ function getCoverStateSnapshot() {
     templateId: coverTemplateId.value,
     content: { ...coverContent },
     typography: { ...coverTypography },
+    fieldOffsets: JSON.parse(JSON.stringify(coverFieldOffsets)),
     illustrationId: coverIllustrationId.value,
     illustrationColor: coverIllustrationColor.value,
     layerOrder: coverLayerOrder.value,
@@ -1527,10 +1757,20 @@ function getCoverStateSnapshot() {
   };
 }
 
+let _restoringCover = false;
+
 function restoreCoverState(state) {
+  _restoringCover = true;
   coverTemplateId.value = state.templateId || 'pure-white';
   Object.assign(coverContent, state.content || DEFAULT_COVER_CONTENT);
   Object.assign(coverTypography, state.typography || DEFAULT_TYPOGRAPHY);
+  if (state.fieldOffsets) {
+    for (const [key, val] of Object.entries(state.fieldOffsets)) {
+      if (coverFieldOffsets[key]) Object.assign(coverFieldOffsets[key], val);
+    }
+  } else {
+    resetCoverFieldOffsets();
+  }
   coverIllustrationId.value = state.illustrationId || '';
   coverIllustrationColor.value = state.illustrationColor || coverIllustrationColor.value;
   coverLayerOrder.value = state.layerOrder || 'text-top';
@@ -1546,6 +1786,9 @@ function restoreCoverState(state) {
   } else {
     coverIllustrationSvg.value = '';
   }
+
+  // Safety: clear flag after render even if coverSvgOutput watcher didn't fire
+  nextTick(() => { _restoringCover = false; });
 }
 
 function pushCoverUndo() {
@@ -1583,6 +1826,7 @@ function coverReset() {
   coverTemplateId.value = 'pure-white';
   Object.assign(coverContent, DEFAULT_COVER_CONTENT);
   Object.assign(coverTypography, DEFAULT_TYPOGRAPHY);
+  resetCoverFieldOffsets();
   coverLayerOrder.value = 'text-top';
   coverOpacity.value = 100;
   coverIllustrationId.value = '';
@@ -1653,6 +1897,19 @@ const app = createApp({
       renderMarkdown();
       persistDocumentState();
     }, { deep: true });
+
+    // Cancel inline editing when template switches (prevents stale editor)
+    watch(coverTemplateId, () => {
+      coverInlineEdit.active = false;
+      if (!_restoringCover) resetCoverFieldOffsets();
+    });
+
+    watch(coverSvgOutput, () => {
+      nextTick(() => {
+        applyFieldOffsetsToDom();
+        _restoringCover = false;
+      });
+    });
 
     onMounted(async () => {
       starredStyles.value = getStarredStyles();
@@ -1745,6 +2002,18 @@ const app = createApp({
       getTemplateMeta,
       renderCoverThumb,
       coverTemplateSupports,
+
+      // ── Inline Editing & Drag ──
+      coverInlineEdit,
+      coverSidebarCollapsed,
+      coverFieldOffsets,
+      handleCoverTextClick,
+      handleCoverMouseDown,
+      applyInlineEdit,
+      cancelInlineEdit,
+      handleInlineEditKeydown,
+      toggleCoverSidebar,
+      resetCoverFieldOffsets,
 
       // ── Illustration Picker ──
       coverIllustrationId,

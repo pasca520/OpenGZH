@@ -141,8 +141,36 @@
 
           <!-- Preview Area -->
           <div class="cover-preview-area">
-            <div class="cover-preview-frame" :style="coverPreviewStyle">
+            <div class="cover-preview-frame" :style="coverPreviewStyle" @mousedown="handleCoverMouseDown">
               <div v-html="coverSvgOutput"></div>
+            </div>
+            <!-- Inline Text Editor Overlay -->
+            <div
+              v-if="coverInlineEdit.active"
+              class="cover-inline-editor"
+              :style="{
+                left: coverInlineEdit.x + 'px',
+                top: coverInlineEdit.y + 'px',
+                width: Math.max(coverInlineEdit.width + 10, 40) + 'px',
+                minHeight: coverInlineEdit.minHeight + 'px'
+              }"
+            >
+              <textarea
+                :value="coverInlineEdit.value"
+                @input="coverInlineEdit.value = $event.target.value; $event.target.style.height = 'auto'; $event.target.style.height = $event.target.scrollHeight + 'px'"
+                @keydown="handleInlineEditKeydown"
+                @blur="applyInlineEdit"
+                :style="{
+                  fontSize: coverInlineEdit.fontSize,
+                  fontFamily: coverInlineEdit.fontFamily,
+                  fontWeight: coverInlineEdit.fontWeight,
+                  color: coverInlineEdit.color,
+                  textAlign: coverInlineEdit.textAlign,
+                  letterSpacing: coverInlineEdit.letterSpacing,
+                  lineHeight: coverInlineEdit.lineHeight
+                }"
+                rows="1"
+              ></textarea>
             </div>
           </div>
 
@@ -151,11 +179,14 @@
         </div>
 
         <!-- Right: Content Editor -->
-        <aside class="cover-sidebar-right">
+        <aside class="cover-sidebar-right" :class="{ collapsed: coverSidebarCollapsed }">
           <div class="cover-sidebar-header">
             <div class="cover-sidebar-title">内容 Content</div>
+            <button class="cover-sidebar-collapse-btn" @click="toggleCoverSidebar" :title="coverSidebarCollapsed ? '展开面板' : '收起面板'">
+              <svg class="lucide lucide-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
           </div>
-          <div class="cover-editor-scroll">
+          <div class="cover-editor-scroll" v-show="!coverSidebarCollapsed">
             <!-- Content Fields -->
             <div class="cover-editor-section">
               <div class="cover-field-group" v-if="coverTemplateSupports('tag')">

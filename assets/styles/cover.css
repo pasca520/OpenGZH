@@ -344,6 +344,7 @@
   background: var(--color-surface-base);
   overflow: auto;
   min-height: 0;
+  position: relative;
 }
 
 .cover-preview-frame {
@@ -833,6 +834,88 @@ textarea.cover-field-input {
 .cover-illust-market-desc {
   font-size: 11px;
   color: var(--color-text-tertiary);
+}
+
+
+/* ── Inline Text Editor Overlay ── */
+.cover-inline-editor {
+  position: absolute;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.96);
+  border: 2px solid var(--color-accent);
+  border-radius: var(--radius-xs);
+  box-shadow: 0 0 0 4px var(--color-accent-light), var(--shadow-3);
+  padding: 2px 6px;
+  box-sizing: border-box;
+}
+
+.cover-inline-editor textarea {
+  width: 100%;
+  min-height: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  resize: none;
+  overflow: hidden;
+  padding: 0;
+  margin: 0;
+}
+
+.cover-inline-editor textarea::selection {
+  background: var(--color-accent-light);
+}
+
+/* ── SVG Text Editability & Draggability ── */
+.cover-preview-frame svg text[data-field] {
+  cursor: move;
+  user-select: none;
+}
+
+.cover-preview-frame svg text[data-field]:hover {
+  filter: drop-shadow(0 0 2px var(--color-accent-light));
+}
+
+/* ── Collapsible Right Sidebar ── */
+.cover-sidebar-right.collapsed {
+  width: 44px;
+  min-width: 44px;
+}
+
+.cover-sidebar-right.collapsed .cover-editor-scroll {
+  display: none !important;
+}
+
+.cover-sidebar-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-xs);
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition: all var(--motion-instant);
+  flex-shrink: 0;
+}
+
+.cover-sidebar-collapse-btn:hover {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.cover-sidebar-collapse-btn svg {
+  transition: transform var(--motion-instant);
+}
+
+.cover-sidebar-right.collapsed .cover-sidebar-collapse-btn svg {
+  transform: rotate(180deg);
+}
+
+.cover-sidebar-right.collapsed .cover-sidebar-header {
+  padding: var(--space-5) var(--space-2);
+  flex-direction: column;
 }
 
 /* ── Responsive ── */

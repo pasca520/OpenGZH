@@ -28,16 +28,41 @@ function tagW(text, fontSize) {
   return Math.ceil(w);
 }
 
-function renderTextLines(text, x, y, fontSize, lineHeight, letterSpacing, textAlign, fill, fontWeight, fontFamily, offsetY = 0, offsetX = 0) {
+// Detect calling convention:
+//   New: renderTextLines(..., dataField)        → arg10 is a known field string
+//   New: renderTextLines(..., dataField, offY)   → arg10 string, arg11 number
+//   New: renderTextLines(..., dataField, offY, offX) → arg10 string, arg11 number, arg12 number
+//   Old: renderTextLines(..., offY)              → arg10 number
+//   Old: renderTextLines(..., offY, offX)        → arg10 number, arg11 number
+function renderTextLines(text, x, y, fontSize, lineHeight, letterSpacing, textAlign, fill, fontWeight, fontFamily, arg10, arg11, arg12) {
   if (!text) return '';
+  const FIELD_NAMES = new Set(['tag', 'title', 'subtitle', 'author', 'issueNumber']);
+  let offsetY = 0, offsetX = 0, dataField = null;
+
+  if (typeof arg10 === 'string' && FIELD_NAMES.has(arg10)) {
+    // New calling convention: dataField comes before offsetY/offsetX
+    dataField = arg10;
+    offsetY = arg11 != null ? arg11 : 0;
+    offsetX = arg12 != null ? arg12 : 0;
+  } else {
+    // Old calling convention: offsetY, offsetX
+    offsetY = arg10 != null ? arg10 : 0;
+    offsetX = arg11 != null ? arg11 : 0;
+    // arg12 may be dataField from transitional calls
+    if (typeof arg12 === 'string' && FIELD_NAMES.has(arg12)) dataField = arg12;
+  }
+
   const baseX = x + (offsetX || 0);
   const baseY = y + (offsetY || 0);
   const resolvedLineHeight = lineHeight <= 4 ? fontSize * lineHeight : lineHeight;
   const lines = text.split('\n');
   const anchor = textAlign === 'center' ? 'middle' : textAlign === 'right' ? 'end' : 'start';
+  const fieldAttr = dataField ? ` data-field="${dataField}"` : '';
+  const lhAttr = dataField ? ` data-line-height="${resolvedLineHeight}"` : '';
   return lines.map((line, i) => {
     const dy = i * resolvedLineHeight;
-    return `<text x="${baseX}" y="${baseY + dy}" font-size="${fontSize}" font-weight="${fontWeight || 'normal'}" font-family="${fontFamily || FONT_FAMILY}" fill="${fill}" text-anchor="${anchor}" letter-spacing="${letterSpacing || 0}">${esc(line)}</text>`;
+    const lineAttr = dataField ? ` data-field-line="${i}"` : '';
+    return `<text x="${baseX}" y="${baseY + dy}" font-size="${fontSize}" font-weight="${fontWeight || 'normal'}" font-family="${fontFamily || FONT_FAMILY}" fill="${fill}" text-anchor="${anchor}" letter-spacing="${letterSpacing || 0}"${fieldAttr}${lineAttr}${lhAttr}>${esc(line)}</text>`;
   }).join('\n');
 }
 
@@ -122,8 +147,8 @@ const blackGold = {
   <circle cx="200" cy="380" r="2" fill="#D4AF37" opacity="0.4"/><circle cx="1000" cy="370" r="1.5" fill="#FFD700" opacity="0.35"/>
   <polygon points="100,200 103,208 112,208 105,213 107,221 100,216 93,221 95,213 88,208 97,208" fill="#D4AF37" opacity="0.15"/>
   <polygon points="1100,280 1102,286 1108,286 1103,290 1105,296 1100,292 1095,296 1097,290 1092,286 1098,286" fill="#FFD700" opacity="0.12"/>
-  ${renderTextLines(content.title, cx, 210, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing + 2, 'center', '#F5F0E1', '400', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, cx, 290, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#D4AF37', '300', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.title, cx, 210, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing + 2, 'center', '#F5F0E1', '400', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, cx, 290, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#D4AF37', '300', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -150,9 +175,9 @@ const pureWhite = {
   <line x1="110" y1="160" x2="250" y2="160" stroke="#4F46E5" stroke-width="0.5" opacity="0.3"/>
   <polygon points="1100,420 1130,460 1070,460" fill="#4F46E5" opacity="0.06"/>
   <polygon points="150,430 170,460 130,460" fill="#7C3AED" opacity="0.05"/>
-  ${content.tag ? renderTextLines(content.tag, 110, 120, typo.tagSize, typo.tagSize * 1.2, 2, 'left', '#4F46E5', '600', typo.subtitleFontFamily) : ''}
-  ${renderTextLines(content.title, 110, 190, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#111827', '800', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 110, 270, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#6B7280', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${content.tag ? renderTextLines(content.tag, 110, 120, typo.tagSize, typo.tagSize * 1.2, 2, 'left', '#4F46E5', '600', typo.subtitleFontFamily, 'tag') : ''}
+  ${renderTextLines(content.title, 110, 190, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#111827', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, 110, 270, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#6B7280', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -187,8 +212,8 @@ const warmCream = {
   <line x1="460" y1="370" x2="740" y2="370" stroke="#D7CCC8" stroke-width="0.5" opacity="0.4"/>
   <polygon points="600,125 605,130 600,135 595,130" fill="#D7CCC8" opacity="0.5"/>
   <polygon points="600,375 604,379 600,383 596,379" fill="#D7CCC8" opacity="0.4"/>
-  ${renderTextLines(content.title, cx, 220, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#3E2723', '600', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, cx, 300, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#795548', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.title, cx, 220, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#3E2723', '600', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, cx, 300, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#795548', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -222,9 +247,9 @@ const lavenderLight = {
   <circle cx="580" cy="450" r="15" fill="none" stroke="#C4B5FD" stroke-width="0.8" opacity="0.3"/>
   <rect x="80" y="100" width="4" height="60" rx="2" fill="url(#lav-ac)"/>
   <line x1="100" y1="380" x2="300" y2="380" stroke="#C4B5FD" stroke-width="0.5" opacity="0.3"/>
-  ${content.tag ? renderTextLines(content.tag, 100, 130, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#7C3AED', '600', typo.subtitleFontFamily) : ''}
-  ${renderTextLines(content.title, 80, 210, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#1E1B4B', '700', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 80, 290, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#6D28D9', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${content.tag ? renderTextLines(content.tag, 100, 130, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#7C3AED', '600', typo.subtitleFontFamily, 'tag') : ''}
+  ${renderTextLines(content.title, 80, 210, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#1E1B4B', '700', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, 80, 290, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#6D28D9', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -290,9 +315,9 @@ const indigoViolet = {
   <path d="M1170 450L1170 420" stroke="white" stroke-width="0.5" opacity="0.12"/><path d="M1170 450L1140 450" stroke="white" stroke-width="0.5" opacity="0.12"/>
   ${content.tag ? `<rect x="${cx - (tagW(content.tag, typo.tagSize) / 2 + 20)}" y="76" width="${tagW(content.tag, typo.tagSize) + 40}" height="38" rx="19" fill="white" opacity="0.15"/>
   <rect x="${cx - (tagW(content.tag, typo.tagSize) / 2 + 20)}" y="76" width="${tagW(content.tag, typo.tagSize) + 40}" height="38" rx="19" fill="none" stroke="white" stroke-width="0.5" opacity="0.12"/>
-  ${renderTextLines(content.tag, cx, 102, typo.tagSize, typo.tagSize * 1.2, 1.5, 'center', '#E0E7FF', '500', typo.subtitleFontFamily)}` : ''}
-  ${renderTextLines(content.title, cx, 195, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#FFFFFF', '700', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, cx, 275, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#C7D2FE', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.tag, cx, 102, typo.tagSize, typo.tagSize * 1.2, 1.5, 'center', '#E0E7FF', '500', typo.subtitleFontFamily, 'tag')}` : ''}
+  ${renderTextLines(content.title, cx, 195, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#FFFFFF', '700', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, cx, 275, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#C7D2FE', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -328,8 +353,8 @@ const darkFade = {
   <line x1="950" y1="0" x2="1200" y2="250" stroke="#818CF8" stroke-width="0.3" opacity="0.08"/>
   <rect x="1050" y="60" width="20" height="20" fill="none" stroke="#6366F1" stroke-width="0.8" opacity="0.2" transform="rotate(45 1060 70)"/>
   <polygon points="950,440 960,425 970,440" fill="none" stroke="#818CF8" stroke-width="0.8" opacity="0.15"/>
-  ${renderTextLines(content.title, 80, 200, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#E2E8F0', '700', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 80, 280, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#94A3B8', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.title, 80, 200, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#E2E8F0', '700', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, 80, 280, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#94A3B8', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -365,9 +390,9 @@ const dawnLight = {
   <circle cx="800" cy="120" r="2.5" fill="#7C3AED" opacity="0.15"/>
   <line x1="100" y1="380" x2="350" y2="380" stroke="#A78BFA" stroke-width="0.5" opacity="0.2"/>
   ${content.tag ? `<rect x="${cx - (tagW(content.tag, typo.tagSize) / 2 + 16)}" y="70" width="${tagW(content.tag, typo.tagSize) + 32}" height="30" rx="15" fill="#7C3AED" opacity="0.15"/>
-  ${renderTextLines(content.tag, cx, 92, typo.tagSize, typo.tagSize * 1.2, 1.5, 'center', '#5B21B6', '600', typo.subtitleFontFamily)}` : ''}
-  ${renderTextLines(content.title, cx, 200, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#1E1B4B', '700', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, cx, 280, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#4C1D95', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.tag, cx, 92, typo.tagSize, typo.tagSize * 1.2, 1.5, 'center', '#5B21B6', '600', typo.subtitleFontFamily, 'tag')}` : ''}
+  ${renderTextLines(content.title, cx, 200, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#1E1B4B', '700', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, cx, 280, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#4C1D95', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -431,8 +456,8 @@ const aurora = {
   <line x1="520" y1="156" x2="680" y2="156" stroke="white" stroke-width="0.5" opacity="0.2"/>
   <!-- Diamond accent -->
   <polygon points="600,145 604,150 600,155 596,150" fill="white" opacity="0.25"/>
-  ${renderTextLines(content.title, cx, 220, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#FFFFFF', '700', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, cx, 300, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', 'rgba(255,255,255,0.75)', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.title, cx, 220, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#FFFFFF', '700', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, cx, 300, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', 'rgba(255,255,255,0.75)', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -465,9 +490,9 @@ const dotMatrix = {
   <rect x="150" y="60" width="900" height="360" rx="16" fill="white" opacity="0.92" stroke="#E0E7FF" stroke-width="1"/>
   <line x1="200" y1="340" x2="1000" y2="340" stroke="#E0E7FF" stroke-width="0.5"/>
   ${content.tag ? `<rect x="${cx - (tagW(content.tag, typo.tagSize) / 2 + 16)}" y="90" width="${tagW(content.tag, typo.tagSize) + 32}" height="30" rx="15" fill="#EEF2FF"/>
-  ${renderTextLines(content.tag, cx, 112, typo.tagSize, typo.tagSize * 1.2, 1.5, 'center', '#4F46E5', '600', typo.subtitleFontFamily)}` : ''}
-  ${renderTextLines(content.title, cx, 200, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#1E1B4B', '700', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, cx, 280, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#6B7280', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.tag, cx, 112, typo.tagSize, typo.tagSize * 1.2, 1.5, 'center', '#4F46E5', '600', typo.subtitleFontFamily, 'tag')}` : ''}
+  ${renderTextLines(content.title, cx, 200, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#1E1B4B', '700', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, cx, 280, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#6B7280', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -500,8 +525,8 @@ const geoOverlap = {
   <circle cx="540" cy="50" r="2" fill="#6366F1" opacity="0.09"/><circle cx="500" cy="70" r="2" fill="#6366F1" opacity="0.12"/>
   <rect x="100" y="140" width="1000" height="220" rx="12" fill="white" opacity="0.85"/>
   <rect x="100" y="140" width="1000" height="220" rx="12" fill="none" stroke="#E5E7EB" stroke-width="0.5"/>
-  ${renderTextLines(content.title, cx, 220, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#111827', '700', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, cx, 300, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#6B7280', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.title, cx, 220, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#111827', '700', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, cx, 300, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#6B7280', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -538,8 +563,8 @@ const triangleComp = {
   <line x1="200" y1="340" x2="400" y2="240" stroke="#4F46E5" stroke-width="0.5" opacity="0.15"/>
   <line x1="400" y1="240" x2="600" y2="340" stroke="#4F46E5" stroke-width="0.5" opacity="0.12"/>
   <circle cx="300" cy="100" r="1.5" fill="#94A3B8" opacity="0.3"/><circle cx="900" cy="350" r="1.5" fill="#94A3B8" opacity="0.25"/>
-  ${renderTextLines(content.title, cx, 210, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#F1F5F9', '700', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, cx, 290, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#94A3B8', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.title, cx, 210, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#F1F5F9', '700', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, cx, 290, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#94A3B8', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -599,9 +624,9 @@ const frostedGlass = {
   <line x1="1040" y1="100" x2="1040" y2="380" stroke="white" stroke-width="0.3" opacity="0.06"/>
   ${content.tag ? `<rect x="${cx - (tagW(content.tag, typo.tagSize) / 2 + 20)}" y="92" width="${tagW(content.tag, typo.tagSize) + 40}" height="36" rx="18" fill="white" opacity="0.15"/>
   <rect x="${cx - (tagW(content.tag, typo.tagSize) / 2 + 20)}" y="92" width="${tagW(content.tag, typo.tagSize) + 40}" height="36" rx="18" fill="none" stroke="white" stroke-width="0.5" opacity="0.12"/>
-  ${renderTextLines(content.tag, cx, 117, typo.tagSize, typo.tagSize * 1.2, 1.5, 'center', '#C7D2FE', '500', typo.subtitleFontFamily)}` : ''}
-  ${renderTextLines(content.title, cx, 195, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#FFFFFF', '700', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, cx, 275, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#C7D2FE', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.tag, cx, 117, typo.tagSize, typo.tagSize * 1.2, 1.5, 'center', '#C7D2FE', '500', typo.subtitleFontFamily, 'tag')}` : ''}
+  ${renderTextLines(content.title, cx, 195, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#FFFFFF', '700', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, cx, 275, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#C7D2FE', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -637,8 +662,8 @@ const paperTexture = {
   <polygon points="600,120 605,125 600,130 595,125" fill="#C9B99A" opacity="0.4"/>
   <polygon points="600,375 604,379 600,383 596,379" fill="#C9B99A" opacity="0.35"/>
   <circle cx="300" cy="100" r="1.5" fill="#C9B99A" opacity="0.3"/><circle cx="900" cy="110" r="1.5" fill="#C9B99A" opacity="0.25"/>
-  ${renderTextLines(content.title, cx, 220, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#2C1810', '600', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, cx, 300, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#6B5B4F', '400', typo.titleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.title, cx, 220, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#2C1810', '600', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, cx, 300, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#6B5B4F', '400', typo.titleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -671,9 +696,9 @@ const frameBorder = {
   <circle cx="600" cy="40" r="2" fill="#D1D5DB" opacity="0.4"/><circle cx="600" cy="440" r="2" fill="#D1D5DB" opacity="0.4"/>
   <circle cx="60" cy="240" r="2" fill="#D1D5DB" opacity="0.4"/><circle cx="1140" cy="240" r="2" fill="#D1D5DB" opacity="0.4"/>
   ${content.tag ? `<line x1="${cx - 40}" y1="95" x2="${cx + 40}" y2="95" stroke="url(#fb-ac)" stroke-width="2"/>
-  ${renderTextLines(content.tag, cx, 125, typo.tagSize, typo.tagSize * 1.2, 3, 'center', '#4F46E5', '600', typo.subtitleFontFamily)}` : ''}
-  ${renderTextLines(content.title, cx, 210, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#111827', '700', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, cx, 290, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#6B7280', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.tag, cx, 125, typo.tagSize, typo.tagSize * 1.2, 3, 'center', '#4F46E5', '600', typo.subtitleFontFamily, 'tag')}` : ''}
+  ${renderTextLines(content.title, cx, 210, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#111827', '700', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, cx, 290, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#6B7280', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -722,11 +747,11 @@ const splitScreen = {
   <circle cx="1120" cy="220" r="2.5" fill="#D1D5DB" opacity="0.2"/><circle cx="1140" cy="220" r="2.5" fill="#D1D5DB" opacity="0.15"/>
   <line x1="480" y1="440" x2="700" y2="440" stroke="#E5E7EB" stroke-width="0.5"/>
   <polygon points="710,440 718,435 718,445" fill="#E5E7EB" opacity="0.4"/>
-  ${content.tag ? renderTextLines(content.tag, 210, 175, typo.tagSize, typo.tagSize * 1.2, 2, 'center', '#A5B4FC', '500', typo.subtitleFontFamily) : ''}
+  ${content.tag ? renderTextLines(content.tag, 210, 175, typo.tagSize, typo.tagSize * 1.2, 2, 'center', '#A5B4FC', '500', typo.subtitleFontFamily, 'tag') : ''}
   <line x1="150" y1="205" x2="270" y2="205" stroke="white" stroke-width="0.5" opacity="0.3"/>
-  ${content.author ? renderTextLines(content.author, 210, 380, typo.authorSize, typo.authorSize * 1.4, 1.5, 'center', 'rgba(255,255,255,0.4)', '300', typo.subtitleFontFamily) : ''}
-  ${renderTextLines(content.title, 480, 185, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#111827', '800', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 480, 265, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#6B7280', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${content.author ? renderTextLines(content.author, 210, 380, typo.authorSize, typo.authorSize * 1.4, 1.5, 'center', 'rgba(255,255,255,0.4)', '300', typo.subtitleFontFamily, 'author') : ''}
+  ${renderTextLines(content.title, 480, 185, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#111827', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, 480, 265, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#6B7280', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -797,9 +822,9 @@ const digitalScene = {
   <rect x="145" y="440" width="15" height="3" rx="1" fill="#3B82F6" opacity="0.15"/>
   ${content.tag ? `<rect x="80" y="88" width="${Math.max(60, tagW(content.tag, typo.tagSize) + 28)}" height="36" rx="6" fill="#60A5FA" opacity="0.12"/>
   <rect x="80" y="88" width="${Math.max(60, tagW(content.tag, typo.tagSize) + 28)}" height="36" rx="6" fill="none" stroke="#60A5FA" stroke-width="0.5" opacity="0.25"/>
-  ${renderTextLines(content.tag, 94, 113, typo.tagSize, typo.tagSize * 1.2, 1, 'left', '#93C5FD', '500', typo.subtitleFontFamily)}` : ''}
-  ${renderTextLines(content.title, 80, 190, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#E2E8F0', '700', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 80, 270, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#64748B', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.tag, 94, 113, typo.tagSize, typo.tagSize * 1.2, 1, 'left', '#93C5FD', '500', typo.subtitleFontFamily, 'tag')}` : ''}
+  ${renderTextLines(content.title, 80, 190, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#E2E8F0', '700', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, 80, 270, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#64748B', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -824,10 +849,10 @@ const warmShowcase = {
   <path d="M0 350Q200 310 400 340Q600 370 800 330" stroke="white" stroke-width="1" fill="none" opacity="0.06"/>
   <path d="M0 80Q150 100 300 70Q450 40 600 60" stroke="white" stroke-width="0.8" fill="none" opacity="0.05"/>
   ${content.tag ? `<rect x="80" y="80" width="${Math.max(60, tagW(content.tag, typo.tagSize) + 28)}" height="32" rx="16" fill="#F97316"/>
-  ${renderTextLines(content.tag, 94, 103, typo.tagSize, typo.tagSize * 1.2, 1, 'left', '#FFFFFF', '600', typo.subtitleFontFamily)}` : ''}
-  ${renderTextLines(content.title, 80, 180, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#FFFFFF', '800', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 80, 260, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#FED7AA', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
-  ${content.author ? renderTextLines(content.author, 80, 430, typo.authorSize, typo.authorSize * 1.4, 1, 'left', 'rgba(255,255,255,0.5)', '300', typo.subtitleFontFamily) : ''}
+  ${renderTextLines(content.tag, 94, 103, typo.tagSize, typo.tagSize * 1.2, 1, 'left', '#FFFFFF', '600', typo.subtitleFontFamily, 'tag')}` : ''}
+  ${renderTextLines(content.title, 80, 180, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#FFFFFF', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, 80, 260, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#FED7AA', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${content.author ? renderTextLines(content.author, 80, 430, typo.authorSize, typo.authorSize * 1.4, 1, 'left', 'rgba(255,255,255,0.5)', '300', typo.subtitleFontFamily, 'author') : ''}
   <circle cx="480" cy="400" r="30" fill="none" stroke="white" stroke-width="1.5" opacity="0.2"/>
   <circle cx="480" cy="400" r="20" fill="white" opacity="0.08"/>
   <circle cx="480" cy="400" r="4" fill="white" opacity="0.3"/>
@@ -866,10 +891,10 @@ const playfulMascot = {
   <line x1="0" y1="430" x2="1200" y2="430" stroke="#0F766E" stroke-width="1" opacity="0.4"/>
   <!-- Left side bold text -->
   ${content.tag ? `<rect x="80" y="60" width="${Math.max(60, tagW(content.tag, typo.tagSize) + 24)}" height="30" rx="6" fill="#134E4A" opacity="0.5"/>
-  ${renderTextLines(content.tag, 92, 82, typo.tagSize, typo.tagSize * 1.2, 1, 'left', '#99F6E4', '600', typo.subtitleFontFamily)}` : ''}
-  ${renderTextLines(content.title, 80, 170, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#134E4A', '900', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 80, 250, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#0F766E', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
-  ${content.author ? `<text x="80" y="458" font-size="${typo.authorSize}" font-family="${typo.subtitleFontFamily}" fill="rgba(255,255,255,0.6)" letter-spacing="1">${esc(content.author)}</text>` : ''}
+  ${renderTextLines(content.tag, 92, 82, typo.tagSize, typo.tagSize * 1.2, 1, 'left', '#99F6E4', '600', typo.subtitleFontFamily, 'tag')}` : ''}
+  ${renderTextLines(content.title, 80, 170, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#134E4A', '900', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, 80, 250, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#0F766E', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${content.author ? `<text x="80" y="458" font-size="${typo.authorSize}" font-family="${typo.subtitleFontFamily}" fill="rgba(255,255,255,0.6)" letter-spacing="1" data-field="author" data-field-line="0" data-line-height="${typo.authorSize * 1.4}">${esc(content.author)}</text>` : ''}
   <!-- Right side mascot character -->
   <image href="assets/images/cover-illustrations/mascot-character.svg" x="680" y="10" width="480" height="420" opacity="0.9"/>
   <!-- Floating decorative elements -->
@@ -916,9 +941,9 @@ const illustRight = {
   <rect x="80" y="65" width="6" height="30" rx="3" fill="#4F46E5"/>
   ${content.tag ? `<rect x="80" y="100" width="${Math.max(60, tagW(content.tag, typo.tagSize) + 28)}" height="36" rx="18" fill="#EEF2FF"/>
   <rect x="80" y="100" width="${Math.max(60, tagW(content.tag, typo.tagSize) + 28)}" height="36" rx="18" fill="none" stroke="#C7D2FE" stroke-width="1" opacity="0.6"/>
-  ${renderTextLines(content.tag, 94, 124, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#4F46E5', '600', typo.subtitleFontFamily)}` : ''}
-  ${renderTextLines(content.title, 80, 200, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#0F172A', '800', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 80, 280, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#64748B', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.tag, 94, 124, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#4F46E5', '600', typo.subtitleFontFamily, 'tag')}` : ''}
+  ${renderTextLines(content.title, 80, 200, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#0F172A', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, 80, 280, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#64748B', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
   <line x1="80" y1="380" x2="180" y2="380" stroke="#C7D2FE" stroke-width="1.5" opacity="0.5"/>
   <line x1="185" y1="380" x2="320" y2="380" stroke="#E2E8F0" stroke-width="0.5"/>
   <circle cx="180" cy="380" r="2" fill="#C7D2FE" opacity="0.5"/>
@@ -958,9 +983,9 @@ const illustLeft = {
   ${illustBlock}
   <line x1="620" y1="120" x2="620" y2="360" stroke="#1E293B" stroke-width="1"/>
   ${content.tag ? `<rect x="660" y="110" width="${Math.max(60, tagW(content.tag, typo.tagSize) + 28)}" height="30" rx="15" fill="#6366F1" opacity="0.2"/>
-  ${renderTextLines(content.tag, 674, 131, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#A5B4FC', '600', typo.subtitleFontFamily)}` : ''}
-  ${renderTextLines(content.title, 1140, 200, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'right', '#F1F5F9', '700', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 1140, 280, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'right', '#94A3B8', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.tag, 674, 131, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#A5B4FC', '600', typo.subtitleFontFamily, 'tag')}` : ''}
+  ${renderTextLines(content.title, 1140, 200, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'right', '#F1F5F9', '700', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, 1140, 280, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'right', '#94A3B8', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
   <line x1="700" y1="420" x2="1140" y2="420" stroke="#1E293B" stroke-width="0.5"/>
 </svg>`;
   }
@@ -1000,9 +1025,9 @@ const illustCenterTop = {
   ${illustBlock}
   <line x1="460" y1="250" x2="740" y2="250" stroke="#D7CCC8" stroke-width="1"/>
   ${content.tag ? `<rect x="${cx - (tagW(content.tag, typo.tagSize) / 2 + 16)}" y="263" width="${tagW(content.tag, typo.tagSize) + 32}" height="32" rx="16" fill="#FEF3C7"/>
-  ${renderTextLines(content.tag, cx, 285, typo.tagSize, typo.tagSize * 1.2, 1.5, 'center', '#B45309', '600', typo.subtitleFontFamily)}` : ''}
-  ${renderTextLines(content.title, cx, 330, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#3E2723', '700', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, cx, 410, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#795548', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.tag, cx, 285, typo.tagSize, typo.tagSize * 1.2, 1.5, 'center', '#B45309', '600', typo.subtitleFontFamily, 'tag')}` : ''}
+  ${renderTextLines(content.title, cx, 330, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#3E2723', '700', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, cx, 410, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#795548', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -1036,9 +1061,9 @@ const illustSplit = {
   ${illustBlock}
   <line x1="620" y1="60" x2="620" y2="420" stroke="white" stroke-width="0.5" opacity="0.1"/>
   ${content.tag ? `<rect x="660" y="100" width="${Math.max(60, tagW(content.tag, typo.tagSize) + 28)}" height="30" rx="15" fill="white" opacity="0.15"/>
-  ${renderTextLines(content.tag, 674, 121, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#E0E7FF', '500', typo.subtitleFontFamily)}` : ''}
-  ${renderTextLines(content.title, 660, 200, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#FFFFFF', '700', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 660, 280, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#C4B5FD', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.tag, 674, 121, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#E0E7FF', '500', typo.subtitleFontFamily, 'tag')}` : ''}
+  ${renderTextLines(content.title, 660, 200, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#FFFFFF', '700', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, 660, 280, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#C4B5FD', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
   <line x1="660" y1="420" x2="900" y2="420" stroke="white" stroke-width="0.5" opacity="0.15"/>
 </svg>`;
   }
@@ -1083,14 +1108,14 @@ const illustHero = {
   ${illustBlock}
   ${content.tag ? `<rect x="80" y="80" width="${Math.max(60, tagW(content.tag, typo.tagSize) + 28)}" height="38" rx="8" fill="#134E4A" opacity="0.5"/>
   <rect x="80" y="80" width="${Math.max(60, tagW(content.tag, typo.tagSize) + 28)}" height="38" rx="8" fill="none" stroke="#5EEAD4" stroke-width="0.8" opacity="0.4"/>
-  ${renderTextLines(content.tag, 94, 106, typo.tagSize, typo.tagSize * 1.2, 1, 'left', '#99F6E4', '600', typo.subtitleFontFamily)}` : ''}
-  ${renderTextLines(content.title, 80, 190, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#FFFFFF', '800', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 80, 270, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#A7F3D0', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.tag, 94, 106, typo.tagSize, typo.tagSize * 1.2, 1, 'left', '#99F6E4', '600', typo.subtitleFontFamily, 'tag')}` : ''}
+  ${renderTextLines(content.title, 80, 190, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#FFFFFF', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, 80, 270, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#A7F3D0', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
   <path d="M0 425 Q300 410 600 425 Q900 440 1200 420" stroke="white" stroke-width="0.5" fill="none" opacity="0.15"/>
   <path d="M0 430 Q300 415 600 430 Q900 445 1200 425" stroke="#5EEAD4" stroke-width="0.3" fill="none" opacity="0.1"/>
   <rect x="0" y="435" width="1200" height="45" fill="#134E4A" opacity="0.4"/>
   <line x1="0" y1="435" x2="1200" y2="435" stroke="#0F766E" stroke-width="0.5" opacity="0.4"/>
-  ${content.author ? renderTextLines(content.author, 80, 464, typo.authorSize, typo.authorSize * 1.4, 1, 'left', 'rgba(255,255,255,0.6)', '300', typo.subtitleFontFamily) : ''}
+  ${content.author ? renderTextLines(content.author, 80, 464, typo.authorSize, typo.authorSize * 1.4, 1, 'left', 'rgba(255,255,255,0.6)', '300', typo.subtitleFontFamily, 'author') : ''}
 </svg>`;
   }
 };
@@ -1132,7 +1157,7 @@ const illustCard = {
   <circle cx="1000" cy="60" r="2" fill="#C7D2FE" opacity="0.22"/>
   ${content.tag ? `<rect x="${cx - (tagW(content.tag, typo.tagSize) / 2 + 16)}" y="18" width="${tagW(content.tag, typo.tagSize) + 32}" height="38" rx="19" fill="#EEF2FF"/>
   <rect x="${cx - (tagW(content.tag, typo.tagSize) / 2 + 16)}" y="18" width="${tagW(content.tag, typo.tagSize) + 32}" height="38" rx="19" fill="none" stroke="#C7D2FE" stroke-width="1" opacity="0.5"/>
-  ${renderTextLines(content.tag, cx, 43, typo.tagSize, typo.tagSize * 1.2, 1.5, 'center', '#4F46E5', '600', typo.subtitleFontFamily)}` : ''}
+  ${renderTextLines(content.tag, cx, 43, typo.tagSize, typo.tagSize * 1.2, 1.5, 'center', '#4F46E5', '600', typo.subtitleFontFamily, 'tag')}` : ''}
   <rect x="240" y="55" width="720" height="370" rx="20" fill="white" filter="url(#ic-shadow2)"/>
   <rect x="240" y="55" width="720" height="370" rx="20" fill="white" filter="url(#ic-shadow)"/>
   <rect x="240" y="55" width="720" height="370" rx="20" fill="url(#ic-dots2)"/>
@@ -1141,8 +1166,8 @@ const illustCard = {
   <line x1="910" y1="428" x2="940" y2="428" stroke="#C7D2FE" stroke-width="1.5" opacity="0.4"/>
   <line x1="270" y1="290" x2="930" y2="290" stroke="#F1F5F9" stroke-width="1"/>
   ${illustInner}
-  ${renderTextLines(content.title, cx, 320, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#0F172A', '700', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, cx, 400, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#64748B', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.title, cx, 320, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#0F172A', '700', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, cx, 400, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#64748B', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -1173,9 +1198,9 @@ const illustWave = {
   <path d="M0 420Q200 450 400 430Q600 410 800 440Q1000 470 1200 450" stroke="#BAE6FD" stroke-width="2" fill="none" opacity="0.3"/>
   <path d="M0 440Q200 470 400 450Q600 430 800 460Q1000 490 1200 470" stroke="#7DD3FC" stroke-width="1" fill="none" opacity="0.2"/>
   <rect x="80" y="140" width="6" height="200" rx="3" fill="#0EA5E9"/>
-  ${content.tag ? renderTextLines(content.tag, 110, 170, typo.tagSize, typo.tagSize * 1.2, 2, 'left', '#0284C7', '600', typo.subtitleFontFamily) : ''}
-  ${renderTextLines(content.title, 110, 220, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#0C4A6E', '800', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 110, 300, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#64748B', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${content.tag ? renderTextLines(content.tag, 110, 170, typo.tagSize, typo.tagSize * 1.2, 2, 'left', '#0284C7', '600', typo.subtitleFontFamily, 'tag') : ''}
+  ${renderTextLines(content.title, 110, 220, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#0C4A6E', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, 110, 300, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#64748B', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
   <line x1="110" y1="420" x2="350" y2="420" stroke="#BAE6FD" stroke-width="0.5"/>
   ${illustBlock}
 </svg>`;
@@ -1231,9 +1256,9 @@ const illustDarkGlow = {
   ${illustBlock}
   ${content.tag ? `<rect x="80" y="100" width="${Math.max(60, tagW(content.tag, typo.tagSize) + 28)}" height="36" rx="18" fill="#A855F7" opacity="0.2"/>
   <rect x="80" y="100" width="${Math.max(60, tagW(content.tag, typo.tagSize) + 28)}" height="36" rx="18" fill="none" stroke="#A855F7" stroke-width="0.5" opacity="0.4"/>
-  ${renderTextLines(content.tag, 94, 124, typo.tagSize, typo.tagSize * 1.2, 1, 'left', '#D8B4FE', '600', typo.subtitleFontFamily)}` : ''}
-  ${renderTextLines(content.title, 80, 200, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#FFFFFF', '700', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 80, 280, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#C084FC', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.tag, 94, 124, typo.tagSize, typo.tagSize * 1.2, 1, 'left', '#D8B4FE', '600', typo.subtitleFontFamily, 'tag')}` : ''}
+  ${renderTextLines(content.title, 80, 200, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#FFFFFF', '700', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, 80, 280, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#C084FC', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
   <line x1="80" y1="380" x2="200" y2="380" stroke="#A855F7" stroke-width="1.5" opacity="0.35"/>
   <line x1="205" y1="380" x2="350" y2="380" stroke="#7C3AED" stroke-width="0.5" opacity="0.2"/>
   <circle cx="200" cy="380" r="2" fill="#A855F7" opacity="0.4"/>
@@ -1259,13 +1284,13 @@ const illustMagazine = {
         <line x1="820" y1="220" x2="980" y2="220" stroke="#D1D5DB" stroke-width="0.5" opacity="0.15"/>`;
     return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <rect width="1200" height="510" fill="#FAFAFA"/>
-  <text x="80" y="80" font-size="72" font-family="${SERIF_FAMILY}" fill="#E5E7EB" font-weight="700" letter-spacing="-2">${esc(content.issueNumber || 'No.01')}</text>
+  <text x="80" y="80" font-size="72" font-family="${SERIF_FAMILY}" fill="#E5E7EB" font-weight="700" letter-spacing="-2" data-field="issueNumber" data-field-line="0" data-line-height="72">${esc(content.issueNumber || 'No.01')}</text>
   <line x1="80" y1="100" x2="580" y2="100" stroke="#111827" stroke-width="2"/>
   <line x1="80" y1="106" x2="400" y2="106" stroke="#D1D5DB" stroke-width="0.5"/>
-  ${renderTextLines(content.title, 80, 200, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#111827', '700', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 80, 280, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#6B7280', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.title, 80, 200, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#111827', '700', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, 80, 280, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#6B7280', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
   <line x1="80" y1="400" x2="580" y2="400" stroke="#E5E7EB" stroke-width="1"/>
-  ${content.author ? renderTextLines(content.author, 80, 440, typo.authorSize, typo.authorSize * 1.4, 1, 'left', '#9CA3AF', '400', typo.subtitleFontFamily) : ''}
+  ${content.author ? renderTextLines(content.author, 80, 440, typo.authorSize, typo.authorSize * 1.4, 1, 'left', '#9CA3AF', '400', typo.subtitleFontFamily, 'author') : ''}
   ${illustBlock}
 </svg>`;
   }
@@ -1311,9 +1336,9 @@ const techNeuralGrid = {
   ${illustBlock}
   ${content.tag ? `<rect x="80" y="58" width="${Math.max(92, tagW(content.tag, typo.tagSize) + 34)}" height="38" rx="8" fill="#22D3EE" opacity="0.12"/>
   <rect x="80" y="58" width="${Math.max(92, tagW(content.tag, typo.tagSize) + 34)}" height="38" rx="8" fill="none" stroke="#67E8F9" stroke-width="0.8" opacity="0.34"/>
-  ${renderTextLines(content.tag, 97, 84, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#67E8F9', '700', typo.subtitleFontFamily)}` : ''}
-  ${renderTextLines(content.title, 80, 170, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#F8FAFC', '800', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 80, 250, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#A7F3D0', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.tag, 97, 84, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#67E8F9', '700', typo.subtitleFontFamily, 'tag')}` : ''}
+  ${renderTextLines(content.title, 80, 170, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#F8FAFC', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, 80, 250, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#A7F3D0', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -1350,9 +1375,9 @@ const techLabConsole = {
   <circle cx="1068" cy="384" r="68" fill="#22C55E" opacity="0.08"/>
   <circle cx="650" cy="84" r="9" fill="#2563EB" opacity="0.1"/><circle cx="604" cy="390" r="7" fill="#16A34A" opacity="0.12"/>
   ${illustBlock}
-  ${content.tag ? renderTextLines(content.tag, 80, 88, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#1D4ED8', '700', typo.subtitleFontFamily) : ''}
-  ${renderTextLines(content.title, 80, 172, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#111827', '800', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 80, 252, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#475569', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${content.tag ? renderTextLines(content.tag, 80, 88, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#1D4ED8', '700', typo.subtitleFontFamily, 'tag') : ''}
+  ${renderTextLines(content.title, 80, 172, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#111827', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, 80, 252, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#475569', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -1390,9 +1415,9 @@ const productLaunchPad = {
   <path d="M80 54H248M80 72H160" stroke="#2563EB" stroke-width="1.2" opacity="0.14"/>
   ${illustBlock}
   ${content.tag ? `<rect x="80" y="58" width="${Math.max(86, tagW(content.tag, typo.tagSize) + 34)}" height="38" rx="19" fill="#DBEAFE"/>
-  ${renderTextLines(content.tag, 97, 84, typo.tagSize, typo.tagSize * 1.2, 1.8, 'left', '#2563EB', '700', typo.subtitleFontFamily)}` : ''}
-  ${renderTextLines(content.title, 80, 172, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#0F172A', '850', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 80, 252, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#475569', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.tag, 97, 84, typo.tagSize, typo.tagSize * 1.2, 1.8, 'left', '#2563EB', '700', typo.subtitleFontFamily, 'tag')}` : ''}
+  ${renderTextLines(content.title, 80, 172, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#0F172A', '850', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, 80, 252, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#475569', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -1429,9 +1454,9 @@ const productCanvas = {
   <circle cx="620" cy="76" r="10" fill="#F97316" opacity="0.12"/>
   <circle cx="1104" cy="400" r="20" fill="#0F766E" opacity="0.1"/>
   ${illustBlock}
-  ${content.tag ? renderTextLines(content.tag, 80, 88, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#C2410C', '700', typo.subtitleFontFamily) : ''}
-  ${renderTextLines(content.title, 80, 172, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#1F2937', '850', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 80, 252, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#6B7280', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${content.tag ? renderTextLines(content.tag, 80, 88, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#C2410C', '700', typo.subtitleFontFamily, 'tag') : ''}
+  ${renderTextLines(content.title, 80, 172, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#1F2937', '850', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, 80, 252, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#6B7280', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -1458,9 +1483,9 @@ const techBlueprint = {
   <path d="M104 76H236M104 96H184" stroke="#18181B" stroke-width="2" opacity="0.2"/>
   <path d="M140 408H448" stroke="#65A30D" stroke-width="4" opacity="0.44"/>
   <circle cx="632" cy="90" r="9" fill="#0284C7" opacity="0.12"/><circle cx="1080" cy="412" r="14" fill="#65A30D" opacity="0.12"/>
-  ${content.tag ? renderTextLines(content.tag, 80, 90, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#365314', '700', typo.subtitleFontFamily) : ''}
-  ${renderTextLines(content.title, 80, 172, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#18181B', '850', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 80, 252, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#475569', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${content.tag ? renderTextLines(content.tag, 80, 90, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#365314', '700', typo.subtitleFontFamily, 'tag') : ''}
+  ${renderTextLines(content.title, 80, 172, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#18181B', '850', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, 80, 252, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#475569', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -1490,9 +1515,9 @@ const techTerminalMap = {
   <path d="M116 404H368" stroke="#38BDF8" stroke-width="4" opacity="0.38"/>
   <path d="M46 46L46 82M46 46L82 46" stroke="#93C5FD" stroke-width="1.2" opacity="0.22"/>
   <path d="M1148 436L1148 398M1148 436L1110 436" stroke="#38BDF8" stroke-width="1.2" opacity="0.22"/>
-  ${content.tag ? renderTextLines(content.tag, 80, 90, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#93C5FD', '700', typo.subtitleFontFamily) : ''}
-  ${renderTextLines(content.title, 80, 172, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#F8FAFC', '850', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 80, 252, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#A7F3D0', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${content.tag ? renderTextLines(content.tag, 80, 90, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#93C5FD', '700', typo.subtitleFontFamily, 'tag') : ''}
+  ${renderTextLines(content.title, 80, 172, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#F8FAFC', '850', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, 80, 252, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#A7F3D0', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -1521,9 +1546,9 @@ const productRoadmap = {
   <circle cx="712" cy="376" r="18" fill="#0F766E" opacity="0.13"/>
   <path d="M120 84C204 48 312 60 380 120" stroke="#F97316" stroke-width="2.8" fill="none" opacity="0.3"/>
   <path d="M144 396H412" stroke="#F97316" stroke-width="4" opacity="0.36"/>
-  ${content.tag ? renderTextLines(content.tag, 80, 90, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#C2410C', '700', typo.subtitleFontFamily) : ''}
-  ${renderTextLines(content.title, 80, 172, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#1F2937', '850', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 80, 252, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#6B7280', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${content.tag ? renderTextLines(content.tag, 80, 90, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#C2410C', '700', typo.subtitleFontFamily, 'tag') : ''}
+  ${renderTextLines(content.title, 80, 172, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#1F2937', '850', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, 80, 252, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#6B7280', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -1553,9 +1578,9 @@ const productDecisionBoard = {
   <path d="M116 88H292M116 108H212" stroke="#0F766E" stroke-width="2" opacity="0.22"/>
   <path d="M144 408H428" stroke="#DB2777" stroke-width="4" opacity="0.24"/>
   <circle cx="638" cy="80" r="10" fill="#0F766E" opacity="0.11"/><circle cx="1088" cy="92" r="14" fill="#DB2777" opacity="0.09"/>
-  ${content.tag ? renderTextLines(content.tag, 80, 90, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#0F766E', '700', typo.subtitleFontFamily) : ''}
-  ${renderTextLines(content.title, 80, 172, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#111827', '850', typo.titleFontFamily, typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 80, 252, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#4B5563', '400', typo.subtitleFontFamily, typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${content.tag ? renderTextLines(content.tag, 80, 90, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#0F766E', '700', typo.subtitleFontFamily, 'tag') : ''}
+  ${renderTextLines(content.title, 80, 172, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#111827', '850', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, 80, 252, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#4B5563', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
