@@ -26,6 +26,7 @@ const FONT_FAMILY_VALUES = ['theme', 'sans', 'serif', 'mono'];
 const IMAGE_STYLE_MODES = ['theme', 'custom'];
 const IMAGE_RADIUS_MODES = ['px', 'circle'];
 const IMAGE_EFFECT_VALUES = ['theme', 'clean', 'soft-shadow', 'paper', 'polaroid', 'rounded', 'circle', 'bordered', 'bleed', 'mono'];
+const END_STYLE_VALUES = ['theme', 'classic', 'dots', 'diamond', 'asterism', 'wave', 'feather', 'minimal', 'ornament'];
 
 const LEGACY_IMAGE_SPACING_MAP = {
   compact: { top: 12, bottom: 16 },
@@ -53,6 +54,7 @@ const DEFAULT_DISPLAY_SETTINGS = {
   fontFamily: 'theme',
   imageStyleMode: 'theme',
   imageEffect: 'theme',
+  endStyle: 'theme',
   imageMarginTop: 24,
   imageMarginBottom: 32,
   imageRadius: 8,
@@ -143,6 +145,9 @@ function normalizeDisplaySettings(settings) {
   const imageStyleMode = IMAGE_STYLE_MODES.includes(settings.imageStyleMode)
     ? settings.imageStyleMode
     : (hasLegacyImageSettings || imageEffect !== 'theme' ? 'custom' : DEFAULT_DISPLAY_SETTINGS.imageStyleMode);
+  const endStyle = END_STYLE_VALUES.includes(settings.endStyle)
+    ? settings.endStyle
+    : DEFAULT_DISPLAY_SETTINGS.endStyle;
   const legacySpacing = LEGACY_IMAGE_SPACING_MAP[settings.imageSpacing] || LEGACY_IMAGE_SPACING_MAP.normal;
   const legacyShadow = LEGACY_IMAGE_SHADOW_MAP[settings.imageShadow] || LEGACY_IMAGE_SHADOW_MAP.none;
   const imageRadiusMode = IMAGE_RADIUS_MODES.includes(settings.imageRadiusMode)
@@ -154,6 +159,7 @@ function normalizeDisplaySettings(settings) {
     fontFamily,
     imageStyleMode,
     imageEffect,
+    endStyle,
     imageMarginTop: clampNumber(
       settings.imageMarginTop,
       0,

@@ -14,6 +14,7 @@ docs/THEMES
 
 # Claude / 本地 agent
 .claude/
+.superpowers/
 .canvas-meta.json
 
 # 临时设计稿 / 预览

@@ -654,6 +654,23 @@
                           </button>
                         </div>
                       </div>
+
+                      <!-- End Style (gzh themes only) -->
+                      <div class="misc-panel-section" v-if="isGzhTheme">
+                        <div class="code-panel-section-title">结尾样式</div>
+                        <div class="misc-button-grid misc-button-grid-end">
+                          <button
+                            v-for="option in endStyleOptions"
+                            :key="`end-style-${option.value}`"
+                            class="segmented-option-btn"
+                            :class="{ active: displaySettings.endStyle === option.value }"
+                            @click="setEndStyle(option.value)"
+                          >
+                            <span>{{ option.label }}</span>
+                            <small>{{ option.meta }}</small>
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>

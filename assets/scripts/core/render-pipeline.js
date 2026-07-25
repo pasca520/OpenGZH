@@ -1,4 +1,5 @@
 import { applyCodeHighlighting } from './code-highlight.js';
+import { applyGzhStructure } from './gzh-structure.js';
 
 /**
  * Render pipeline.
@@ -75,6 +76,14 @@ function applyInlineStyles(html, styleConfig, codeTheme, displaySettings) {
   applyCodeHighlighting(doc, { codeTheme, styleConfig });
   applyFontFamilyOverride(doc, fontStyle);
   applyImageDisplaySettings(doc, displaySettings);
+  if (styleConfig?.gzh) {
+    const gzh = { ...styleConfig.gzh };
+    const endStyle = displaySettings?.endStyle;
+    if (endStyle && endStyle !== 'theme') {
+      gzh.endStyle = endStyle;
+    }
+    applyGzhStructure(doc, gzh);
+  }
 
   const container = doc.createElement('div');
   container.setAttribute('style', mergeStyleText(scaledStyle.container, fontStyle?.container));

@@ -250,6 +250,17 @@ const imageEffectOptions = [
   { label: '通栏', value: 'bleed', meta: '沉浸图片' },
   { label: '黑白', value: 'mono', meta: '纪实质感' }
 ];
+const endStyleOptions = [
+  { label: '跟随主题', value: 'theme', meta: '模板内置' },
+  { label: '经典', value: 'classic', meta: '— END —' },
+  { label: '圆点', value: 'dots', meta: '● ● ●' },
+  { label: '菱形', value: 'diamond', meta: '◆' },
+  { label: '星群', value: 'asterism', meta: '* * *' },
+  { label: '波浪', value: 'wave', meta: '～～～' },
+  { label: '羽毛', value: 'feather', meta: '❦' },
+  { label: '极简', value: 'minimal', meta: '———' },
+  { label: '花饰', value: 'ornament', meta: '❋' }
+];
 const imageRadiusModeOptions = [
   { label: '圆角', value: 'px' },
   { label: '圆形', value: 'circle' }
@@ -288,6 +299,7 @@ const filteredDocuments = computed(() => {
 });
 
 const isImageStyleCustom = computed(() => displaySettings.value.imageStyleMode === 'custom');
+const isGzhTheme = computed(() => Boolean(STYLES[currentStyle.value]?.gzh));
 
 const tocItems = computed(() => {
   if (!renderedContent.value) return [];
@@ -999,6 +1011,12 @@ function setImageEffect(value) {
     imageEffect: value,
     imageStyleMode: value === 'theme' ? 'theme' : 'custom'
   });
+}
+
+function setEndStyle(value) {
+  const validStyles = endStyleOptions.map((option) => option.value);
+  if (!validStyles.includes(value)) return;
+  updateDisplaySettings({ endStyle: value });
 }
 
 function updateImageDisplaySettings(nextSettings) {
@@ -2041,6 +2059,7 @@ const app = createApp({
       documentSearch,
       filteredDocuments,
       isImageStyleCustom,
+      isGzhTheme,
       previewMode,
       tocVisible,
       tocItems,
@@ -2064,6 +2083,7 @@ const app = createApp({
       fontFamilyOptions,
       imageStyleModeOptions,
       imageEffectOptions,
+      endStyleOptions,
       imageRadiusModeOptions,
       codeBlockSettings,
       displaySettings,
@@ -2099,6 +2119,7 @@ const app = createApp({
       setFontScale,
       setFontFamily,
       setImageEffect,
+      setEndStyle,
       setImageRadiusMode,
       updateImageMetric,
       updateImageShadowOpacity,

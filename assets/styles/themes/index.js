@@ -31,6 +31,16 @@ import { theme as wechatFounderNote } from './wechat-founder-note.js';
 import { theme as wechatLabReport } from './wechat-lab-report.js';
 import { theme as wechatCityNews } from './wechat-city-news.js';
 import { theme as wechatCv8g } from './wechat-cv8g.js';
+import { theme as gzhHuijie } from './gzh-huijie.js';
+import { theme as gzhQingyu } from './gzh-qingyu.js';
+import { theme as gzhNuanxing } from './gzh-nuanxing.js';
+import { theme as gzhJingkong } from './gzh-jingkong.js';
+import { theme as gzhGewu } from './gzh-gewu.js';
+import { theme as gzhZidian } from './gzh-zidian.js';
+import { theme as gzhFeihong } from './gzh-feihong.js';
+import { theme as gzhYehang } from './gzh-yehang.js';
+import { theme as gzhHongcai } from './gzh-hongcai.js';
+import { theme as gzhDansha } from './gzh-dansha.js';
 
 /**
  * 所有主题样式配置
@@ -64,4 +74,14 @@ export const STYLES = {
   'wechat-lab-report': wechatLabReport,
   'wechat-city-news': wechatCityNews,
   'wechat-cv8g': wechatCv8g,
+  'gzh-huijie': gzhHuijie,
+  'gzh-qingyu': gzhQingyu,
+  'gzh-nuanxing': gzhNuanxing,
+  'gzh-jingkong': gzhJingkong,
+  'gzh-gewu': gzhGewu,
+  'gzh-zidian': gzhZidian,
+  'gzh-feihong': gzhFeihong,
+  'gzh-yehang': gzhYehang,
+  'gzh-hongcai': gzhHongcai,
+  'gzh-dansha': gzhDansha,
 };

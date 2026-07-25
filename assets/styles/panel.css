@@ -449,6 +449,10 @@
   grid-template-columns: repeat(5, minmax(108px, 1fr));
 }
 
+.misc-button-grid-end {
+  grid-template-columns: repeat(5, minmax(90px, 1fr));
+}
+
 .code-theme-grid-inline {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
@@ -811,6 +815,7 @@
   .misc-button-grid-font,
   .misc-button-grid-family,
   .image-effect-grid,
+  .misc-button-grid-end,
   .misc-range-input,
   .misc-color-row,
   .misc-shadow-grid {
@@ -826,7 +831,8 @@
   .side-panel { --side-panel-width: 360px; }
 
   .misc-button-grid-family,
-  .image-effect-grid {
+  .image-effect-grid,
+  .misc-button-grid-end {
     grid-template-columns: repeat(2, minmax(128px, 1fr));
   }
 }
