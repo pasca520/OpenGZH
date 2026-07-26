@@ -1,5 +1,5 @@
 import { applyCodeHighlighting } from './code-highlight.js';
-import { applyGzhStructure } from './gzh-structure.js';
+import { applyGzhStructure, applyEndDivider } from './gzh-structure.js';
 
 /**
  * Render pipeline.
@@ -77,13 +77,10 @@ function applyInlineStyles(html, styleConfig, codeTheme, displaySettings) {
   applyFontFamilyOverride(doc, fontStyle);
   applyImageDisplaySettings(doc, displaySettings);
   if (styleConfig?.gzh) {
-    const gzh = { ...styleConfig.gzh };
-    const endStyle = displaySettings?.endStyle;
-    if (endStyle && endStyle !== 'theme') {
-      gzh.endStyle = endStyle;
-    }
-    applyGzhStructure(doc, gzh);
+    applyGzhStructure(doc, styleConfig.gzh);
   }
+  // 结尾分隔线：所有主题独立生效
+  applyEndDivider(doc, displaySettings?.endStyle, styleConfig?.gzh);
 
   const container = doc.createElement('div');
   container.setAttribute('style', mergeStyleText(scaledStyle.container, fontStyle?.container));

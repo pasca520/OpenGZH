@@ -99,7 +99,7 @@ describe('buildEndHTML', () => {
   });
   it('minimal：极简单线无文字', () => {
     const html = buildEndHTML({ ...base, endStyle: 'minimal' });
-    expect(html).toContain('width:80px');
+    expect(html).toContain('width:72px');
     expect(html).not.toContain('END');
     expect(html).not.toContain('◆');
   });

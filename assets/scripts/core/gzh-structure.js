@@ -53,7 +53,7 @@ export function buildMarkHTML(text, gzh) {
   return `<mark style="background:${gzh.tagBg};color:${gzh.title};padding:2px 7px;border-radius:3px;font-weight:700;font-size:14px;">${esc(text)}</mark>`;
 }
 
-/** 文末 END 分隔线。根据 gzh.endStyle 切换样式，默认 classic。 */
+/** 文末分隔线。根据 endStyle 切换样式，默认 classic。每种样式自带 <style> 动效。 */
 export function buildEndHTML(gzh) {
   const endStyle = gzh.endStyle || 'classic';
   const line = gzh.line;
@@ -61,37 +61,48 @@ export function buildEndHTML(gzh) {
 
   switch (endStyle) {
     case 'dots':
-      // 三个小圆点
-      return `<section data-gzh-end style="margin:44px 10px 20px;"><section style="display:flex;align-items:center;justify-content:center;gap:14px;"><span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:${muted};"></span><span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:${muted};"></span><span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:${muted};"></span></section></section>`;
+      return `<section data-gzh-end style="margin:48px 10px 24px;text-align:center;"><style>@keyframes gzh-dot1{0%{opacity:0;transform:scale(0)}60%{opacity:1;transform:scale(1.3)}100%{opacity:1;transform:scale(1)}}@keyframes gzh-dot2{0%{opacity:0;transform:scale(0)}60%{opacity:1;transform:scale(1.3)}100%{opacity:1;transform:scale(1)}}@keyframes gzh-dot3{0%{opacity:0;transform:scale(0)}60%{opacity:1;transform:scale(1.3)}100%{opacity:1;transform:scale(1)}}</style><span style="display:inline-block;width:4px;height:4px;border-radius:50%;background:${muted};margin:0 8px;animation:gzh-dot1 .5s ease both;animation-delay:0s;"></span><span style="display:inline-block;width:4px;height:4px;border-radius:50%;background:${muted};margin:0 8px;animation:gzh-dot2 .5s ease both;animation-delay:.15s;"></span><span style="display:inline-block;width:4px;height:4px;border-radius:50%;background:${muted};margin:0 8px;animation:gzh-dot3 .5s ease both;animation-delay:.3s;"></span></section>`;
 
     case 'diamond':
-      // 菱形 ◆ 左右细线
-      return `<section data-gzh-end style="margin:44px 10px 20px;"><section style="display:flex;align-items:center;justify-content:center;"><span style="display:inline-block;height:1px;width:60px;background:${line};"></span><span style="display:inline-block;margin:0 16px;font-size:10px;color:${muted};line-height:1;">◆</span><span style="display:inline-block;height:1px;width:60px;background:${line};"></span></section></section>`;
+      return `<section data-gzh-end style="margin:48px 10px 24px;"><style>@keyframes gzh-diamond-spin{0%{transform:rotate(0deg) scale(.8);opacity:0}50%{opacity:1}100%{transform:rotate(360deg) scale(1);opacity:1}}</style><section style="display:flex;align-items:center;justify-content:center;"><span style="display:inline-block;height:1px;width:56px;background:${line};"></span><span style="display:inline-block;margin:0 18px;font-size:8px;color:${muted};line-height:1;animation:gzh-diamond-spin 1.8s ease-in-out infinite;transform-origin:center center;">◆</span><span style="display:inline-block;height:1px;width:56px;background:${line};"></span></section></section>`;
 
     case 'asterism':
-      // 三个小星号 * * *
-      return `<section data-gzh-end style="margin:44px 10px 20px;"><section style="display:flex;align-items:center;justify-content:center;"><span style="display:inline-block;height:1px;width:32px;background:${line};margin-right:16px;"></span><span style="font-size:14px;color:${muted};letter-spacing:10px;font-weight:400;">*&nbsp;*&nbsp;*</span><span style="display:inline-block;height:1px;width:32px;background:${line};margin-left:16px;"></span></section></section>`;
+      return `<section data-gzh-end style="margin:48px 10px 24px;"><style>@keyframes gzh-ast{0%{opacity:0;transform:rotate(-90deg) scale(.5)}100%{opacity:1;transform:rotate(0deg) scale(1)}}</style><section style="display:flex;align-items:center;justify-content:center;"><span style="display:inline-block;height:1px;width:28px;background:${line};margin-right:14px;"></span><span style="display:inline-block;font-size:11px;color:${muted};letter-spacing:14px;font-weight:300;padding-right:14px;animation:gzh-ast .8s ease both;animation-delay:0s;">*</span><span style="display:inline-block;font-size:11px;color:${muted};letter-spacing:14px;font-weight:300;padding-right:14px;animation:gzh-ast .8s ease both;animation-delay:.15s;">*</span><span style="display:inline-block;font-size:11px;color:${muted};letter-spacing:14px;font-weight:300;animation:gzh-ast .8s ease both;animation-delay:.3s;">*</span><span style="display:inline-block;height:1px;width:28px;background:${line};margin-left:14px;"></span></section></section>`;
 
     case 'wave':
-      // 波浪线
-      return `<section data-gzh-end style="margin:44px 10px 20px;"><section style="text-align:center;font-size:14px;color:${line};letter-spacing:2px;line-height:1;">～～～～～～</section></section>`;
+      return `<section data-gzh-end style="margin:48px 10px 24px;"><style>@keyframes gzh-wave{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}</style><section style="text-align:center;font-size:16px;color:${line};line-height:1;letter-spacing:3px;"><span style="display:inline-block;animation:gzh-wave 1.8s ease-in-out infinite;animation-delay:0s;">～</span><span style="display:inline-block;animation:gzh-wave 1.8s ease-in-out infinite;animation-delay:.15s;">～</span><span style="display:inline-block;animation:gzh-wave 1.8s ease-in-out infinite;animation-delay:.3s;">～</span><span style="display:inline-block;animation:gzh-wave 1.8s ease-in-out infinite;animation-delay:.45s;">～</span><span style="display:inline-block;animation:gzh-wave 1.8s ease-in-out infinite;animation-delay:.6s;">～</span><span style="display:inline-block;animation:gzh-wave 1.8s ease-in-out infinite;animation-delay:.75s;">～</span></section></section>`;
 
     case 'feather':
-      // 羽毛 ❦ 左右细线
-      return `<section data-gzh-end style="margin:44px 10px 20px;"><section style="display:flex;align-items:center;justify-content:center;"><span style="display:inline-block;height:1px;width:50px;background:${line};"></span><span style="display:inline-block;margin:0 16px;font-size:16px;color:${muted};line-height:1;">❦</span><span style="display:inline-block;height:1px;width:50px;background:${line};"></span></section></section>`;
+      return `<section data-gzh-end style="margin:48px 10px 24px;"><style>@keyframes gzh-feather{0%,100%{transform:rotate(-6deg)}50%{transform:rotate(6deg)}}</style><section style="display:flex;align-items:center;justify-content:center;"><span style="display:inline-block;height:1px;width:48px;background:${line};"></span><span style="display:inline-block;margin:0 18px;font-size:18px;color:${muted};line-height:1;animation:gzh-feather 3s ease-in-out infinite;transform-origin:center bottom;">❦</span><span style="display:inline-block;height:1px;width:48px;background:${line};"></span></section></section>`;
 
     case 'minimal':
-      // 极简单线
-      return `<section data-gzh-end style="margin:44px 10px 20px;"><section style="display:flex;justify-content:center;"><span style="display:inline-block;height:1px;width:80px;background:${line};"></span></section></section>`;
+      return `<section data-gzh-end style="margin:48px 10px 24px;"><style>@keyframes gzh-min-line{0%{width:0;opacity:0}100%{width:72px;opacity:1}}</style><section style="display:flex;justify-content:center;"><span style="display:inline-block;height:1px;width:72px;background:${line};border-radius:1px;animation:gzh-min-line .8s ease-out both;"></span></section></section>`;
 
     case 'ornament':
-      // 装饰花体 ❋ 双层
-      return `<section data-gzh-end style="margin:44px 10px 20px;"><section style="display:flex;align-items:center;justify-content:center;"><span style="display:inline-block;height:1px;width:40px;background:${line};margin-right:8px;"></span><span style="display:inline-block;height:1px;width:16px;background:${muted};margin-right:14px;"></span><span style="font-size:12px;color:${muted};line-height:1;">❋</span><span style="display:inline-block;height:1px;width:16px;background:${muted};margin-left:14px;"></span><span style="display:inline-block;height:1px;width:40px;background:${line};margin-left:8px;"></span></section></section>`;
+      return `<section data-gzh-end style="margin:48px 10px 24px;"><style>@keyframes gzh-orn{0%{opacity:0;transform:scale(.6)}60%{opacity:1;transform:scale(1.15)}100%{opacity:1;transform:scale(1)}}</style><section style="display:flex;align-items:center;justify-content:center;"><span style="display:inline-block;height:1px;width:36px;background:${line};margin-right:6px;"></span><span style="display:inline-block;height:1px;width:14px;background:${muted};margin-right:12px;opacity:.6;"></span><span style="display:inline-block;font-size:13px;color:${muted};line-height:1;animation:gzh-orn .7s ease both;">❋</span><span style="display:inline-block;height:1px;width:14px;background:${muted};margin-left:12px;opacity:.6;"></span><span style="display:inline-block;height:1px;width:36px;background:${line};margin-left:6px;"></span></section></section>`;
 
     default:
-      // classic：— END —
-      return `<section data-gzh-end style="margin:44px 10px 20px;"><section style="display:flex;align-items:center;justify-content:center;"><span style="display:inline-block;height:1px;width:44px;background:${line};margin-right:14px;"></span><span style="font-size:10px;color:${muted};letter-spacing:4px;font-weight:500;">END</span><span style="display:inline-block;height:1px;width:44px;background:${line};margin-left:14px;"></span></section></section>`;
+      // classic
+      return `<section data-gzh-end style="margin:44px 10px 20px;"><section style="display:flex;align-items:center;justify-content:center;"><span style="display:inline-block;height:1px;width:44px;background:${gzh.line};margin-right:14px;"></span><span style="font-size:10px;color:${gzh.muted};letter-spacing:4px;font-weight:500;">END</span><span style="display:inline-block;height:1px;width:44px;background:${gzh.line};margin-left:14px;"></span></section></section>`;
   }
+}
+
+/**
+ * 独立的文末分隔线（所有主题可用）。
+ * endStyle='theme' 时：gzh 主题使用其自带 endStyle（默认 classic），非 gzh 主题不显示。
+ * endStyle 为具体值时：所有主题均应用该样式。
+ */
+export function applyEndDivider(doc, endStyle, themeColors) {
+  if (!doc.body) return;
+
+  if (endStyle === 'theme' || !endStyle) {
+    // 跟随主题：gzh 主题默认 classic，非 gzh 不显示
+    if (!themeColors) return;
+    endStyle = themeColors.endStyle || 'classic';
+  }
+
+  const colors = themeColors || { line: '#e5e7eb', muted: '#9ca3af' };
+  doc.body.appendChild(htmlToElement(doc, buildEndHTML({ ...colors, endStyle })));
 }
 
 /* ================= DOM 胶水 ================= */
@@ -132,7 +143,7 @@ function replaceHighlightMarkers(doc, gzh) {
 }
 
 /**
- * 结构化主流程：==高亮== → h2 自动编号 → END 分隔线。
+ * 结构化主流程：==高亮== → h2 自动编号。
  * 直接就地修改 doc（须在 selector 样式循环之后、容器包裹之前调用）。
  */
 export function applyGzhStructure(doc, gzh) {
@@ -151,6 +162,4 @@ export function applyGzhStructure(doc, gzh) {
       slot.parentNode.insertBefore(h2, slot);
       slot.parentNode.removeChild(slot);
     });
-
-  body.appendChild(htmlToElement(doc, buildEndHTML(gzh)));
 }

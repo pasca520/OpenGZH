@@ -450,7 +450,7 @@
 }
 
 .misc-button-grid-end {
-  grid-template-columns: repeat(5, minmax(90px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .code-theme-grid-inline {

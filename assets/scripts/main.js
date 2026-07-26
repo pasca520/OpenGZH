@@ -299,7 +299,6 @@ const filteredDocuments = computed(() => {
 });
 
 const isImageStyleCustom = computed(() => displaySettings.value.imageStyleMode === 'custom');
-const isGzhTheme = computed(() => Boolean(STYLES[currentStyle.value]?.gzh));
 
 const tocItems = computed(() => {
   if (!renderedContent.value) return [];
@@ -2059,7 +2058,6 @@ const app = createApp({
       documentSearch,
       filteredDocuments,
       isImageStyleCustom,
-      isGzhTheme,
       previewMode,
       tocVisible,
       tocItems,
