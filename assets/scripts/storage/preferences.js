@@ -26,7 +26,7 @@ const FONT_FAMILY_VALUES = ['theme', 'sans', 'serif', 'mono'];
 const IMAGE_STYLE_MODES = ['theme', 'custom'];
 const IMAGE_RADIUS_MODES = ['px', 'circle'];
 const IMAGE_EFFECT_VALUES = ['theme', 'clean', 'soft-shadow', 'paper', 'polaroid', 'rounded', 'circle', 'bordered', 'bleed', 'mono'];
-const END_STYLE_VALUES = ['theme', 'classic', 'dots', 'diamond', 'asterism', 'wave', 'feather', 'minimal', 'ornament'];
+const END_STYLE_VALUES = ['theme', 'classic', 'aurora', 'pulse', 'scan', 'orbit', 'neon', 'pixel', 'breathe', 'equalizer', 'datastream', 'particle', 'holo'];
 
 const LEGACY_IMAGE_SPACING_MAP = {
   compact: { top: 12, bottom: 16 },

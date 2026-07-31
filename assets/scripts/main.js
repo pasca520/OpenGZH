@@ -253,13 +253,17 @@ const imageEffectOptions = [
 const endStyleOptions = [
   { label: '跟随主题', value: 'theme', meta: '模板内置' },
   { label: '经典', value: 'classic', meta: '— END —' },
-  { label: '圆点', value: 'dots', meta: '● ● ●' },
-  { label: '菱形', value: 'diamond', meta: '◆' },
-  { label: '星群', value: 'asterism', meta: '* * *' },
-  { label: '波浪', value: 'wave', meta: '～～～' },
-  { label: '羽毛', value: 'feather', meta: '❦' },
-  { label: '极简', value: 'minimal', meta: '———' },
-  { label: '花饰', value: 'ornament', meta: '❋' }
+  { label: '极光', value: 'aurora', meta: '流光渐变' },
+  { label: '脉冲', value: 'pulse', meta: '雷达光环' },
+  { label: '扫描', value: 'scan', meta: '光束划过' },
+  { label: '星轨', value: 'orbit', meta: '环绕运行' },
+  { label: '霓虹', value: 'neon', meta: '灯牌闪烁' },
+  { label: '像素', value: 'pixel', meta: '逐格点亮' },
+  { label: '灵晕', value: 'breathe', meta: '涟漪光晕' },
+  { label: '频谱', value: 'equalizer', meta: '声浪跳动' },
+  { label: '数据流', value: 'datastream', meta: '码流明灭' },
+  { label: '粒子', value: 'particle', meta: '星火升腾' },
+  { label: '全息', value: 'holo', meta: '幻彩流转' }
 ];
 const imageRadiusModeOptions = [
   { label: '圆角', value: 'px' },

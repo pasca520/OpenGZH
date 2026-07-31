@@ -26,16 +26,19 @@ describe('accentOf', () => {
 });
 
 describe('buildH2WrapperHTML', () => {
-  it('badge：圆角徽标 + 编号 + 插槽', () => {
+  it('badge：实心方块并置 + 插槽', () => {
     const html = buildH2WrapperHTML(1, base);
-    expect(html).toContain('border-radius:9999px');
+    expect(html).toContain('display:flex');
+    expect(html).toContain('font-size:20px');
     expect(html).toContain('>01<');
     expect(html).toContain('data-gzh-slot');
     expect(html).toContain('background:#059669');
   });
-  it('chip：方框描边', () => {
+  it('chip：描边方块并置', () => {
     const html = buildH2WrapperHTML(2, { ...base, numStyle: 'chip' });
     expect(html).toContain('border:1.5px solid');
+    expect(html).toContain('font-size:20px');
+    expect(html).toContain('display:flex');
     expect(html).toContain('>02<');
   });
   it('watermark：44px 水印大号数字用 line 色', () => {
@@ -44,10 +47,11 @@ describe('buildH2WrapperHTML', () => {
     expect(html).toContain('color:#e5e7eb');
     expect(html).toContain('>03<');
   });
-  it('plain：小编号 + 36px 短横线', () => {
+  it('plain：34px 大编号与标题并置', () => {
     const html = buildH2WrapperHTML(1, { ...base, numStyle: 'plain' });
-    expect(html).toContain('letter-spacing:3px');
-    expect(html).toContain('width:36px');
+    expect(html).toContain('font-size:34px');
+    expect(html).toContain('font-weight:900');
+    expect(html).toContain('display:flex');
   });
   it('palette 主题编号徽标用轮转色', () => {
     const g = { ...base, palette: ['#F24E1E', '#A259FF'] };
@@ -71,41 +75,74 @@ describe('buildEndHTML', () => {
     expect(html).toContain('#e5e7eb');
     expect(html).toContain('letter-spacing:4px');
   });
-  it('dots：三个圆点', () => {
-    const html = buildEndHTML({ ...base, endStyle: 'dots' });
+  it('aurora：流光渐变带', () => {
+    const html = buildEndHTML({ ...base, endStyle: 'aurora' });
+    expect(html).toContain('linear-gradient');
+    expect(html).toContain('gzh-aurora');
+    expect(html).toContain('data-gzh-end');
+    expect(html).not.toContain('END');
+  });
+  it('pulse：雷达扩散光环', () => {
+    const html = buildEndHTML({ ...base, endStyle: 'pulse' });
+    expect(html).toContain('gzh-pulse-ring');
     expect(html).toContain('border-radius:50%');
     expect(html).toContain('data-gzh-end');
-    expect(html).not.toContain('END');
   });
-  it('diamond：菱形符号', () => {
-    const html = buildEndHTML({ ...base, endStyle: 'diamond' });
-    expect(html).toContain('◆');
-    expect(html).toContain('#9ca3af');
-  });
-  it('asterism：三个星号', () => {
-    const html = buildEndHTML({ ...base, endStyle: 'asterism' });
-    expect(html).toContain('*');
-    expect(html).toContain('data-gzh-end');
-  });
-  it('wave：波浪线', () => {
-    const html = buildEndHTML({ ...base, endStyle: 'wave' });
-    expect(html).toContain('～');
+  it('scan：光束扫描线', () => {
+    const html = buildEndHTML({ ...base, endStyle: 'scan' });
+    expect(html).toContain('gzh-scan');
     expect(html).toContain('#e5e7eb');
-  });
-  it('feather：羽毛装饰', () => {
-    const html = buildEndHTML({ ...base, endStyle: 'feather' });
-    expect(html).toContain('❦');
-    expect(html).toContain('data-gzh-end');
-  });
-  it('minimal：极简单线无文字', () => {
-    const html = buildEndHTML({ ...base, endStyle: 'minimal' });
-    expect(html).toContain('width:72px');
     expect(html).not.toContain('END');
-    expect(html).not.toContain('◆');
   });
-  it('ornament：装饰花体', () => {
-    const html = buildEndHTML({ ...base, endStyle: 'ornament' });
-    expect(html).toContain('❋');
+  it('orbit：环绕星轨', () => {
+    const html = buildEndHTML({ ...base, endStyle: 'orbit' });
+    expect(html).toContain('gzh-orbit');
+    expect(html).toContain('border:1px dashed');
     expect(html).toContain('data-gzh-end');
+  });
+  it('neon：霓虹灯牌边框闪烁', () => {
+    const html = buildEndHTML({ ...base, endStyle: 'neon' });
+    expect(html).toContain('gzh-neon-frame');
+    expect(html).toContain('border-radius:8px');
+    expect(html).toContain('text-shadow');
+    expect(html).not.toContain('END');
+  });
+  it('pixel：方块逐格点亮', () => {
+    const html = buildEndHTML({ ...base, endStyle: 'pixel' });
+    expect(html).toContain('gzh-pixel');
+    expect(html).toContain('animation-delay:.6s');
+    expect(html).toContain('data-gzh-end');
+  });
+  it('breathe：三层光晕涟漪扩散', () => {
+    const html = buildEndHTML({ ...base, endStyle: 'breathe' });
+    expect(html).toContain('gzh-breathe-halo');
+    expect(html).toContain('radial-gradient');
+    expect(html).toContain('animation-delay:2s');
+    expect(html).not.toContain('END');
+  });
+  it('equalizer：声浪柱跳动', () => {
+    const html = buildEndHTML({ ...base, endStyle: 'equalizer' });
+    expect(html).toContain('gzh-eq');
+    expect(html).toContain('scaleY');
+    expect(html).toContain('data-gzh-end');
+  });
+  it('datastream：码流明灭 + 块状光标', () => {
+    const html = buildEndHTML({ ...base, endStyle: 'datastream' });
+    expect(html).toContain('gzh-data-cursor');
+    expect(html).toContain('monospace');
+    expect(html).not.toContain('END');
+  });
+  it('particle：星火升腾', () => {
+    const html = buildEndHTML({ ...base, endStyle: 'particle' });
+    expect(html).toContain('gzh-particle');
+    expect(html).toContain('translateY(-20px)');
+    expect(html).toContain('data-gzh-end');
+  });
+  it('holo：幻彩光带色相流转', () => {
+    const html = buildEndHTML({ ...base, endStyle: 'holo' });
+    expect(html).toContain('gzh-holo');
+    expect(html).toContain('hue-rotate');
+    expect(html).toContain('repeating-linear-gradient');
+    expect(html).not.toContain('END');
   });
 });
