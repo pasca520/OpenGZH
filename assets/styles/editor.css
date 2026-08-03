@@ -706,6 +706,25 @@
   max-width: min(94vw, 680px);
 }
 
+/* 右侧空间不足时翻转：浮层右缘对齐按钮右缘，向左展开 */
+.preview-picker-dropdown.align-right {
+  left: auto;
+  right: 0;
+}
+
+/* 极端窄屏下向左仍放不下时，改为贴合视口左缘（fixed 相对视口定位，top 由 JS 计算） */
+.preview-picker-dropdown.align-fit {
+  position: fixed;
+  left: var(--space-3);
+  width: calc(100vw - var(--space-6));
+  max-width: calc(100vw - var(--space-6));
+}
+
+.preview-picker-dropdown.align-fit .typo-dropdown-scroll,
+.preview-picker-dropdown.align-fit .template-dropdown-scroll {
+  max-height: inherit;
+}
+
 .template-dropdown-scroll {
   
   max-height: min(420px, calc(100vh - 140px));

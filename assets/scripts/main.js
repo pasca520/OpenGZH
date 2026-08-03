@@ -1952,6 +1952,30 @@ const app = createApp({
 
       initResizeHandles();
 
+      // 下拉浮层右侧溢出视口时自动翻转对齐
+      function alignPickerDropdown() {
+        const margin = 12;
+        for (const selector of ['.template-dropdown', '.typo-dropdown']) {
+          const dropdown = document.querySelector(selector);
+          if (!dropdown) continue;
+          dropdown.classList.remove('align-right', 'align-fit');
+          if (dropdown.getBoundingClientRect().right > window.innerWidth - margin) {
+            dropdown.classList.add('align-right');
+            if (dropdown.getBoundingClientRect().left < margin) {
+              const anchorTop = dropdown.getBoundingClientRect().top;
+              dropdown.classList.remove('align-right');
+              dropdown.classList.add('align-fit');
+              dropdown.style.top = `${anchorTop}px`;
+              dropdown.style.maxHeight = `calc(100vh - ${anchorTop + margin}px)`;
+            }
+          }
+        }
+      }
+      watch([showTemplatePicker, showTypoPicker], () => nextTick(alignPickerDropdown));
+      window.addEventListener('resize', () => {
+        if (showTemplatePicker.value || showTypoPicker.value) alignPickerDropdown();
+      });
+
       // 点击外部关闭下拉菜单
       document.addEventListener('click', (event) => {
         if (!event.target.closest('.device-model-picker')) {
