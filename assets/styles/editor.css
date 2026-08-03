@@ -708,7 +708,7 @@
 
 .template-dropdown-scroll {
   
-  max-height: 420px;
+  max-height: min(420px, calc(100vh - 140px));
   overflow-y: auto;
   padding: var(--space-5) var(--space-5) var(--space-6);
 }
@@ -717,7 +717,7 @@
 .template-dropdown-scroll::-webkit-scrollbar-thumb { background: var(--color-border-default); border-radius: 2px; }
 
 .typo-dropdown-scroll {
-  max-height: 560px;
+  max-height: min(560px, calc(100vh - 140px));
   overflow-y: auto;
   padding: var(--space-5) var(--space-5) var(--space-6);
 }

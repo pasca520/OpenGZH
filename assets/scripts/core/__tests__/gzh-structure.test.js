@@ -26,18 +26,18 @@ describe('accentOf', () => {
 });
 
 describe('buildH2WrapperHTML', () => {
-  it('badge：实心方块并置 + 插槽', () => {
+  it('badge：居中圆章 + 插槽', () => {
     const html = buildH2WrapperHTML(1, base);
-    expect(html).toContain('display:flex');
-    expect(html).toContain('font-size:20px');
+    expect(html).toContain('border-radius:50%');
+    expect(html).toContain('text-align:center');
     expect(html).toContain('>01<');
     expect(html).toContain('data-gzh-slot');
     expect(html).toContain('background:#059669');
   });
-  it('chip：描边方块并置', () => {
+  it('chip：soft 浅底色带页眉', () => {
     const html = buildH2WrapperHTML(2, { ...base, numStyle: 'chip' });
-    expect(html).toContain('border:1.5px solid');
-    expect(html).toContain('font-size:20px');
+    expect(html).toContain('background:#ecfdf5');
+    expect(html).toContain('font-size:22px');
     expect(html).toContain('display:flex');
     expect(html).toContain('>02<');
   });
@@ -47,11 +47,11 @@ describe('buildH2WrapperHTML', () => {
     expect(html).toContain('color:#e5e7eb');
     expect(html).toContain('>03<');
   });
-  it('plain：34px 大编号与标题并置', () => {
+  it('plain：26px 大编号堆叠 + 44px 短横线', () => {
     const html = buildH2WrapperHTML(1, { ...base, numStyle: 'plain' });
-    expect(html).toContain('font-size:34px');
+    expect(html).toContain('font-size:26px');
     expect(html).toContain('font-weight:900');
-    expect(html).toContain('display:flex');
+    expect(html).toContain('width:44px');
   });
   it('palette 主题编号徽标用轮转色', () => {
     const g = { ...base, palette: ['#F24E1E', '#A259FF'] };
@@ -135,7 +135,7 @@ describe('buildEndHTML', () => {
   it('particle：星火升腾', () => {
     const html = buildEndHTML({ ...base, endStyle: 'particle' });
     expect(html).toContain('gzh-particle');
-    expect(html).toContain('translateY(-20px)');
+    expect(html).toContain('translateY(-16px)');
     expect(html).toContain('data-gzh-end');
   });
   it('holo：幻彩光带色相流转', () => {
@@ -144,5 +144,12 @@ describe('buildEndHTML', () => {
     expect(html).toContain('hue-rotate');
     expect(html).toContain('repeating-linear-gradient');
     expect(html).not.toContain('END');
+  });
+  it('全部结尾样式不含 position 定位（公众号会剥离，静态布局必须成立）', () => {
+    const styles = ['classic', 'aurora', 'pulse', 'scan', 'orbit', 'neon', 'pixel', 'breathe', 'equalizer', 'datastream', 'particle', 'holo'];
+    styles.forEach((endStyle) => {
+      const html = buildEndHTML({ ...base, endStyle });
+      expect(html).not.toMatch(/(?<![\w-])position:/);
+    });
   });
 });
