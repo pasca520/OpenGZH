@@ -7,14 +7,14 @@ import { COVER_TEMPLATES } from './templates.js';
 
 /** Default typography settings for cover images */
 export const DEFAULT_TYPOGRAPHY = {
-  titleSize: 48,
-  subtitleSize: 40,
-  tagSize: 28,
+  titleSize: 56,
+  subtitleSize: 30,
+  tagSize: 26,
   authorSize: 14,
-  titleLineHeight: 1.3,
-  subtitleLineHeight: 1.35,
-  titleLetterSpacing: 0,
-  subtitleLetterSpacing: 0,
+  titleLineHeight: 1.25,
+  subtitleLineHeight: 1.4,
+  titleLetterSpacing: -0.5,
+  subtitleLetterSpacing: 1,
   titleOffsetY: 0,
   subtitleOffsetY: 0,
   titleOffsetX: 0,
