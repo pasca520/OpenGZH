@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1200" height="250" viewBox="0 0 1200 250"
+     role="img" aria-labelledby="wf-title wf-desc">
+  <title id="wf-title">OpenGZH 工作流程：从 Markdown 到公众号</title>
+  <desc id="wf-desc">Markdown 编辑输入 → markdown-it 实时渲染 → 27 套主题排版与 73 幅封面插画 → 一键复制富文本粘贴到公众号后台。</desc>
+
+  <rect width="1200" height="250" rx="24" fill="#fdfaf5"/>
+  <rect x="1" y="1" width="1198" height="248" rx="23" fill="none" stroke="#e7e2d8" stroke-width="1.5"/>
+
+  <text x="48" y="40" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+        font-size="15" font-weight="600" letter-spacing="3" fill="#2d6dc3">HOW IT WORKS</text>
+  <text x="48" y="72" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif"
+        font-size="26" font-weight="700" fill="#2b3340">从 Markdown 到公众号，一条流水线</text>
+
+  <g id="stages">
+    <!-- stage 1: Markdown -->
+    <rect x="48" y="92" width="176" height="104" rx="14" fill="#ffffff" stroke="#dfe4ed"/>
+    <rect x="114" y="108" width="44" height="44" rx="12" fill="#eef4fc"/>
+    <text x="136" y="137" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+          font-size="21" font-weight="700" fill="#2d6dc3">#</text>
+    <text x="136" y="172" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
+          font-size="21" font-weight="700" fill="#2b3340">Markdown</text>
+    <text x="136" y="190" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
+          font-size="18" fill="#8a94a6">编辑输入</text>
+
+    <!-- arrow 1 -->
+    <line x1="228" y1="144" x2="250" y2="144" stroke="#c5cedb" stroke-width="2"/>
+    <path d="M250 139l7 5 -7 5" fill="none" stroke="#c5cedb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- stage 2: 渲染 -->
+    <rect x="258" y="92" width="176" height="104" rx="14" fill="#ffffff" stroke="#dfe4ed"/>
+    <rect x="324" y="108" width="44" height="44" rx="12" fill="#eef4fc"/>
+    <path d="M331 121v18l13 -9z" fill="#2d6dc3"/>
+    <text x="346" y="172" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
+          font-size="21" font-weight="700" fill="#2b3340">实时渲染</text>
+    <text x="346" y="190" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
+          font-size="18" fill="#8a94a6">markdown-it</text>
+
+    <!-- arrow 2 -->
+    <line x1="438" y1="144" x2="460" y2="144" stroke="#c5cedb" stroke-width="2"/>
+    <path d="M460 139l7 5 -7 5" fill="none" stroke="#c5cedb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- stage 3: 主题 -->
+    <rect x="468" y="92" width="176" height="104" rx="14" fill="#ffffff" stroke="#dfe4ed"/>
+    <rect x="534" y="108" width="44" height="44" rx="12" fill="#eef4fc"/>
+    <circle cx="542" cy="126" r="5.5" fill="#2d6dc3"/>
+    <circle cx="554" cy="134" r="5.5" fill="#07c160"/>
+    <circle cx="566" cy="124" r="5.5" fill="#e8a23d"/>
+    <text x="556" y="172" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
+          font-size="21" font-weight="700" fill="#2b3340">主题排版</text>
+    <text x="556" y="190" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
+          font-size="18" fill="#8a94a6">27 套主题</text>
+
+    <!-- arrow 3 -->
+    <line x1="648" y1="144" x2="670" y2="144" stroke="#c5cedb" stroke-width="2"/>
+    <path d="M670 139l7 5 -7 5" fill="none" stroke="#c5cedb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- stage 4: 封面 -->
+    <rect x="678" y="92" width="176" height="104" rx="14" fill="#ffffff" stroke="#dfe4ed"/>
+    <rect x="744" y="108" width="44" height="44" rx="12" fill="#eef4fc"/>
+    <rect x="738" y="121" width="22" height="17" rx="3" fill="none" stroke="#2d6dc3" stroke-width="2"/>
+    <circle cx="745" cy="127" r="2.4" fill="#2d6dc3"/>
+    <path d="M744 133l5 -5 5 4 4 -4" fill="none" stroke="#2d6dc3" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="766" y="172" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
+          font-size="21" font-weight="700" fill="#2b3340">封面模板</text>
+    <text x="766" y="190" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
+          font-size="18" fill="#8a94a6">73 幅插画</text>
+
+    <!-- arrow 4 -->
+    <line x1="858" y1="144" x2="880" y2="144" stroke="#c5cedb" stroke-width="2"/>
+    <path d="M880 139l7 5 -7 5" fill="none" stroke="#c5cedb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- stage 5: 复制 -->
+    <rect x="888" y="92" width="176" height="104" rx="14" fill="#e9f9f0" stroke="#07c160"/>
+    <rect x="954" y="108" width="44" height="44" rx="12" fill="#d7f3e3"/>
+    <rect x="963" y="117" width="16" height="20" rx="3" fill="none" stroke="#07c160" stroke-width="2"/>
+    <rect x="969" y="123" width="10" height="3" rx="1.5" fill="#07c160"/>
+    <text x="976" y="172" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
+          font-size="21" font-weight="700" fill="#0f7a43">复制到公众号</text>
+    <text x="976" y="190" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
+          font-size="14" fill="#3c9a63">粘贴即发布</text>
+  </g>
+</svg>

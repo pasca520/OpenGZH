@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1200" height="400" viewBox="0 0 1200 400"
+     role="img" aria-labelledby="hero-title hero-desc">
+  <title id="hero-title">OpenGZH · 为公众号写作而生的 Markdown 编辑器</title>
+  <desc id="hero-desc">OpenGZH 面向微信公众号排版，所见即所得、零构建、零依赖。右侧为编辑器分屏示意图：左侧 Markdown 源码，右侧公众号文章实时预览。</desc>
+
+  <defs>
+    <linearGradient id="heroCover" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2d6dc3"/>
+      <stop offset="1" stop-color="#0066ff"/>
+    </linearGradient>
+  </defs>
+
+  <!-- canvas -->
+  <rect width="1200" height="400" rx="24" fill="#fdfaf5"/>
+  <rect x="1" y="1" width="1198" height="398" rx="23" fill="none" stroke="#e7e2d8" stroke-width="1.5"/>
+
+  <!-- ==================== 左侧：标题 ==================== -->
+  <g id="title-block">
+    <text x="58" y="76" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+          font-size="18" font-weight="600" letter-spacing="3" fill="#2d6dc3">微信公众号排版 · PURE-FRONTEND</text>
+
+    <text x="58" y="172" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif"
+          font-size="82" font-weight="800" fill="#19222f">Open<tspan fill="#2d6dc3">GZH</tspan></text>
+
+    <text x="60" y="228" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif"
+          font-size="31" font-weight="600" fill="#3f4a5a">为公众号写作而生的 Markdown 编辑器</text>
+
+    <text x="60" y="264" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif"
+          font-size="20" fill="#677487">所见即所得 · 零构建 · 零依赖 · 部署即用</text>
+
+    <!-- 元信息 chips -->
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="17" fill="#4f5a6d">
+      <rect x="58" y="292" width="98" height="38" rx="19" fill="#ffffff" stroke="#dfe4ed"/>
+      <text x="107" y="317" text-anchor="middle">Vue 3</text>
+
+      <rect x="168" y="292" width="150" height="38" rx="19" fill="#ffffff" stroke="#dfe4ed"/>
+      <text x="243" y="317" text-anchor="middle">ES Modules</text>
+
+      <rect x="330" y="292" width="190" height="38" rx="19" fill="#ffffff" stroke="#dfe4ed"/>
+      <text x="425" y="317" text-anchor="middle">zero-dependency</text>
+
+      <rect x="532" y="292" width="68" height="38" rx="19" fill="#ffffff" stroke="#dfe4ed"/>
+      <text x="566" y="317" text-anchor="middle">MIT</text>
+    </g>
+  </g>
+
+  <!-- ==================== 右侧：编辑器分屏示意 ==================== -->
+  <g id="editor-mockup">
+    <rect x="662" y="48" width="500" height="310" rx="16" fill="#2d6dc3" opacity="0.05"/>
+
+    <rect x="660" y="45" width="500" height="310" rx="16" fill="#ffffff" stroke="#e6e9ef"/>
+
+    <!-- 工具栏 -->
+    <path d="M660 61a16 16 0 0 1 16 -16h468a16 16 0 0 1 16 16v24h-500z" fill="#f7f8fa"/>
+    <circle cx="684" cy="65" r="5.5" fill="#f97066"/>
+    <circle cx="704" cy="65" r="5.5" fill="#f2c744"/>
+    <circle cx="724" cy="65" r="5.5" fill="#4dcd8c"/>
+    <text x="910" y="70" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+          font-size="15" fill="#9aa7b8">markdown.md</text>
+    <line x1="660" y1="85" x2="1160" y2="85" stroke="#eef1f5"/>
+
+    <!-- 左：Markdown 源码 -->
+    <rect x="660" y="85" width="245" height="270" fill="#f6f8fa"/>
+    <line x1="905" y1="85" x2="905" y2="355" stroke="#eef1f5"/>
+
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="17">
+      <text x="676" y="122"><tspan fill="#2d6dc3" font-weight="700"># </tspan><tspan fill="#3f4a5a">公众号排版</tspan></text>
+      <text x="676" y="152"><tspan fill="#2d6dc3" font-weight="700">## </tspan><tspan fill="#3f4a5a">所见即所得</tspan></text>
+      <text x="676" y="212"><tspan fill="#3f4a5a">**加粗**</tspan><tspan fill="#9aa7b8"> 与 </tspan><tspan fill="#6b8fd4">`代码`</tspan></text>
+      <text x="676" y="242"><tspan fill="#9aa7b8">- </tspan><tspan fill="#3f4a5a">列表项</tspan></text>
+      <text x="676" y="272"><tspan fill="#b4883f">> </tspan><tspan fill="#3f4a5a">引用</tspan></text>
+    </g>
+    <rect x="731" y="273" width="2.5" height="22" rx="1.2" fill="#2d6dc3"/>
+
+    <!-- 右：公众号文章预览 -->
+    <rect x="905" y="85" width="255" height="270" fill="#ffffff"/>
+
+    <rect x="917" y="98" width="231" height="244" rx="10" fill="#ffffff" stroke="#eef1f5"/>
+    <path d="M917 108a10 10 0 0 1 10 -10h211a10 10 0 0 1 10 10v76h-231z" fill="url(#heroCover)"/>
+    <text x="929" y="142" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
+          font-size="12.5" font-weight="600" fill="#ffffff">封面预览</text>
+    <text x="929" y="159" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
+          font-size="10.5" fill="#ffffff" opacity="0.85">公众号 · 品牌蓝</text>
+
+    <text x="929" y="212" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
+          font-size="13" font-weight="600" fill="#2b3340">实时预览 · 所见即所得</text>
+    <circle cx="937" cy="232" r="7" fill="#dbe6f5"/>
+    <text x="950" y="236" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
+          font-size="10.5" fill="#9aa7b8">OpenGZH · 发布于今天</text>
+
+    <rect x="929" y="250" width="196" height="6" rx="3" fill="#e8ecf2"/>
+    <rect x="929" y="262" width="182" height="6" rx="3" fill="#e8ecf2"/>
+    <rect x="929" y="274" width="160" height="6" rx="3" fill="#e8ecf2"/>
+
+    <rect x="929" y="292" width="128" height="26" rx="13" fill="#07c160"/>
+    <text x="993" y="309" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
+          font-size="12.5" font-weight="600" fill="#ffffff">复制富文本</text>
+  </g>
+</svg>
