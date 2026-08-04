@@ -5,6 +5,7 @@
 
 import { convertMathForWechat, stripFormulaExportMetadata } from './math-exporter.js';
 import { applyCodeHighlighting, serializeHighlightedCodeHtml } from '../core/code-highlight.js';
+import { buildEndDividerGif, END_DIVIDER_META } from './end-divider-gif.js';
 
 function extractBackgroundColor(styleString) {
   if (!styleString) return null;
@@ -746,6 +747,44 @@ function replaceFormulaNodesWithPlainText(root) {
   });
 }
 
+/**
+ * 把动效结尾替换为 GIF 动图（公众号不支持 CSS 动画，静态 HTML 无法呈现动效）。
+ * classic / 静态样式保留原样；任何异常都回退静态 HTML，绝不影响复制主流程。
+ */
+function maybeReplaceAnimatedEndWithGif(doc, { styleConfig, displaySettings }) {
+  const divider = doc.querySelector('[data-gzh-end]');
+  if (!divider) return;
+
+  // 与 render-pipeline 的 applyEndDivider 同语义解析有效 endStyle
+  let endStyle = displaySettings?.endStyle || 'theme';
+  const themeColors = styleConfig?.gzh;
+  if (endStyle === 'theme' || !endStyle) {
+    if (!themeColors) return; // 非 gzh 主题 + 跟随主题 → 无分隔线
+    endStyle = themeColors.endStyle || 'classic';
+  }
+
+  const meta = END_DIVIDER_META[endStyle];
+  if (!meta?.animated) return;
+
+  try {
+    const colors = {
+      line: themeColors?.line || '#e5e7eb',
+      muted: themeColors?.muted || '#9ca3af',
+      accent: themeColors?.accent || themeColors?.muted || '#818cf8'
+    };
+    const gif = buildEndDividerGif({ endStyle, colors });
+    if (!gif) return;
+
+    divider.setAttribute('style', mergeStyleText(
+      divider.getAttribute('style') || '',
+      'text-align: center;'
+    ));
+    divider.innerHTML = `<img src="${gif.dataUrl}" alt="" style="display:block;width:${gif.width}px;max-width:100%;height:auto;margin:0 auto;border:0;">`;
+  } catch (error) {
+    console.warn('结尾动图替换失败，保留静态 HTML:', error);
+  }
+}
+
 export async function copyToWechat({ renderedHTML, styleConfig, imageStore, showToast, codeTheme, displaySettings }) {
   if (!renderedHTML) {
     showToast('没有内容可复制', 'error');
@@ -800,6 +839,8 @@ export async function copyToWechat({ renderedHTML, styleConfig, imageStore, show
     inlineContainerTypographyForWechat(doc, effectiveStyleConfig);
     normalizeBlockquotes(doc);
     wrapSectionIfNeeded(doc, effectiveStyleConfig);
+
+    maybeReplaceAnimatedEndWithGif(doc, { styleConfig, displaySettings });
 
     const text = buildClipboardPlainText(doc);
     stripFormulaExportMetadata(doc.body);
