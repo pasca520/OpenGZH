@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pad2, accentOf, buildH2WrapperHTML, buildMarkHTML, buildEndHTML } from '../gzh-structure.js';
+import { pad2, accentOf, darken, buildH2WrapperHTML, buildMarkHTML, buildEndHTML } from '../gzh-structure.js';
 
 const base = {
   body: '#374151', title: '#111827', muted: '#9ca3af', line: '#e5e7eb',
@@ -25,37 +25,60 @@ describe('accentOf', () => {
   });
 });
 
+describe('darken', () => {
+  it('按系数加深并保持色相（白字/浅色在微信反色后可读）', () => {
+    expect(darken('#059669')).toBe('#035a3f');
+    expect(darken('#A259FF')).toBe('#613599');
+    expect(darken('#ffffff')).toBe('#999999');
+  });
+  it('非法输入原样返回', () => {
+    expect(darken('transparent')).toBe('transparent');
+    expect(darken('')).toBe('');
+  });
+});
+
 describe('buildH2WrapperHTML', () => {
-  it('badge：居中圆章 + 插槽', () => {
+  it('badge：居中深彩圆章 + 白字编号 + 插槽', () => {
     const html = buildH2WrapperHTML(1, base);
     expect(html).toContain('border-radius:50%');
     expect(html).toContain('text-align:center');
     expect(html).toContain('>01<');
     expect(html).toContain('data-gzh-slot');
-    expect(html).toContain('background:#059669');
+    expect(html).toContain('background:#035a3f');
+    expect(html).toContain('color:#ffffff');
   });
-  it('chip：soft 浅底色带页眉', () => {
+  it('chip：soft 浅底色带页眉 + 深色编号', () => {
     const html = buildH2WrapperHTML(2, { ...base, numStyle: 'chip' });
     expect(html).toContain('background:#ecfdf5');
+    expect(html).toContain('color:#035a3f');
     expect(html).toContain('font-size:22px');
     expect(html).toContain('display:flex');
     expect(html).toContain('>02<');
   });
-  it('watermark：44px 水印大号数字用 line 色', () => {
+  it('watermark：44px 水印数字用黑色低透明度（反色后成淡白水印）', () => {
     const html = buildH2WrapperHTML(3, { ...base, numStyle: 'watermark' });
     expect(html).toContain('font-size:44px');
-    expect(html).toContain('color:#e5e7eb');
+    expect(html).toContain('color:rgba(0,0,0,0.07)');
     expect(html).toContain('>03<');
+    // 分隔线仍用 line 色
+    expect(html).toContain('border-bottom:1px solid #e5e7eb');
   });
-  it('plain：26px 大编号堆叠 + 44px 短横线', () => {
+  it('plain：26px 深色大编号堆叠 + 44px 短横线', () => {
     const html = buildH2WrapperHTML(1, { ...base, numStyle: 'plain' });
     expect(html).toContain('font-size:26px');
     expect(html).toContain('font-weight:900');
+    expect(html).toContain('color:#035a3f');
     expect(html).toContain('width:44px');
   });
-  it('palette 主题编号徽标用轮转色', () => {
+  it('palette 主题编号徽标用轮转色加深版', () => {
     const g = { ...base, palette: ['#F24E1E', '#A259FF'] };
-    expect(buildH2WrapperHTML(2, g)).toContain('background:#A259FF');
+    expect(buildH2WrapperHTML(2, g)).toContain('background:#613599');
+  });
+  it('深色底主题（有 bg）微信不反色，编号保持原色不加深', () => {
+    const dark = { ...base, bg: '#191414', numStyle: 'plain' };
+    const html = buildH2WrapperHTML(1, dark);
+    expect(html).toContain('color:#059669');
+    expect(html).not.toContain('color:#035a3f');
   });
 });
 

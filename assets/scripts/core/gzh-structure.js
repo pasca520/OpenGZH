@@ -19,6 +19,22 @@ export function accentOf(gzh, num) {
   return gzh.palette ? gzh.palette[(num - 1) % gzh.palette.length] : gzh.accent;
 }
 
+/**
+ * 把颜色加深（保持色相）。
+ * 面向微信深色模式：微信对文章整体反色，中亮度饱和色反色后仍为中亮度，
+ * 深色底上看不清；接近黑白的颜色反色后变得可读。编号文字/徽标统一用加深色，
+ * 浅色模式下是深彩字，深色模式下反色成浅彩字，明暗两态对比度都足够。
+ */
+export function darken(hex, factor = 0.6) {
+  const m = String(hex).trim().replace('#', '');
+  const full = m.length === 3 ? m.split('').map((c) => c + c).join('') : m;
+  if (!/^[0-9a-fA-F]{6}$/.test(full)) return hex;
+  const r = Math.round(parseInt(full.slice(0, 2), 16) * factor);
+  const g = Math.round(parseInt(full.slice(2, 4), 16) * factor);
+  const b = Math.round(parseInt(full.slice(4, 6), 16) * factor);
+  return `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+}
+
 function esc(s) {
   return String(s)
     .replace(/&/g, '&amp;')
@@ -38,20 +54,25 @@ function esc(s) {
 export function buildH2WrapperHTML(num, gzh) {
   const ac = accentOf(gzh, num);
   const label = pad2(num);
+  // 深色底主题（有 gzh.bg，如夜航）微信不反色，保持原设计用色；
+  // 浅色底主题会被微信整体反色，编号用色需加深，反色后变浅、明暗两态才都可读。
+  const dk = gzh.bg ? ac : darken(ac);
+  const watermarkColor = gzh.bg ? gzh.line : 'rgba(0,0,0,0.07)';
 
   if (gzh.numStyle === 'watermark') {
-    return `<section style="margin:52px 10px 28px;"><section style="padding-bottom:18px;border-bottom:1px solid ${gzh.line};"><p style="font-size:44px;font-weight:900;color:${gzh.line};margin:0;line-height:1;letter-spacing:-2px;">${label}</p><span data-gzh-slot></span></section></section>`;
+    // 浅色主题：水印数字用黑色低透明度，反色后成淡白水印，始终隐约可辨
+    return `<section style="margin:52px 10px 28px;"><section style="padding-bottom:18px;border-bottom:1px solid ${gzh.line};"><p style="font-size:44px;font-weight:900;color:${watermarkColor};margin:0;line-height:1;letter-spacing:-2px;">${label}</p><span data-gzh-slot></span></section></section>`;
   }
   if (gzh.numStyle === 'badge') {
-    // 居中圆章：46px accent 圆 + 白字编号，标题随 wrapper 居中
-    return `<section style="margin:52px 10px 28px;text-align:center;"><p style="margin:0 0 12px;"><span style="display:inline-block;width:46px;height:46px;border-radius:50%;background:${ac};color:#ffffff;font-size:17px;font-weight:800;line-height:46px;text-align:center;">${label}</span></p><span data-gzh-slot></span></section>`;
+    // 居中圆章：主题色底 + 白字编号（浅色主题用加深色，反色后变浅色底 + 深字）
+    return `<section style="margin:52px 10px 28px;text-align:center;"><p style="margin:0 0 12px;"><span style="display:inline-block;width:46px;height:46px;border-radius:50%;background:${dk};color:#ffffff;font-size:17px;font-weight:800;line-height:46px;text-align:center;">${label}</span></p><span data-gzh-slot></span></section>`;
   }
   if (gzh.numStyle === 'chip') {
     // 浅底色带页眉：soft 底色整行圆角带，22px 编号与标题同行
-    return `<section style="margin:48px 10px 24px;background:${gzh.soft};border-radius:10px;padding:12px 16px;display:flex;align-items:center;"><p style="margin:0 12px 0 0;font-size:22px;font-weight:900;color:${ac};line-height:1;letter-spacing:-0.5px;">${label}</p><span data-gzh-slot></span></section>`;
+    return `<section style="margin:48px 10px 24px;background:${gzh.soft};border-radius:10px;padding:12px 16px;display:flex;align-items:center;"><p style="margin:0 12px 0 0;font-size:22px;font-weight:900;color:${dk};line-height:1;letter-spacing:-0.5px;">${label}</p><span data-gzh-slot></span></section>`;
   }
   // plain：26px 大编号上置堆叠 + 标题 + 44px 短横线
-  return `<section style="margin:52px 10px 26px;"><p style="margin:0 0 8px;font-size:26px;font-weight:900;color:${ac};line-height:1;letter-spacing:-0.5px;">${label}</p><span data-gzh-slot></span><section style="width:44px;height:3px;background:${ac};margin-top:12px;"></section></section>`;
+  return `<section style="margin:52px 10px 26px;"><p style="margin:0 0 8px;font-size:26px;font-weight:900;color:${dk};line-height:1;letter-spacing:-0.5px;">${label}</p><span data-gzh-slot></span><section style="width:44px;height:3px;background:${dk};margin-top:12px;"></section></section>`;
 }
 
 /** ==高亮== chip。 */
