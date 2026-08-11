@@ -86,6 +86,7 @@ export function buildEndHTML(gzh) {
   const line = gzh.line;
   const muted = gzh.muted;
   const accent = gzh.accent || muted;
+  const readableMuted = gzh.bg ? muted : darken(muted);
 
   switch (endStyle) {
     case 'aurora':
@@ -134,7 +135,7 @@ export function buildEndHTML(gzh) {
 
     default:
       // classic
-      return `<section data-gzh-end style="margin:44px 10px 20px;"><section style="display:flex;align-items:center;justify-content:center;"><span style="display:inline-block;height:1px;width:44px;background:${gzh.line};margin-right:14px;"></span><span style="font-size:10px;color:${gzh.muted};letter-spacing:4px;font-weight:500;">END</span><span style="display:inline-block;height:1px;width:44px;background:${gzh.line};margin-left:14px;"></span></section></section>`;
+      return `<section data-gzh-end style="margin:44px 10px 20px;"><section style="display:flex;align-items:center;justify-content:center;"><span style="display:inline-block;height:1px;width:44px;background:${gzh.line};margin-right:14px;"></span><span style="font-size:10px;color:${readableMuted};letter-spacing:4px;font-weight:500;">END</span><span style="display:inline-block;height:1px;width:44px;background:${gzh.line};margin-left:14px;"></span></section></section>`;
   }
 }
 

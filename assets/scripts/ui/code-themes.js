@@ -197,8 +197,9 @@ function createCodeTheme({
   punctuation,
   meta
 }) {
-  const tokens = buildTokenPalette({
-    textColor,
+  const readableTextColor = ensureReadableColor(textColor, bg, null, 4.5);
+  const rawTokens = buildTokenPalette({
+    textColor: readableTextColor,
     bg,
     primary,
     secondary,
@@ -210,13 +211,19 @@ function createCodeTheme({
     punctuation,
     meta
   });
+  const tokens = Object.fromEntries(
+    Object.entries(rawTokens).map(([token, color]) => [
+      token,
+      ensureReadableColor(color, bg, null, 4.5)
+    ])
+  );
 
   return {
     name,
     description,
     bg,
     headerBg,
-    textColor,
+    textColor: readableTextColor,
     borderColor,
     tokens,
     syntaxHighlight: tokens
@@ -567,6 +574,7 @@ function deriveThemeAwareHighlightTheme(styleConfig) {
     || getColorFromStyle(preStyle, ['color'])
     || getColorFromStyle(containerStyle, ['color'])
     || '#24292e';
+  const readableTextColor = ensureReadableColor(textColor, bg, null, 4.5);
   const borderColor = getColorFromStyle(preStyle, ['border-color', 'border'])
     || mixColors(textColor, bg, isDarkColor(bg) ? 0.28 : 0.18);
   const accent = getColorFromStyle(linkStyle, ['color'])
@@ -592,7 +600,7 @@ function deriveThemeAwareHighlightTheme(styleConfig) {
   const punctuation = mixColors(textColor, bg, darkMode ? 0.8 : 0.68);
   const meta = mixColors(accent, textColor, darkMode ? 0.7 : 0.58);
   const baseTokens = buildTokenPalette({
-    textColor,
+    textColor: readableTextColor,
     bg,
     primary: accent,
     secondary,
@@ -604,11 +612,9 @@ function deriveThemeAwareHighlightTheme(styleConfig) {
     punctuation,
     meta
   });
-  const readableFallback = ensureReadableColor(accent, bg, textColor, 3.2);
   const tokens = Object.fromEntries(
     Object.entries(baseTokens).map(([token, color]) => {
-      const minContrast = token === 'comment' || token === 'punctuation' ? 2.4 : 3;
-      return [token, ensureReadableColor(color, bg, readableFallback, minContrast)];
+      return [token, ensureReadableColor(color, bg, null, 4.5)];
     })
   );
 
@@ -617,7 +623,7 @@ function deriveThemeAwareHighlightTheme(styleConfig) {
     description: '默认的文章样式风格',
     bg,
     headerBg: bg,
-    textColor,
+    textColor: readableTextColor,
     borderColor,
     tokens,
     syntaxHighlight: tokens

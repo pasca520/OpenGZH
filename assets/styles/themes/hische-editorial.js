@@ -13,7 +13,7 @@ export const theme = {
     "h3": "font-size: 17px; font-weight: 700; color: #2c2c2c !important; line-height: 1.45 !important; margin: 20px 0 10px; font-family: Georgia, \"Didot\", serif;",
     "h4": "font-size: 13px; font-weight: 700; color: #2c2c2c !important; line-height: 1.5 !important; margin: 18px 0 8px; text-transform: uppercase; letter-spacing: 0.06em;",
     "h5": "font-size: 14.5px; font-weight: 400; color: #5a5a5a !important; line-height: 1.5 !important; margin: 16px 0 8px; font-style: italic;",
-    "h6": "font-size: 13.5px; font-weight: 400; color: #7a7a7a !important; line-height: 1.5 !important; margin: 14px 0 6px;",
+    "h6": "font-size: 13.5px; font-weight: 400; color: #717171 !important; line-height: 1.5 !important; margin: 14px 0 6px;",
     "p": "margin: 0 0 14px !important; line-height: 1.82 !important; color: #2c2c2c !important; text-align: justify;",
     "strong": "font-weight: 700; color: #8b1a1a !important;",
     "em": "font-style: italic; color: #2c2c2c !important;",

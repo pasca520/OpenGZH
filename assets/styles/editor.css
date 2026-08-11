@@ -412,29 +412,33 @@
 /* Use CSS filter to invert colors at container level.
    This overrides inline styles applied by the render pipeline,
    which individual class selectors cannot beat in specificity. */
-.preview-container.dark-preview {
+.preview-container.dark-preview:not(.native-dark-theme) {
   background: #181a1b !important;
   filter: invert(1) hue-rotate(180deg);
 }
 
+/* Native dark themes already provide their own accessible palette. */
+.preview-container.dark-preview.native-dark-theme {
+  background: #181a1b !important;
+}
+
 /* Re-invert images and media so they display naturally */
-.preview-container.dark-preview img,
-.preview-container.dark-preview video,
-.preview-container.dark-preview canvas,
-.preview-container.dark-preview .katex-display,
-.preview-container.dark-preview .katex {
+.preview-container.dark-preview:not(.native-dark-theme) img,
+.preview-container.dark-preview:not(.native-dark-theme) video,
+.preview-container.dark-preview:not(.native-dark-theme) canvas,
+.preview-container.dark-preview:not(.native-dark-theme) .katex-display,
+.preview-container.dark-preview:not(.native-dark-theme) .katex {
   filter: invert(1) hue-rotate(180deg);
 }
 
 /* Code blocks get a softer re-inversion to keep syntax highlighting readable */
-.preview-container.dark-preview [data-code-block="true"],
-.preview-container.dark-preview .md-code-block-pre,
-.preview-container.dark-preview code:not(.md-code-block-code) {
+.preview-container.dark-preview:not(.native-dark-theme) [data-code-block="true"],
+.preview-container.dark-preview:not(.native-dark-theme) code:not(.md-code-block-code) {
   filter: invert(1) hue-rotate(180deg);
 }
 
 /* Slightly dim re-inverted images to reduce glare in dark mode */
-.preview-container.dark-preview img {
+.preview-container.dark-preview:not(.native-dark-theme) img {
   opacity: 0.92;
 }
 

@@ -96,7 +96,12 @@ describe('buildEndHTML', () => {
     const html = buildEndHTML(base);
     expect(html).toContain('END');
     expect(html).toContain('#e5e7eb');
+    expect(html).toContain('color:#5e6269');
     expect(html).toContain('letter-spacing:4px');
+  });
+  it('深色底主题保留原生 muted 色', () => {
+    const html = buildEndHTML({ ...base, bg: '#191414', muted: '#8a8785' });
+    expect(html).toContain('color:#8a8785');
   });
   it('aurora：流光渐变带', () => {
     const html = buildEndHTML({ ...base, endStyle: 'aurora' });

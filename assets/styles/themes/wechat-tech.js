@@ -26,7 +26,7 @@ export const theme = {
     "hr": "margin: 36px 0; border: none; height: 2px; background: linear-gradient(to right, transparent, #4a7c59, transparent);",
     "img": "max-width: 100%; max-height: 600px !important; height: auto; display: block; margin: 24px auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);",
     "table": "width: 100%; margin: 24px 0; border-collapse: collapse; font-size: 15px; box-shadow: 0 1px 4px rgba(0,0,0,0.1);",
-    "th": "background-color: #808080 !important; color: #fff !important; padding: 12px; text-align: left; border: 1px solid #f0f0f0; font-weight: 600;",
+    "th": "background-color: #767676 !important; color: #fff !important; padding: 12px; text-align: left; border: 1px solid #f0f0f0; font-weight: 600;",
     "td": "padding: 12px; border: 1px solid #e0e0e0; background-color: #fff !important;",
     "tr": "border-bottom: 1px solid #e0e0e0;line-height:1.1;"
   }

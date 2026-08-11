@@ -14,7 +14,7 @@ export const theme = {
     "h3": "font-size: 17px; font-weight: 600; color: #3d7a5f !important; line-height: 1.45 !important; margin: 20px 0 10px; padding-left: 12px; border-left: 3px solid #c4a94a;",
     "h4": "font-size: 15px; font-weight: 600; color: #3d2e1f !important; line-height: 1.5 !important; margin: 18px 0 8px;",
     "h5": "font-size: 14px; font-weight: 600; color: #5a6e4a !important; line-height: 1.5 !important; margin: 16px 0 6px; font-style: italic;",
-    "h6": "font-size: 13.5px; font-weight: 500; color: #8a7a60 !important; line-height: 1.5 !important; margin: 14px 0 6px;",
+    "h6": "font-size: 13.5px; font-weight: 500; color: #7e6f57 !important; line-height: 1.5 !important; margin: 14px 0 6px;",
     "p": "margin: 0 0 14px !important; line-height: 1.85 !important; color: #3d2e1f !important;",
     "strong": "font-weight: 700; color: #a04030 !important;",
     "em": "font-style: italic; color: #5a6e4a !important;",
@@ -28,7 +28,7 @@ export const theme = {
     "hr": "margin: 28px auto; border: none; height: 1px; background-color: #c4a94a !important; max-width: 60px;",
     "img": "max-width: 100%; max-height: 560px !important; height: auto; display: block; margin: 18px auto; border-radius: 6px;",
     "table": "width: 100%; margin: 14px 0; border-collapse: collapse; font-size: 13.5px;",
-    "th": "background-color: #c4784a !important; color: #fff !important; padding: 9px 14px; text-align: left; font-weight: 600; font-size: 12px; letter-spacing: 0.03em;",
+    "th": "background-color: #a7663f !important; color: #fff !important; padding: 9px 14px; text-align: left; font-weight: 600; font-size: 12px; letter-spacing: 0.03em;",
     "td": "padding: 9px 14px; border-bottom: 1px solid #e8dcc8; color: #3d2e1f !important;",
     "tr": "border: none;"
   }

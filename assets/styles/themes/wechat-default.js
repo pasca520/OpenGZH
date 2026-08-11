@@ -16,7 +16,7 @@ export const theme = {
     "p": "margin: 16px 0 !important; line-height: 1.8 !important; color: #3f3f3f !important;",
     "strong": "font-weight: 600; color: #2c3e50 !important;",
     "em": "font-style: italic; color: #555 !important;",
-    "a": "color: #3498db !important; text-decoration: none; border-bottom: 1px solid #3498db;",
+    "a": "color: #2a7bb1 !important; text-decoration: none; border-bottom: 1px solid #2a7bb1;",
     "ul": "margin: 24px 0; padding-left: 24px;",
     "ol": "margin: 24px 0; padding-left: 24px;",
     "li": "margin: 8px 0; line-height: 1.8 !important;",

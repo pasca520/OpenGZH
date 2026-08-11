@@ -748,7 +748,7 @@
                 <p>左侧输入 Markdown，右侧实时预览。</p>
               </div>
               <template v-else>
-                <div class="preview-container" :class="{ 'mobile-mode': previewMode === 'mobile', 'dark-preview': previewDarkMode }" :style="previewMode === 'mobile' ? { maxWidth: mobilePreviewWidth + 'px' } : {}" v-html="renderedContent"></div>
+                <div class="preview-container" :class="{ 'mobile-mode': previewMode === 'mobile', 'dark-preview': previewDarkMode, 'native-dark-theme': Boolean(STYLES[currentStyle]?.gzh?.bg) }" :style="previewMode === 'mobile' ? { maxWidth: mobilePreviewWidth + 'px' } : {}" v-html="renderedContent"></div>
               </template>
             </div>
         </div>

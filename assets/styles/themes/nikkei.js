@@ -14,7 +14,7 @@ export const theme = {
     "h3": "font-size: 16px; font-weight: 600; color: #1a1a1a !important; line-height: 1.45 !important; margin: 16px 0 8px; padding: 4px 8px; background-color: #f7f7f7 !important;",
     "h4": "font-size: 14.5px; font-weight: 600; color: #333 !important; line-height: 1.5 !important; margin: 14px 0 6px;",
     "h5": "font-size: 13.5px; font-weight: 600; color: #555 !important; line-height: 1.5 !important; margin: 12px 0 4px;",
-    "h6": "font-size: 13px; font-weight: 600; color: #888 !important; line-height: 1.5 !important; margin: 10px 0 4px;",
+    "h6": "font-size: 13px; font-weight: 600; color: #767676 !important; line-height: 1.5 !important; margin: 10px 0 4px;",
     "p": "margin: 0 0 10px !important; line-height: 1.78 !important; color: #1a1a1a !important; text-align: justify;",
     "strong": "font-weight: 700; color: #000 !important;",
     "em": "font-style: normal; color: #C41230 !important; font-weight: 600;",

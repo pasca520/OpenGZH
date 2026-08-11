@@ -12,7 +12,7 @@ export const theme = {
     "h3": "font-size: 17px; font-weight: 700; color: #1b7a5e !important; line-height: 1.45 !important; margin: 22px 0 10px;",
     "h4": "font-size: 15.5px; font-weight: 700; color: #20242a !important; line-height: 1.48 !important; margin: 18px 0 8px;",
     "h5": "font-size: 14px; font-weight: 700; color: #667085 !important; line-height: 1.5 !important; margin: 16px 0 6px;",
-    "h6": "font-size: 13px; font-weight: 600; color: #8a94a3 !important; line-height: 1.5 !important; margin: 14px 0 6px;",
+    "h6": "font-size: 13px; font-weight: 600; color: #6e7682 !important; line-height: 1.5 !important; margin: 14px 0 6px;",
     "p": "margin: 13px 0 !important; line-height: 1.78 !important; color: #20242a !important; font-size: 15px;",
     "strong": "font-weight: 700; color: #166a50 !important;",
     "em": "font-style: normal; color: #667085 !important;",
