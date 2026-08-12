@@ -1,6 +1,6 @@
 // ============================================================
 // Cover Templates for WeChat Article Cover Image Editor
-// 35 unique SVG templates across 7 categories
+// 40 unique SVG templates across 8 categories
 // ============================================================
 
 const FONT_FAMILY = "'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif";
@@ -26,6 +26,65 @@ function tagW(text, fontSize) {
     w += isWide ? fontSize : fontSize * 0.58;
   }
   return Math.ceil(w);
+}
+
+/**
+ * Estimate rendered pixel width of a text run, accounting for CJK (full-width)
+ * vs Latin characters. Used for auto line-wrapping long titles/subtitles.
+ */
+function textW(text, fontSize) {
+  if (!text) return 0;
+  let w = 0;
+  for (const ch of text) {
+    if (ch === '\n') continue;
+    const isWide = ch.codePointAt(0) > 0x2E7F;
+    w += isWide ? fontSize : fontSize * 0.58;
+  }
+  return Math.ceil(w);
+}
+
+/**
+ * Greedy, CJK-aware line wrap: break text so each visual line fits maxWidth px.
+ * Real WeChat cover titles run 20–30 CJK characters, so templates must flow the
+ * title/subtitle into multiple lines instead of letting it overflow the canvas.
+ * Preserves explicit newlines; breaks preferentially at spaces to keep Latin
+ * words whole, and at any character boundary for CJK.
+ * @param {string} text
+ * @param {number} fontSize
+ * @param {number} maxWidth
+ * @returns {string} text with '\n' inserted between visual lines
+ */
+function wrapText(text, fontSize, maxWidth) {
+  if (!text) return '';
+  const lines = [];
+  for (const paragraph of String(text).split('\n')) {
+    if (paragraph === '') { lines.push(''); continue; }
+    let line = '';
+    for (const ch of paragraph) {
+      const chW = ch.codePointAt(0) > 0x2E7F ? fontSize : fontSize * 0.58;
+      if (line && textW(line, fontSize) + chW > maxWidth) {
+        const lastSpace = line.lastIndexOf(' ');
+        if (lastSpace > 0) {
+          lines.push(line.slice(0, lastSpace));
+          line = line.slice(lastSpace + 1) + ch;
+        } else {
+          lines.push(line);
+          line = ch;
+        }
+      } else {
+        line += ch;
+      }
+    }
+    lines.push(line);
+  }
+  return lines.join('\n');
+}
+
+/**
+ * Resolve a line-height value to pixels (supports multiplier or absolute px).
+ */
+function lineHeightPx(fontSize, lineHeight) {
+  return lineHeight <= 4 ? fontSize * lineHeight : lineHeight;
 }
 
 // Detect calling convention:
@@ -783,224 +842,6 @@ const playfulMascot = {
 };
 
 // ============================================================
-// 24. illust-right / 右图排版
-// ============================================================
-const illustRight = {
-  id: 'illust-right', name: '右图排版', category: 'illustration',
-  illustFit: 'side',
-  elements: { tag: true, title: true, subtitle: true, author: false, image: false, illustration: true },
-  render(content, typo) {
-    const illustBlock = content.illustrationSvg
-      ? illustrationLayer(embedIllustration(content.illustrationSvg, 620, 30, 540, 420, illustrationOpacity(content, 0.95)))
-      : `<g opacity="0.08">
-          <circle cx="860" cy="200" r="140" fill="#4F46E5"/>
-          <circle cx="780" cy="300" r="80" fill="#818CF8"/>
-          <rect x="900" y="100" width="120" height="120" rx="16" fill="#6366F1" transform="rotate(15 960 160)"/>
-          <circle cx="1000" cy="350" r="60" fill="#A78BFA"/>
-        </g>
-        <circle cx="860" cy="200" r="100" fill="none" stroke="#C7D2FE" stroke-width="1" opacity="0.3"/>
-        <circle cx="860" cy="200" r="60" fill="none" stroke="#A5B4FC" stroke-width="0.5" opacity="0.25"/>`;
-    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <pattern id="ir-dots" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="10" cy="10" r="0.8" fill="#C7D2FE" opacity="0.35"/></pattern>
-  </defs>
-  <rect width="1200" height="510" fill="#F8FAFC"/>
-  <rect x="0" y="0" width="600" height="510" fill="white" opacity="0.55"/>
-  <rect x="0" y="0" width="600" height="510" fill="url(#ir-dots)"/>
-  <path d="M620 60 Q640 40 660 60 Q680 80 660 100 Q640 120 620 100 Q600 80 620 60Z" fill="#EEF2FF" opacity="0.6"/>
-  <path d="M560 380 Q580 360 600 380 Q610 400 590 410 Q570 420 560 400Z" fill="#E0E7FF" opacity="0.45"/>
-  <line x1="600" y1="30" x2="600" y2="450" stroke="#CBD5E1" stroke-width="1.5" opacity="0.7"/>
-  <path d="M620 30 L620 54 M620 30 L644 30" stroke="#C7D2FE" stroke-width="2" fill="none" opacity="0.6"/>
-  <path d="M1170 30 L1170 54 M1170 30 L1146 30" stroke="#C7D2FE" stroke-width="2" fill="none" opacity="0.6"/>
-  <path d="M620 450 L620 426 M620 450 L644 450" stroke="#C7D2FE" stroke-width="2" fill="none" opacity="0.6"/>
-  <path d="M1170 450 L1170 426 M1170 450 L1146 450" stroke="#C7D2FE" stroke-width="2" fill="none" opacity="0.6"/>
-  <rect x="80" y="62" width="7" height="34" rx="3.5" fill="#4F46E5"/>
-  ${content.tag ? `<rect x="80" y="100" width="${Math.max(64, tagW(content.tag, typo.tagSize) + 30)}" height="38" rx="19" fill="#EEF2FF"/>
-  <rect x="80" y="100" width="${Math.max(64, tagW(content.tag, typo.tagSize) + 30)}" height="38" rx="19" fill="none" stroke="#C7D2FE" stroke-width="1.5" opacity="0.7"/>
-  ${renderTextLines(content.tag, 96, 126, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#4F46E5', '600', typo.subtitleFontFamily, 'tag')}` : ''}
-  ${renderTextLines(content.title, 80, 205, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#0F172A', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 80, 285, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#475569', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
-  <line x1="80" y1="380" x2="200" y2="380" stroke="#C7D2FE" stroke-width="2.5" opacity="0.6"/>
-  <line x1="206" y1="380" x2="340" y2="380" stroke="#E2E8F0" stroke-width="1" opacity="0.6"/>
-  <circle cx="203" cy="380" r="3" fill="#C7D2FE" opacity="0.7"/>
-  <circle cx="70" cy="200" r="4" fill="#A5B4FC" opacity="0.35"/>
-  <circle cx="540" cy="90" r="3.5" fill="#818CF8" opacity="0.3"/>
-  <circle cx="60" cy="420" r="3" fill="#C7D2FE" opacity="0.4"/>
-  <circle cx="500" cy="430" r="4" fill="#A5B4FC" opacity="0.3"/>
-  ${illustBlock}
-</svg>`;
-  }
-};
-
-// ============================================================
-// 25. illust-left / 左图排版
-// ============================================================
-const illustLeft = {
-  id: 'illust-left', name: '左图排版', category: 'illustration',
-  illustFit: 'side',
-  elements: { tag: true, title: true, subtitle: true, author: false, image: false, illustration: true },
-  render(content, typo) {
-    const illustBlock = content.illustrationSvg
-      ? illustrationLayer(`<defs><radialGradient id="il-glow" cx="0.5" cy="0.5"><stop offset="0%" stop-color="#6366F1" stop-opacity="0.25"/><stop offset="100%" stop-color="#6366F1" stop-opacity="0"/></radialGradient></defs>
-        <circle cx="280" cy="240" r="200" fill="url(#il-glow)"/>
-        ${embedIllustration(content.illustrationSvg, 30, 30, 520, 420, illustrationOpacity(content, 0.9))}`)
-      : `<defs><radialGradient id="il-glow" cx="0.5" cy="0.5"><stop offset="0%" stop-color="#6366F1" stop-opacity="0.2"/><stop offset="100%" stop-color="#6366F1" stop-opacity="0"/></radialGradient></defs>
-        <circle cx="280" cy="240" r="200" fill="url(#il-glow)"/>
-        <circle cx="280" cy="240" r="120" fill="none" stroke="#6366F1" stroke-width="1" opacity="0.2"/>
-        <circle cx="280" cy="240" r="80" fill="none" stroke="#818CF8" stroke-width="0.5" opacity="0.15"/>
-        <circle cx="280" cy="240" r="40" fill="#6366F1" opacity="0.06"/>
-        <circle cx="200" cy="160" r="3" fill="#818CF8" opacity="0.3"/>
-        <circle cx="360" cy="320" r="2.5" fill="#A78BFA" opacity="0.25"/>`;
-    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
-  <rect width="1200" height="510" fill="#0F172A"/>
-  <circle cx="120" cy="90" r="3.5" fill="#818CF8" opacity="0.3"/><circle cx="330" cy="60" r="3" fill="#A78BFA" opacity="0.25"/>
-  <circle cx="520" cy="430" r="3.5" fill="#6366F1" opacity="0.3"/><circle cx="170" cy="400" r="3" fill="#818CF8" opacity="0.25"/>
-  ${illustBlock}
-  <line x1="620" y1="110" x2="620" y2="370" stroke="#334155" stroke-width="2"/>
-  <line x1="620" y1="110" x2="620" y2="370" stroke="#4F46E5" stroke-width="1" opacity="0.4"/>
-  ${content.tag ? `<rect x="660" y="108" width="${Math.max(64, tagW(content.tag, typo.tagSize) + 30)}" height="34" rx="17" fill="#6366F1" opacity="0.24"/>
-  <rect x="660" y="108" width="${Math.max(64, tagW(content.tag, typo.tagSize) + 30)}" height="34" rx="17" fill="none" stroke="#818CF8" stroke-width="1" opacity="0.4"/>
-  ${renderTextLines(content.tag, 676, 131, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#A5B4FC', '600', typo.subtitleFontFamily, 'tag')}` : ''}
-  ${renderTextLines(content.title, 1140, 205, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'right', '#F1F5F9', '700', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 1140, 285, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'right', '#CBD5E1', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
-  <line x1="700" y1="422" x2="1140" y2="422" stroke="#334155" stroke-width="1.5"/>
-  <line x1="700" y1="426" x2="940" y2="426" stroke="#4F46E5" stroke-width="0.8" opacity="0.5"/>
-</svg>`;
-  }
-};
-
-// ============================================================
-// 26. illust-center-top / 居上图下
-// ============================================================
-const illustCenterTop = {
-  id: 'illust-center-top', name: '居上图下', category: 'illustration',
-  illustFit: 'landscape',
-  elements: { tag: true, title: true, subtitle: true, author: false, image: false, illustration: true },
-  render(content, typo) {
-    const cx = 600;
-    const illustBlock = content.illustrationSvg
-      ? illustrationLayer(embedIllustration(content.illustrationSvg, 440, 15, 320, 220, illustrationOpacity(content, 0.95)))
-      : `<g opacity="0.12">
-          <circle cx="600" cy="110" r="70" fill="#F59E0B"/>
-          <circle cx="540" cy="140" r="40" fill="#FBBF24"/>
-          <circle cx="660" cy="140" r="40" fill="#FBBF24"/>
-        </g>
-        <circle cx="600" cy="120" r="60" fill="none" stroke="#F59E0B" stroke-width="1" opacity="0.2"/>
-        <circle cx="520" cy="80" r="4" fill="#FBBF24" opacity="0.2"/>
-        <circle cx="680" cy="80" r="4" fill="#FBBF24" opacity="0.2"/>
-        <circle cx="500" cy="160" r="3" fill="#F59E0B" opacity="0.15"/>
-        <circle cx="700" cy="160" r="3" fill="#F59E0B" opacity="0.15"/>`;
-    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
-  <rect width="1200" height="510" fill="#FFF8F0"/>
-  <circle cx="200" cy="80" r="80" fill="#FFECD2" opacity="0.45"/>
-  <circle cx="1000" cy="80" r="80" fill="#FFECD2" opacity="0.45"/>
-  <circle cx="200" cy="80" r="52" fill="none" stroke="#F5DEB3" stroke-width="1.5" opacity="0.4"/>
-  <circle cx="1000" cy="80" r="52" fill="none" stroke="#F5DEB3" stroke-width="1.5" opacity="0.4"/>
-  <circle cx="440" cy="40" r="8" fill="#A8D5BA" opacity="0.3"/>
-  <circle cx="760" cy="40" r="8" fill="#A8D5BA" opacity="0.3"/>
-  <circle cx="420" cy="200" r="6" fill="#F59E0B" opacity="0.25"/>
-  <circle cx="780" cy="200" r="6" fill="#F59E0B" opacity="0.25"/>
-  ${illustBlock}
-  <line x1="460" y1="252" x2="740" y2="252" stroke="#C9B8A4" stroke-width="1.5" opacity="0.8"/>
-  ${content.tag ? `<rect x="${cx - (tagW(content.tag, typo.tagSize) / 2 + 16)}" y="264" width="${tagW(content.tag, typo.tagSize) + 32}" height="34" rx="17" fill="#FEF3C7"/>
-  <rect x="${cx - (tagW(content.tag, typo.tagSize) / 2 + 16)}" y="264" width="${tagW(content.tag, typo.tagSize) + 32}" height="34" rx="17" fill="none" stroke="#FCD34D" stroke-width="1.5" opacity="0.7"/>
-  ${renderTextLines(content.tag, cx, 288, typo.tagSize, typo.tagSize * 1.2, 1.5, 'center', '#B45309', '600', typo.subtitleFontFamily, 'tag')}` : ''}
-  ${renderTextLines(content.title, cx, 335, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#3E2723', '700', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, cx, 415, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#6D4C3F', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
-</svg>`;
-  }
-};
-
-// ============================================================
-// 27. illust-split / 图文分割
-// ============================================================
-const illustSplit = {
-  id: 'illust-split', name: '图文分割', category: 'illustration',
-  illustFit: 'side',
-  elements: { tag: true, title: true, subtitle: true, author: false, image: false, illustration: true },
-  render(content, typo) {
-    const illustBlock = content.illustrationSvg
-      ? illustrationLayer(embedIllustration(content.illustrationSvg, 30, 30, 540, 420, illustrationOpacity(content, 0.95)))
-      : `<g opacity="0.1">
-          <circle cx="300" cy="200" r="100" fill="white"/>
-          <rect x="180" y="260" width="160" height="100" rx="12" fill="white"/>
-          <circle cx="220" cy="140" r="40" fill="white"/>
-        </g>
-        <circle cx="300" cy="220" r="80" fill="none" stroke="white" stroke-width="1" opacity="0.15"/>
-        <circle cx="300" cy="220" r="40" fill="none" stroke="white" stroke-width="0.5" opacity="0.1"/>`;
-    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="is-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#7C3AED"/><stop offset="100%" stop-color="#4338CA"/></linearGradient>
-  </defs>
-  <rect width="1200" height="510" fill="url(#is-bg)"/>
-  <circle cx="120" cy="70" r="3.5" fill="white" opacity="0.3"/><circle cx="330" cy="50" r="3" fill="white" opacity="0.25"/>
-  <circle cx="500" cy="440" r="3.5" fill="white" opacity="0.25"/>
-  <rect x="20" y="20" width="570" height="440" rx="18" fill="white" opacity="0.12"/>
-  <rect x="20" y="20" width="570" height="440" rx="18" fill="none" stroke="white" stroke-width="1.5" opacity="0.25"/>
-  ${illustBlock}
-  <line x1="620" y1="55" x2="620" y2="425" stroke="white" stroke-width="1.5" opacity="0.2"/>
-  <line x1="622" y1="55" x2="622" y2="425" stroke="#C4B5FD" stroke-width="0.8" opacity="0.15"/>
-  ${content.tag ? `<rect x="660" y="100" width="${Math.max(64, tagW(content.tag, typo.tagSize) + 30)}" height="34" rx="17" fill="white" opacity="0.18"/>
-  <rect x="660" y="100" width="${Math.max(64, tagW(content.tag, typo.tagSize) + 30)}" height="34" rx="17" fill="none" stroke="white" stroke-width="1" opacity="0.3"/>
-  ${renderTextLines(content.tag, 676, 123, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#E0E7FF', '500', typo.subtitleFontFamily, 'tag')}` : ''}
-  ${renderTextLines(content.title, 660, 205, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#FFFFFF', '700', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 660, 285, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#C4B5FD', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
-  <line x1="660" y1="420" x2="920" y2="420" stroke="white" stroke-width="1.5" opacity="0.25"/>
-  <circle cx="660" cy="420" r="3" fill="white" opacity="0.35"/>
-  <circle cx="920" cy="420" r="3" fill="white" opacity="0.3"/>
-</svg>`;
-  }
-};
-
-// ============================================================
-// 28. illust-hero / 英雄横幅
-// ============================================================
-const illustHero = {
-  id: 'illust-hero', name: '英雄横幅', category: 'illustration',
-  illustFit: 'hero',
-  elements: { tag: true, title: true, subtitle: true, author: true, image: false, illustration: true },
-  render(content, typo) {
-    const illustBlock = content.illustrationSvg
-      ? illustrationLayer(`<g transform="rotate(-3, 900, 240)">
-          ${embedIllustration(content.illustrationSvg, 580, 10, 600, 460, illustrationOpacity(content, 0.95))}
-        </g>`)
-      : `<g transform="rotate(-3, 900, 240)" opacity="0.1">
-          <circle cx="860" cy="200" r="160" fill="white"/>
-          <rect x="740" y="280" width="200" height="120" rx="16" fill="white"/>
-        </g>
-        <circle cx="860" cy="220" r="100" fill="none" stroke="white" stroke-width="1" opacity="0.12"/>`;
-    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="ih-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#0D9488"/><stop offset="100%" stop-color="#10B981"/></linearGradient>
-    <linearGradient id="ih-btm" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0D9488" stop-opacity="0"/><stop offset="100%" stop-color="#064E3B" stop-opacity="0.5"/></linearGradient>
-  </defs>
-  <rect width="1200" height="510" fill="url(#ih-bg)"/>
-  <rect width="1200" height="510" fill="url(#ih-btm)"/>
-  <circle cx="200" cy="80" r="120" fill="white" opacity="0.05"/>
-  <circle cx="100" cy="350" r="80" fill="white" opacity="0.04"/>
-  <path d="M40 200 Q60 170 90 190 Q120 210 100 240 Q80 270 50 250 Q20 230 40 200Z" fill="white" opacity="0.04"/>
-  <path d="M30 30 L30 58 M30 30 L58 30" stroke="white" stroke-width="1.5" fill="none" opacity="0.16"/>
-  <path d="M548 30 L548 58 M548 30 L520 30" stroke="white" stroke-width="1.5" fill="none" opacity="0.16"/>
-  <circle cx="450" cy="120" r="4" fill="#99F6E4" opacity="0.3"/>
-  <circle cx="320" cy="260" r="3.5" fill="#5EEAD4" opacity="0.28"/>
-  <circle cx="50" cy="140" r="3.5" fill="#A7F3D0" opacity="0.3"/>
-  <circle cx="250" cy="380" r="3" fill="#5EEAD4" opacity="0.25"/>
-  ${illustBlock}
-  ${content.tag ? `<rect x="80" y="78" width="${Math.max(64, tagW(content.tag, typo.tagSize) + 30)}" height="42" rx="9" fill="#134E4A" opacity="0.55"/>
-  <rect x="80" y="78" width="${Math.max(64, tagW(content.tag, typo.tagSize) + 30)}" height="42" rx="9" fill="none" stroke="#5EEAD4" stroke-width="1.2" opacity="0.5"/>
-  ${renderTextLines(content.tag, 96, 107, typo.tagSize, typo.tagSize * 1.2, 1, 'left', '#99F6E4', '600', typo.subtitleFontFamily, 'tag')}` : ''}
-  ${renderTextLines(content.title, 80, 195, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#FFFFFF', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(content.subtitle, 80, 275, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#A7F3D0', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
-  <path d="M0 428 Q300 412 600 428 Q900 444 1200 422" stroke="white" stroke-width="1.5" fill="none" opacity="0.22"/>
-  <path d="M0 434 Q300 420 600 434 Q900 450 1200 428" stroke="#5EEAD4" stroke-width="0.8" fill="none" opacity="0.16"/>
-  <rect x="0" y="438" width="1200" height="46" fill="#134E4A" opacity="0.5"/>
-  <line x1="0" y1="438" x2="1200" y2="438" stroke="#0F766E" stroke-width="1.5" opacity="0.5"/>
-  ${content.author ? renderTextLines(content.author, 80, 466, typo.authorSize, typo.authorSize * 1.4, 1, 'left', 'rgba(255,255,255,0.65)', '300', typo.subtitleFontFamily, 'author') : ''}
-</svg>`;
-  }
-};
-
-// ============================================================
 // 29. illust-card / 卡片插画
 // ============================================================
 const illustCard = {
@@ -1468,7 +1309,433 @@ const productDecisionBoard = {
 };
 
 // ============================================================
-// Export all 35 templates
+// 41. mag-pop-art / 波普插画
+// ============================================================
+const magPopArt = {
+  id: 'mag-pop-art', name: '波普插画', category: 'illustration',
+  illustFit: 'side',
+  elements: { tag: true, title: true, subtitle: true, author: false, image: false, illustration: true },
+  render(content, typo) {
+    const bw = Math.max(150, tagW(content.tag, typo.tagSize) + 60);
+    const bxc = 96 + bw / 2;
+    const TITLE_X = 80, TITLE_Y = 175, TITLE_W = 620, SUB_W = 620;
+    const titleWrapped = wrapText(content.title, typo.titleSize, TITLE_W);
+    const titleLines = titleWrapped === '' ? 0 : titleWrapped.split('\n').length;
+    const titlePx = lineHeightPx(typo.titleSize, typo.titleLineHeight);
+    const SUB_Y = TITLE_Y + titleLines * titlePx + 34;
+    const illustBlock = content.illustrationSvg
+      ? illustrationLayer(embedIllustration(content.illustrationSvg, 756, 40, 388, 408, illustrationOpacity(content, 0.95)))
+      : `<g opacity="0.92">
+          <circle cx="930" cy="180" r="110" fill="#219EBC"/>
+          <circle cx="870" cy="260" r="66" fill="#FFB703"/>
+          <polygon points="1010,120 1050,100 1038,150 1072,170 1020,172 988,192 1010,150" fill="#E63946"/>
+        </g>
+        <circle cx="920" cy="200" r="90" fill="none" stroke="#111111" stroke-width="4" opacity="0.35"/>`;
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <pattern id="pa-dots" width="26" height="26" patternUnits="userSpaceOnUse"><circle cx="13" cy="13" r="3" fill="#111111" opacity="0.07"/></pattern>
+    <radialGradient id="pa-starburst" cx="0.5" cy="0.5"><stop offset="0%" stop-color="#FFB703" stop-opacity="0.9"/><stop offset="100%" stop-color="#F97316" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="1200" height="510" fill="#FFF6E3"/>
+  <rect width="1200" height="510" fill="url(#pa-dots)"/>
+  <!-- Starburst behind headline -->
+  <polygon points="150,120 210,150 186,212 252,196 300,246 240,300 262,356 196,338 120,380 110,310 40,320 92,262 52,196 120,180" fill="url(#pa-starburst)" opacity="0.5"/>
+  <polygon points="150,120 210,150 186,212 252,196 300,246 240,300 262,356 196,338 120,380 110,310 40,320 92,262 52,196 120,180" fill="none" stroke="#111111" stroke-width="3" opacity="0.45"/>
+  <!-- Tag speech bubble -->
+  ${content.tag ? `<rect x="96" y="56" width="${bw}" height="80" rx="18" fill="#FFFFFF" stroke="#111111" stroke-width="4"/>
+  <path d="M${bxc - 16} 136 L${bxc} 164 L${bxc + 16} 136 Z" fill="#FFFFFF" stroke="#111111" stroke-width="4" stroke-linejoin="round"/>
+  ${renderTextLines(content.tag, bxc, 105, typo.tagSize, typo.tagSize * 1.2, 2, 'center', '#E63946', '900', typo.subtitleFontFamily, 'tag')}` : ''}
+  <!-- Pop highlight bar behind title, scales with wrapped block -->
+  <rect x="66" y="${TITLE_Y - typo.titleSize + 14}" width="${TITLE_W + 28}" height="${titleLines * titlePx + typo.titleSize * 0.6}" fill="#FFB703" opacity="0.55"/>
+  ${renderTextLines(titleWrapped, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#111111', '900', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(wrapText(content.subtitle, typo.subtitleSize, SUB_W), TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#E63946', '700', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  <line x1="80" y1="478" x2="380" y2="478" stroke="#111111" stroke-width="5"/>
+  <circle cx="420" cy="478" r="10" fill="#219EBC" stroke="#111111" stroke-width="3"/>
+  <!-- Pop-art illustration frame -->
+  <rect x="758" y="42" width="420" height="440" fill="#111111" opacity="0.92"/>
+  <rect x="740" y="24" width="420" height="440" fill="#FFFFFF" stroke="#111111" stroke-width="7"/>
+  <rect x="748" y="32" width="404" height="424" fill="none" stroke="#E63946" stroke-width="2" opacity="0.5"/>
+  ${illustBlock}
+</svg>`;
+  }
+};
+
+// ============================================================
+// 42. mag-collage / 撕纸拼贴
+// ============================================================
+const magCollage = {
+  id: 'mag-collage', name: '撕纸拼贴', category: 'illustration',
+  illustFit: 'side',
+  elements: { tag: true, title: true, subtitle: true, author: false, image: false, illustration: true },
+  render(content, typo) {
+    const TITLE_X = 80, TITLE_Y = 190, TITLE_W = 620, SUB_W = 620;
+    const titleWrapped = wrapText(content.title, typo.titleSize, TITLE_W);
+    const titleLines = titleWrapped === '' ? 0 : titleWrapped.split('\n').length;
+    const titlePx = lineHeightPx(typo.titleSize, typo.titleLineHeight);
+    const SUB_Y = TITLE_Y + titleLines * titlePx + 30;
+    const illustBlock = content.illustrationSvg
+      ? illustrationLayer(embedIllustration(content.illustrationSvg, 746, 46, 398, 418, illustrationOpacity(content, 0.95)))
+      : `<g opacity="0.85">
+          <path d="M780 160 Q830 110 900 150 Q960 190 990 140 Q1040 200 1000 250 Q950 290 870 240 Q800 210 780 250 Z" fill="#E8D5B7"/>
+          <path d="M840 300 Q890 260 940 300 Q990 340 940 380 Q890 410 840 370 Z" fill="#E56B4A" opacity="0.85"/>
+          <circle cx="1030" cy="300" r="55" fill="#2B2620" opacity="0.14"/>
+        </g>`;
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="510" fill="#FBF3E4"/>
+  <!-- Torn paper shapes -->
+  <path d="M70 60 L120 52 L166 64 L214 50 L260 62 L300 54 L326 70 L310 96 L258 100 L212 90 L166 104 L114 96 Z" fill="#E56B4A" opacity="0.85"/>
+  <path d="M40 470 L100 458 L158 474 L216 460 L270 476 L320 464 L346 482 L310 506 L252 498 L204 508 L150 496 L94 504 Z" fill="#2B2620" opacity="0.82"/>
+  <!-- Washi tape -->
+  <rect x="122" y="70" width="110" height="22" fill="#F4C97F" opacity="0.85" transform="rotate(-5 177 81)"/>
+  <!-- Typewriter tag -->
+  ${content.tag ? renderTextLines(content.tag, 82, 138, typo.tagSize, typo.tagSize * 1.2, 2, 'left', '#2B2620', '600', typo.subtitleFontFamily, 'tag') : ''}
+  ${content.tag ? `<rect x="80" y="152" width="${Math.max(30, tagW(content.tag, typo.tagSize) * 0.7)}" height="4" fill="#E56B4A"/>` : ''}
+  ${renderTextLines(titleWrapped, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#2B2620', '700', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(wrapText(content.subtitle, typo.subtitleSize, SUB_W), TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#7A6A58', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  <!-- Illustration paper card, slightly rotated -->
+  <g transform="rotate(1.5, 950, 260)">
+    <rect x="730" y="30" width="430" height="450" fill="#FFFDF6" stroke="#2B2620" stroke-width="2"/>
+    <rect x="746" y="46" width="398" height="418" fill="#F1E8D8" opacity="0.5"/>
+    ${illustBlock}
+    <rect x="770" y="14" width="120" height="26" fill="#F4C97F" opacity="0.85" transform="rotate(-4 830 27)"/>
+  </g>
+</svg>`;
+  }
+};
+
+// ============================================================
+// 43. mag-duotone / 双色叠印
+// ============================================================
+const magDuotone = {
+  id: 'mag-duotone', name: '双色叠印', category: 'illustration',
+  illustFit: 'side',
+  elements: { tag: true, title: true, subtitle: true, author: false, image: false, illustration: true },
+  render(content, typo) {
+    const TITLE_X = 80, TITLE_Y = 185, TITLE_W = 620, SUB_W = 620;
+    const titleWrapped = wrapText(content.title, typo.titleSize, TITLE_W);
+    const titleLines = titleWrapped === '' ? 0 : titleWrapped.split('\n').length;
+    const titlePx = lineHeightPx(typo.titleSize, typo.titleLineHeight);
+    const SUB_Y = TITLE_Y + titleLines * titlePx + 30;
+    const illustBlock = content.illustrationSvg
+      ? illustrationLayer(embedIllustration(content.illustrationSvg, 764, 62, 388, 376, illustrationOpacity(content, 0.9)))
+      : `<g opacity="0.85">
+          <circle cx="930" cy="200" r="130" fill="#FF4D6D"/>
+          <circle cx="880" cy="280" r="75" fill="#00E5FF"/>
+          <rect x="990" y="110" width="130" height="130" fill="#FF4D6D"/>
+        </g>`;
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="md-gl" cx="0.2" cy="0.8"><stop offset="0%" stop-color="#FF4D6D" stop-opacity="0.16"/><stop offset="100%" stop-color="#FF4D6D" stop-opacity="0"/></radialGradient>
+    <radialGradient id="md-gr" cx="0.85" cy="0.2"><stop offset="0%" stop-color="#00E5FF" stop-opacity="0.12"/><stop offset="100%" stop-color="#00E5FF" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="1200" height="510" fill="#0E0E11"/>
+  <rect width="1200" height="510" fill="url(#md-gl)"/><rect width="1200" height="510" fill="url(#md-gr)"/>
+  <!-- Registration marks -->
+  <path d="M36 36 L36 64 M36 36 L64 36" stroke="#00E5FF" stroke-width="2" fill="none" opacity="0.5"/>
+  <path d="M1164 36 L1164 64 M1164 36 L1136 36" stroke="#FF4D6D" stroke-width="2" fill="none" opacity="0.5"/>
+  <path d="M36 474 L36 446 M36 474 L64 474" stroke="#FF4D6D" stroke-width="2" fill="none" opacity="0.5"/>
+  <path d="M1164 474 L1164 446 M1164 474 L1136 474" stroke="#00E5FF" stroke-width="2" fill="none" opacity="0.5"/>
+  ${content.tag ? `<rect x="80" y="66" width="${Math.max(60, tagW(content.tag, typo.tagSize) + 34)}" height="40" fill="none" stroke="#FF4D6D" stroke-width="2"/>
+  <rect x="86" y="72" width="${Math.max(60, tagW(content.tag, typo.tagSize) + 34)}" height="40" fill="none" stroke="#00E5FF" stroke-width="1" opacity="0.8"/>
+  ${renderTextLines(content.tag, 97, 94, typo.tagSize, typo.tagSize * 1.2, 2, 'left', '#FFD6DE', '600', typo.subtitleFontFamily, 'tag')}` : ''}
+  ${renderTextLines(titleWrapped, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#F5F5F7', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(wrapText(content.subtitle, typo.subtitleSize, SUB_W), TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#00E5FF', '500', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  <!-- Duotone neon frame -->
+  <rect x="748" y="36" width="420" height="438" fill="none" stroke="#00E5FF" stroke-width="2"/>
+  <rect x="756" y="44" width="404" height="422" fill="none" stroke="#FF4D6D" stroke-width="2"/>
+  ${illustBlock}
+</svg>`;
+  }
+};
+
+// ============================================================
+// 44. mag-swiss / 瑞士网格
+// ============================================================
+const magSwiss = {
+  id: 'mag-swiss', name: '瑞士网格', category: 'illustration',
+  illustFit: 'side',
+  elements: { tag: true, title: true, subtitle: true, author: false, image: false, illustration: true },
+  render(content, typo) {
+    const TITLE_X = 80, TITLE_Y = 205, TITLE_W = 620, SUB_W = 620;
+    const titleWrapped = wrapText(content.title, typo.titleSize, TITLE_W);
+    const titleLines = titleWrapped === '' ? 0 : titleWrapped.split('\n').length;
+    const titlePx = lineHeightPx(typo.titleSize, typo.titleLineHeight);
+    const SUB_Y = TITLE_Y + titleLines * titlePx + 26;
+    const illustBlock = content.illustrationSvg
+      ? illustrationLayer(embedIllustration(content.illustrationSvg, 754, 84, 372, 272, illustrationOpacity(content, 0.95)))
+      : `<g opacity="0.85">
+          <circle cx="920" cy="180" r="95" fill="#111111"/>
+          <rect x="840" y="250" width="170" height="110" fill="#111111"/>
+          <circle cx="1020" cy="150" r="48" fill="#111111"/>
+        </g>`;
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="510" fill="#F4F4F0"/>
+  <!-- Hairline grid -->
+  <line x1="0" y1="496" x2="1200" y2="496" stroke="#111111" stroke-width="1.5"/>
+  <line x1="0" y1="502" x2="1200" y2="502" stroke="#111111" stroke-width="0.5" opacity="0.4"/>
+  <line x1="720" y1="0" x2="720" y2="496" stroke="#111111" stroke-width="1" opacity="0.3"/>
+  <line x1="300" y1="60" x2="300" y2="496" stroke="#111111" stroke-width="0.5" opacity="0.18"/>
+  <line x1="440" y1="60" x2="440" y2="496" stroke="#111111" stroke-width="0.5" opacity="0.18"/>
+  <!-- Red accent block -->
+  <rect x="80" y="60" width="56" height="56" fill="#E63946"/>
+  <text x="108" y="96" font-size="30" font-family="${SERIF_FAMILY}" fill="#FFFFFF" font-weight="700" text-anchor="middle">№</text>
+  ${content.tag ? renderTextLines(content.tag, 80, 166, typo.tagSize, typo.tagSize * 1.2, 3, 'left', '#E63946', '700', typo.subtitleFontFamily, 'tag') : ''}
+  ${renderTextLines(titleWrapped, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#111111', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(wrapText(content.subtitle, typo.subtitleSize, SUB_W), TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#555555', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  <!-- Illustration in grid cell -->
+  <rect x="740" y="70" width="400" height="300" fill="none" stroke="#111111" stroke-width="1.5"/>
+  ${illustBlock}
+  <text x="740" y="398" font-size="14" font-family="${typo.subtitleFontFamily}" fill="#555555" letter-spacing="2" font-weight="600">FIG. 01 — ${esc(content.tag || 'ILLUSTRATION')}</text>
+  <line x1="740" y1="410" x2="1140" y2="410" stroke="#111111" stroke-width="0.5" opacity="0.5"/>
+  <!-- Crosshair marks -->
+  <path d="M30 30 L30 46 M30 30 L46 30" stroke="#111111" stroke-width="1.5" fill="none" opacity="0.5"/>
+  <path d="M1170 30 L1170 46 M1170 30 L1154 30" stroke="#111111" stroke-width="1.5" fill="none" opacity="0.5"/>
+</svg>`;
+  }
+};
+
+// ============================================================
+// 45. mag-retro-masthead / 复古报头
+// ============================================================
+const magRetroMasthead = {
+  id: 'mag-retro-masthead', name: '复古报头', category: 'illustration',
+  illustFit: 'side',
+  elements: { tag: true, title: true, subtitle: true, author: true, issue: true, image: false, illustration: true },
+  render(content, typo) {
+    const TITLE_X = 80, TITLE_Y = 210, TITLE_W = 620, SUB_W = 620;
+    const titleWrapped = wrapText(content.title, typo.titleSize, TITLE_W);
+    const titleLines = titleWrapped === '' ? 0 : titleWrapped.split('\n').length;
+    const titlePx = lineHeightPx(typo.titleSize, typo.titleLineHeight);
+    const SUB_Y = TITLE_Y + titleLines * titlePx + 26;
+    const illustBlock = content.illustrationSvg
+      ? illustrationLayer(embedIllustration(content.illustrationSvg, 756, 56, 388, 398, illustrationOpacity(content, 0.95)))
+      : `<g opacity="0.85">
+          <ellipse cx="950" cy="200" rx="105" ry="135" fill="#F97316"/>
+          <rect x="880" y="300" width="140" height="90" rx="10" fill="#0D9488"/>
+          <circle cx="1010" cy="160" r="48" fill="#0D9488" opacity="0.7"/>
+        </g>`;
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="rm-sun" cx="0.5" cy="0.5"><stop offset="0%" stop-color="#FFD166" stop-opacity="0.9"/><stop offset="60%" stop-color="#F97316" stop-opacity="0.5"/><stop offset="100%" stop-color="#F97316" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="1200" height="510" fill="#FFF4E4"/>
+  <!-- Masthead bars -->
+  <rect x="0" y="0" width="1200" height="22" fill="#0D9488"/>
+  <rect x="0" y="22" width="1200" height="10" fill="#F97316"/>
+  <text x="80" y="58" font-size="14" font-family="${typo.subtitleFontFamily}" fill="#B45309" letter-spacing="3" font-weight="700">${esc(content.issueNumber || 'No.01')}</text>
+  <text x="1120" y="58" font-size="14" font-family="${typo.subtitleFontFamily}" fill="#0D9488" letter-spacing="2" font-weight="600" text-anchor="end">FEATURE</text>
+  <line x1="80" y1="74" x2="1120" y2="74" stroke="#C9A876" stroke-width="2"/>
+  <line x1="80" y1="80" x2="1120" y2="80" stroke="#C9A876" stroke-width="0.8"/>
+  <!-- Sunburst behind headline -->
+  <circle cx="210" cy="250" r="160" fill="url(#rm-sun)"/>
+  ${content.tag ? renderTextLines(content.tag, 82, 140, typo.tagSize, typo.tagSize * 1.2, 4, 'left', '#F97316', '800', typo.subtitleFontFamily, 'tag') : ''}
+  ${renderTextLines(titleWrapped, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#2B2620', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(wrapText(content.subtitle, typo.subtitleSize, SUB_W), TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#8A6D4F', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  <!-- Portrait frame -->
+  <g transform="rotate(2, 950, 260)">
+    <rect x="740" y="30" width="420" height="450" fill="none" stroke="#2B2620" stroke-width="3"/>
+    <rect x="750" y="40" width="400" height="430" fill="#FDF7EA"/>
+    ${illustBlock}
+    <rect x="740" y="30" width="420" height="22" fill="#2B2620"/>
+  </g>
+  <!-- Bottom triple rule -->
+  <line x1="80" y1="472" x2="700" y2="472" stroke="#2B2620" stroke-width="3"/>
+  <line x1="80" y1="478" x2="700" y2="478" stroke="#F97316" stroke-width="1.5"/>
+  <line x1="80" y1="484" x2="700" y2="484" stroke="#0D9488" stroke-width="0.8"/>
+  ${content.author ? renderTextLines(content.author, 80, 468, typo.authorSize, typo.authorSize * 1.4, 2, 'left', '#0D9488', '700', typo.subtitleFontFamily, 'author') : ''}
+</svg>`;
+  }
+};
+
+// ============================================================
+// 46. abs-fluid-blobs / 流体色块
+// ============================================================
+const absFluidBlobs = {
+  id: 'abs-fluid-blobs', name: '流体色块', category: 'abstract-art',
+  elements: { tag: true, title: true, subtitle: true, author: false, image: false },
+  render(content, typo) {
+    const TITLE_X = 80, TITLE_Y = 210, TITLE_W = 1040, SUB_W = 1040;
+    const titleWrapped = wrapText(content.title, typo.titleSize, TITLE_W);
+    const titleLines = titleWrapped === '' ? 0 : titleWrapped.split('\n').length;
+    const titlePx = lineHeightPx(typo.titleSize, typo.titleLineHeight);
+    const SUB_Y = TITLE_Y + titleLines * titlePx + 30;
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="fb-g1" cx="0.5" cy="0.5"><stop offset="0%" stop-color="#C4B5FD" stop-opacity="0.9"/><stop offset="100%" stop-color="#C4B5FD" stop-opacity="0"/></radialGradient>
+    <radialGradient id="fb-g2" cx="0.5" cy="0.5"><stop offset="0%" stop-color="#FCD34D" stop-opacity="0.8"/><stop offset="100%" stop-color="#FCD34D" stop-opacity="0"/></radialGradient>
+    <radialGradient id="fb-g3" cx="0.5" cy="0.5"><stop offset="0%" stop-color="#A78BFA" stop-opacity="0.9"/><stop offset="100%" stop-color="#A78BFA" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="1200" height="510" fill="#F7F4EF"/>
+  <path d="M40 60 C120 10 260 20 300 90 C340 160 260 220 180 230 C90 240 10 180 40 60Z" fill="url(#fb-g1)"/>
+  <path d="M940 380 C1020 330 1120 350 1160 410 C1200 470 1100 520 1010 510 C910 500 880 430 940 380Z" fill="url(#fb-g2)"/>
+  <path d="M760 40 C830 10 940 40 950 110 C960 180 880 220 800 210 C720 200 690 130 700 90 C710 55 720 50 760 40Z" fill="url(#fb-g3)"/>
+  <path d="M120 400 C180 360 260 380 300 420 C340 460 300 500 230 505 C160 510 90 480 120 400Z" fill="#E9D8FD" opacity="0.7"/>
+  <circle cx="1020" cy="90" r="6" fill="#A78BFA" opacity="0.4"/>
+  <circle cx="960" cy="70" r="3" fill="#C4B5FD" opacity="0.5"/>
+  ${content.tag ? `<rect x="80" y="90" width="${Math.max(60, tagW(content.tag, typo.tagSize) + 30)}" height="36" rx="18" fill="#A78BFA" opacity="0.16"/>
+  <rect x="80" y="90" width="${Math.max(60, tagW(content.tag, typo.tagSize) + 30)}" height="36" rx="18" fill="none" stroke="#7C3AED" stroke-width="1" opacity="0.3"/>
+  ${renderTextLines(content.tag, 96, 116, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#6D28D9', '600', typo.subtitleFontFamily, 'tag')}` : ''}
+  ${renderTextLines(titleWrapped, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#1F2937', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(wrapText(content.subtitle, typo.subtitleSize, SUB_W), TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#6B7280', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  <line x1="80" y1="470" x2="260" y2="470" stroke="#C4B5FD" stroke-width="2.5" opacity="0.6"/>
+  <circle cx="270" cy="470" r="4" fill="#FCD34D" opacity="0.9"/>
+</svg>`;
+  }
+};
+
+// ============================================================
+// 47. abs-line-art / 极简线构
+// ============================================================
+const absLineArt = {
+  id: 'abs-line-art', name: '极简线构', category: 'abstract-art',
+  elements: { tag: true, title: true, subtitle: true, author: false, image: false },
+  render(content, typo) {
+    const TITLE_X = 80, TITLE_Y = 230, TITLE_W = 1040, SUB_W = 1040;
+    const titleWrapped = wrapText(content.title, typo.titleSize, TITLE_W);
+    const titleLines = titleWrapped === '' ? 0 : titleWrapped.split('\n').length;
+    const titlePx = lineHeightPx(typo.titleSize, typo.titleLineHeight);
+    const SUB_Y = TITLE_Y + titleLines * titlePx + 30;
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="510" fill="#FAF7F0"/>
+  <circle cx="980" cy="130" r="130" fill="none" stroke="#1F2937" stroke-width="1.5"/>
+  <circle cx="980" cy="130" r="78" fill="none" stroke="#1F2937" stroke-width="1"/>
+  <circle cx="980" cy="130" r="26" fill="#F97316"/>
+  <path d="M80 110 Q180 50 260 100" fill="none" stroke="#1F2937" stroke-width="1.5"/>
+  <path d="M1080 440 Q980 490 900 450" fill="none" stroke="#1F2937" stroke-width="1.2"/>
+  <line x1="120" y1="458" x2="460" y2="458" stroke="#1F2937" stroke-width="1.2"/>
+  <line x1="120" y1="466" x2="380" y2="466" stroke="#1F2937" stroke-width="0.6" opacity="0.4"/>
+  <circle cx="500" cy="120" r="3" fill="#1F2937" opacity="0.6"/>
+  <circle cx="1120" cy="330" r="2.5" fill="#1F2937" opacity="0.5"/>
+  ${content.tag ? renderTextLines(content.tag, 80, 152, typo.tagSize, typo.tagSize * 1.2, 3, 'left', '#F97316', '700', typo.subtitleFontFamily, 'tag') : ''}
+  ${renderTextLines(titleWrapped, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#1F2937', '700', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(wrapText(content.subtitle, typo.subtitleSize, SUB_W), TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#6B7280', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+</svg>`;
+  }
+};
+
+// ============================================================
+// 48. abs-op-art / 视错觉波纹
+// ============================================================
+const absOpArt = {
+  id: 'abs-op-art', name: '视错觉波纹', category: 'abstract-art',
+  elements: { tag: true, title: true, subtitle: true, author: false, image: false },
+  render(content, typo) {
+    const TITLE_X = 80, TITLE_Y = 235, TITLE_W = 1040, SUB_W = 1040;
+    const titleWrapped = wrapText(content.title, typo.titleSize, TITLE_W);
+    const titleLines = titleWrapped === '' ? 0 : titleWrapped.split('\n').length;
+    const titlePx = lineHeightPx(typo.titleSize, typo.titleLineHeight);
+    const SUB_Y = TITLE_Y + titleLines * titlePx + 30;
+    let arcs = '';
+    for (let i = 1; i <= 6; i++) {
+      const r = i * 66;
+      arcs += `<circle cx="600" cy="640" r="${r}" fill="none" stroke="#111111" stroke-width="${i % 2 ? 9 : 4}"/>`;
+    }
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <pattern id="oa-stripes" width="26" height="130" patternUnits="userSpaceOnUse"><rect x="0" y="0" width="26" height="15" fill="#111111"/></pattern>
+  </defs>
+  <rect width="1200" height="510" fill="#FDFBF7"/>
+  <!-- Top scanline band -->
+  <rect x="0" y="0" width="1200" height="130" fill="url(#oa-stripes)"/>
+  <rect x="0" y="130" width="1200" height="8" fill="#E63946"/>
+  <!-- Bottom concentric arcs (op-art ripple) -->
+  ${arcs}
+  <circle cx="600" cy="640" r="44" fill="#E63946"/>
+  <circle cx="600" cy="640" r="18" fill="#111111"/>
+  ${content.tag ? `<rect x="80" y="170" width="${Math.max(60, tagW(content.tag, typo.tagSize) + 28)}" height="30" fill="#111111"/>
+  ${renderTextLines(content.tag, 94, 191, typo.tagSize, typo.tagSize * 1.2, 2, 'left', '#FFFFFF', '800', typo.subtitleFontFamily, 'tag')}` : ''}
+  ${renderTextLines(titleWrapped, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#111111', '900', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(wrapText(content.subtitle, typo.subtitleSize, SUB_W), TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#444444', '500', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+</svg>`;
+  }
+};
+
+// ============================================================
+// 49. abs-bauhaus / 包豪斯构成
+// ============================================================
+const absBauhaus = {
+  id: 'abs-bauhaus', name: '包豪斯构成', category: 'abstract-art',
+  elements: { tag: true, title: true, subtitle: true, author: false, image: false },
+  render(content, typo) {
+    const TITLE_X = 80, TITLE_Y = 210, TITLE_W = 1040, SUB_W = 1040;
+    const titleWrapped = wrapText(content.title, typo.titleSize, TITLE_W);
+    const titleLines = titleWrapped === '' ? 0 : titleWrapped.split('\n').length;
+    const titlePx = lineHeightPx(typo.titleSize, typo.titleLineHeight);
+    const SUB_Y = TITLE_Y + titleLines * titlePx + 32;
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="510" fill="#F5F1EA"/>
+  <!-- Bauhaus composition -->
+  <rect x="850" y="-40" width="430" height="290" fill="#1D4ED8"/>
+  <rect x="870" y="-20" width="390" height="250" fill="none" stroke="#F5F1EA" stroke-width="3"/>
+  <circle cx="960" cy="120" r="110" fill="#F59E0B"/>
+  <circle cx="960" cy="120" r="52" fill="#111111"/>
+  <rect x="620" y="330" width="170" height="140" fill="#E63946"/>
+  <polygon points="760,400 890,400 825,320" fill="#111111"/>
+  <circle cx="1040" cy="330" r="70" fill="#111111" opacity="0.85"/>
+  <rect x="0" y="476" width="1200" height="34" fill="#111111"/>
+  <circle cx="120" cy="498" r="12" fill="#F59E0B"/>
+  <circle cx="300" cy="490" r="9" fill="#E63946"/>
+  <circle cx="430" cy="496" r="14" fill="#1D4ED8"/>
+  ${content.tag ? `<rect x="80" y="78" width="${Math.max(60, tagW(content.tag, typo.tagSize) + 32)}" height="34" fill="#111111"/>
+  ${renderTextLines(content.tag, 96, 102, typo.tagSize, typo.tagSize * 1.2, 2, 'left', '#F5F1EA', '700', typo.subtitleFontFamily, 'tag')}` : ''}
+  ${renderTextLines(titleWrapped, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#111111', '900', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  <rect x="80" y="${SUB_Y - 26}" width="140" height="10" fill="#E63946"/>
+  <rect x="230" y="${SUB_Y - 26}" width="60" height="10" fill="#1D4ED8"/>
+  <rect x="300" y="${SUB_Y - 26}" width="40" height="10" fill="#F59E0B"/>
+  ${content.subtitle ? renderTextLines(wrapText(content.subtitle, typo.subtitleSize, SUB_W), TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#4B5563', '500', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+</svg>`;
+  }
+};
+
+// ============================================================
+// 50. abs-retro-sun / 复古日出
+// ============================================================
+const absRetroSun = {
+  id: 'abs-retro-sun', name: '复古日出', category: 'abstract-art',
+  elements: { tag: true, title: true, subtitle: true, author: false, image: false },
+  render(content, typo) {
+    const TITLE_X = 520, TITLE_Y = 205, TITLE_W = 660, SUB_W = 660;
+    const titleWrapped = wrapText(content.title, typo.titleSize, TITLE_W);
+    const titleLines = titleWrapped === '' ? 0 : titleWrapped.split('\n').length;
+    const titlePx = lineHeightPx(typo.titleSize, typo.titleLineHeight);
+    const SUB_Y = TITLE_Y + titleLines * titlePx + 26;
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="rs-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1E1B4B"/><stop offset="55%" stop-color="#6D28D9"/><stop offset="100%" stop-color="#7C3AED"/></linearGradient>
+    <radialGradient id="rs-sun" cx="0.5" cy="0.5"><stop offset="0%" stop-color="#FFD166"/><stop offset="55%" stop-color="#FB923C"/><stop offset="100%" stop-color="#F97316"/></radialGradient>
+  </defs>
+  <rect width="1200" height="510" fill="url(#rs-sky)"/>
+  <!-- Sun rays -->
+  <g stroke="#FFD166" stroke-width="2.5" opacity="0.4">
+    <line x1="280" y1="355" x2="150" y2="215"/><line x1="300" y1="355" x2="245" y2="205"/>
+    <line x1="320" y1="355" x2="345" y2="195"/><line x1="340" y1="355" x2="445" y2="215"/>
+    <line x1="360" y1="355" x2="510" y2="265"/><line x1="260" y1="355" x2="100" y2="290"/>
+  </g>
+  <circle cx="280" cy="355" r="150" fill="url(#rs-sun)"/>
+  <circle cx="280" cy="355" r="150" fill="none" stroke="#FFD166" stroke-width="3" opacity="0.5"/>
+  <circle cx="280" cy="355" r="120" fill="none" stroke="#FFD166" stroke-width="2" opacity="0.35"/>
+  <circle cx="280" cy="355" r="92" fill="none" stroke="#FFD166" stroke-width="1.5" opacity="0.28"/>
+  <!-- Horizon grid -->
+  <line x1="0" y1="355" x2="1200" y2="355" stroke="#22D3EE" stroke-width="3" opacity="0.9"/>
+  <g stroke="#22D3EE" stroke-width="1.5" opacity="0.5">
+    <line x1="0" y1="377" x2="1200" y2="377"/><line x1="0" y1="401" x2="1200" y2="401"/>
+    <line x1="0" y1="427" x2="1200" y2="427"/><line x1="0" y1="455" x2="1200" y2="455"/>
+    <line x1="0" y1="485" x2="1200" y2="485"/>
+  </g>
+  <circle cx="1100" cy="80" r="3" fill="#FFD166" opacity="0.6"/>
+  <circle cx="1160" cy="160" r="2.5" fill="#FDE68A" opacity="0.5"/>
+  <circle cx="1040" cy="200" r="3" fill="#FFD166" opacity="0.4"/>
+  ${content.tag ? `<rect x="520" y="72" width="${Math.max(64, tagW(content.tag, typo.tagSize) + 30)}" height="36" rx="18" fill="#22D3EE" opacity="0.18"/>
+  <rect x="520" y="72" width="${Math.max(64, tagW(content.tag, typo.tagSize) + 30)}" height="36" rx="18" fill="none" stroke="#67E8F9" stroke-width="1" opacity="0.5"/>
+  ${renderTextLines(content.tag, 536, 98, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#A5F3FC', '600', typo.subtitleFontFamily, 'tag')}` : ''}
+  ${renderTextLines(titleWrapped, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#FFF8E7', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(wrapText(content.subtitle, typo.subtitleSize, SUB_W), TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#E9D5FF', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+</svg>`;
+  }
+};
+
+// ============================================================
+// Export all 40 templates
 // ============================================================
 /**
  * Template metadata for preview UI — scenario descriptions and style tags.
@@ -1493,11 +1760,16 @@ export const TEMPLATE_META = {
   'paper-texture':      { scenario: '学术论文、深度长文',     styleTags: ['纸质', '质感', '经典'] },
   'frame-border':       { scenario: '艺术展览、画作赏析',     styleTags: ['画框', '留白', '典雅'] },
   'split-screen':       { scenario: '对比分析、双主题展示',   styleTags: ['分割', '对比', '构图'] },
-  'illust-right':       { scenario: '技术教程、工具介绍',     styleTags: ['图文', '右侧', '清爽'] },
-  'illust-left':        { scenario: '观点输出、思想分享',     styleTags: ['图文', '左侧', '阅读'] },
-  'illust-center-top':  { scenario: '活动海报、线上直播',     styleTags: ['图文', '居上', '聚焦'] },
-  'illust-split':       { scenario: '产品介绍、功能对比',     styleTags: ['图文', '分割', '均衡'] },
-  'illust-hero':        { scenario: '重磅发布、大事件',       styleTags: ['图文', '英雄', '震撼'] },
+  'mag-pop-art':        { scenario: '潮流话题、创意内容',     styleTags: ['插画', '波普', '撞色'] },
+  'mag-collage':        { scenario: '生活方式、手作笔记',     styleTags: ['插画', '拼贴', '文艺'] },
+  'mag-duotone':        { scenario: '设计美学、科技新品',     styleTags: ['插画', '双色', '先锋'] },
+  'mag-swiss':          { scenario: '设计观点、方法论',       styleTags: ['插画', '网格', '理性'] },
+  'mag-retro-masthead': { scenario: '人物故事、品牌专题',     styleTags: ['插画', '复古', '杂志'] },
+  'abs-fluid-blobs':    { scenario: '创意灵感、品牌视觉',     styleTags: ['抽象', '色块', '柔和'] },
+  'abs-line-art':       { scenario: '极简哲学、设计思考',     styleTags: ['抽象', '线条', '极简'] },
+  'abs-op-art':         { scenario: '艺术科普、视觉实验',     styleTags: ['抽象', '视错觉', '高对比'] },
+  'abs-bauhaus':        { scenario: '设计史、建筑美学',       styleTags: ['抽象', '包豪斯', '构成'] },
+  'abs-retro-sun':      { scenario: '复古浪潮、音乐文化',     styleTags: ['抽象', '复古', '渐变'] },
   'illust-card':        { scenario: '课程推广、知识分享',       styleTags: ['图文', '卡片', '精致'] },
   'illust-wave':        { scenario: '品牌宣传、创意展示',     styleTags: ['图文', '波浪', '动感'] },
   'illust-dark-glow':   { scenario: '暗夜主题、游戏电竞',     styleTags: ['图文', '发光', '炫酷'] },
@@ -1538,19 +1810,25 @@ export const COVER_TEMPLATES = [
   splitScreen,
   // Illustration (14)
   digitalScene,
-  illustRight,
-  illustLeft,
-  illustCenterTop,
-  illustSplit,
-  illustHero,
   illustCard,
   illustWave,
   illustDarkGlow,
   illustMagazine,
+  magPopArt,
+  magCollage,
+  magDuotone,
+  magSwiss,
+  magRetroMasthead,
   techNeuralGrid,
   techLabConsole,
   productLaunchPad,
   productCanvas,
+  // Abstract Art (5)
+  absFluidBlobs,
+  absLineArt,
+  absOpArt,
+  absBauhaus,
+  absRetroSun,
   // New technical/product decorative covers (4)
   techBlueprint,
   techTerminalMap,

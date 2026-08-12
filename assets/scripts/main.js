@@ -1311,7 +1311,7 @@ function loadDefaultExample() {
 
 切换到顶部 **「封面图」** 标签页，快速生成公众号封面：
 
-- **35 套精选模板**，涵盖深色、浅色、渐变、几何、插画等风格
+- **40 套精选模板**，涵盖深色、浅色、渐变、几何、插画、抽象艺术等风格
 - **73 幅精选插画**，支持自定义颜色替换
 - 自由调整标题、副标题、标签的 **字体、字号、行高、字间距**
 - 导出 **2400 × 960** 高清 PNG
@@ -1372,7 +1372,7 @@ def analyze_articles(df):
 |------|------|------|
 | 文章主题 | 27 套风格主题 | 五类场景分类 |
 | 代码主题 | 17 种高亮方案 | 跟随文章主题联动 |
-| 封面模板 | 35 套 + 73 幅插画 | 场景标签辅助选择 |
+| 封面模板 | 40 套 + 73 幅插画 | 场景标签辅助选择 |
 | 手机预览 | 29 款机型 | 含折叠屏 |
 | 数学公式 | LaTeX 渲染 | 导出自动转 SVG |
 
@@ -1782,7 +1782,10 @@ let _restoringCover = false;
 
 function restoreCoverState(state) {
   _restoringCover = true;
-  coverTemplateId.value = state.templateId || 'pure-white';
+  // Fall back to a known template if the saved one no longer exists
+  // (e.g. a template was removed in a newer version)
+  const savedTpl = COVER_TEMPLATES.find(t => t.id === state.templateId);
+  coverTemplateId.value = savedTpl ? state.templateId : 'pure-white';
   Object.assign(coverContent, state.content || DEFAULT_COVER_CONTENT);
   Object.assign(coverTypography, state.typography || DEFAULT_TYPOGRAPHY);
   if (state.fieldOffsets) {

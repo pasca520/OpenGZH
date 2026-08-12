@@ -67,7 +67,8 @@ export function getCategories() {
     'geometric': '几何装饰',
     'glass-texture': '质感纹理',
     'editorial': '版式布局',
-    'illustration': '插画风格'
+    'illustration': '插画风格',
+    'abstract-art': '抽象艺术'
   };
   COVER_TEMPLATES.forEach(t => {
     if (!seen.has(t.category)) {
