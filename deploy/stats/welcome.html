@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>OpenGZH · 访问统计 · 登录入口</title>
+<style>
+:root{
+  --bg:#FBF8F3; --surface:#FFFFFF; --border:#ECE7DE;
+  --text:#1A1714; --text-2:#6F6A61; --text-3:#746E62;
+  --accent:#C4473A; --accent-soft:#F5E2DE;
+  --shadow:0 1px 2px rgba(26,23,20,.05),0 16px 48px rgba(26,23,20,.10);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#161412; --surface:#201D1A; --border:#38332B;
+    --text:#F0ECE4; --text-2:#B3AC9F; --text-3:#A49D90;
+    --accent:#E07A6C; --accent-soft:rgba(224,122,108,.16);
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 16px 48px rgba(0,0,0,.4);
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  min-height:100vh;display:grid;place-items:center;padding:24px;
+  background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",sans-serif;
+  line-height:1.6;-webkit-font-smoothing:antialiased;
+}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
+.card{
+  width:100%;max-width:440px;background:var(--surface);
+  border:1px solid var(--border);border-radius:20px;box-shadow:var(--shadow);
+  padding:40px 36px 32px;text-align:center;
+}
+.brand{display:inline-flex;align-items:center;gap:10px;margin-bottom:26px}
+.brand svg{width:34px;height:34px}
+.brand span{font-size:20px;font-weight:800;letter-spacing:.2px}
+.brand em{font-style:normal;color:var(--text-2);font-weight:600}
+h1{font-size:22px;font-weight:800;margin-bottom:10px}
+.lead{font-size:14px;color:var(--text-2);margin-bottom:26px}
+.lead b{color:var(--text);font-weight:600}
+.creds{
+  background:var(--surface);border:1px dashed var(--border);border-radius:14px;
+  padding:14px 16px;margin-bottom:22px;text-align:left;font-size:13.5px;color:var(--text-2);
+}
+.creds .row{display:flex;justify-content:space-between;align-items:center;padding:3px 0}
+.creds .row span{color:var(--text-3)}
+.creds code{
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:700;color:var(--text);
+}
+.btn{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  width:100%;padding:14px 20px;border:none;border-radius:12px;cursor:pointer;
+  background:var(--accent);color:#fff;font-size:15px;font-weight:700;
+  text-decoration:none;transition:filter .15s ease,transform .08s ease;
+}
+.btn:hover{filter:brightness(1.06)}
+.btn:active{transform:translateY(1px)}
+.btn svg{width:18px;height:18px}
+.hint{font-size:12.5px;color:var(--text-3);margin-top:18px}
+.tip{
+  margin-top:26px;padding-top:20px;border-top:1px solid var(--border);
+  font-size:12.5px;color:var(--text-3);text-align:left;
+}
+.tip li{margin:6px 0 6px 18px}
+.back{display:inline-block;margin-top:22px;font-size:13px;color:var(--text-3);text-decoration:none}
+.back:hover{color:var(--accent)}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="brand">
+    <svg viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="3" y="11" width="4" height="14" rx="1.5" fill="#C4473A"/>
+      <rect x="14" y="6" width="4" height="19" rx="1.5" fill="#E89A8C"/>
+      <rect x="25" y="15" width="4" height="10" rx="1.5" fill="#C4473A"/>
+    </svg>
+    <span>OpenGZH <em>访问统计</em></span>
+  </div>
+
+  <h1>站点流量统计</h1>
+  <p class="lead">这是 <b>opengzh.pasca.fun</b> 的 PV / UV 访问统计面板，<br>仅供站点运营者查看。</p>
+
+  <div class="creds">
+    <div class="row"><span>登录账号</span><code>pasca</code></div>
+    <div class="row"><span>密码</span><code>见初始化通知 · 可修改</code></div>
+  </div>
+
+  <a class="btn" href="/stats/">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 17V9M8 13l4-4 4 4"/><rect x="3" y="4" width="18" height="16" rx="3"/></svg>
+    进入统计面板
+  </a>
+
+  <p class="hint">点击后将弹出浏览器登录窗口，输入账号密码即可进入。</p>
+
+  <ul class="tip">
+    <li>建议勾选「记住密码」，下次免输入。</li>
+    <li>密码校验在服务器端完成，不会离开本站。</li>
+    <li>忘记密码请联系部署者重置（详见 deploy 文档）。</li>
+  </ul>
+
+  <a class="back" href="/">← 返回 OpenGZH 首页</a>
+</div>
+</body>
+</html>
