@@ -21,21 +21,61 @@ const LONG = {
   illustrationSvg: ''
 };
 
-/** Parse y-position of every rendered line for a data-field. */
-function fieldLineYs(svg, field) {
-  const re = new RegExp(`y="([\\d.]+)"[^>]*data-field="${field}"`, 'g');
-  const ys = [];
+const NEW_TEMPLATE_IDS = [
+  'editorial-depth',
+  'data-brief',
+  'product-launch',
+  'prism-spectrum',
+  'paper-cut-window',
+  'pixel-future'
+];
+
+function estimatedTextWidth(text, fontSize) {
+  let width = 0;
+  for (const ch of text) {
+    width += ch.codePointAt(0) > 0x2E7F ? fontSize : fontSize * 0.58;
+  }
+  return width;
+}
+
+/** Parse rendered position and estimated bounds for every line of a data-field. */
+function fieldLines(svg, field) {
+  const re = /<text\s+([^>]*)>([^<]*)<\/text>/g;
+  const lines = [];
   let m;
-  while ((m = re.exec(svg)) !== null) ys.push(parseFloat(m[1]));
-  return ys;
+  while ((m = re.exec(svg)) !== null) {
+    const attrs = m[1];
+    const get = name => attrs.match(new RegExp(`${name}="([^"]*)"`))?.[1];
+    if (get('data-field') !== field) continue;
+
+    const x = Number(get('x'));
+    const y = Number(get('y'));
+    const fontSize = Number(get('font-size'));
+    const width = estimatedTextWidth(m[2], fontSize);
+    const anchor = get('text-anchor') || 'start';
+    const left = anchor === 'middle' ? x - width / 2 : anchor === 'end' ? x - width : x;
+    const right = anchor === 'middle' ? x + width / 2 : anchor === 'end' ? x : x + width;
+    lines.push({ x, y, left, right, fontSize, text: m[2] });
+  }
+  return lines;
 }
 
 describe('cover templates', () => {
-  it('has exactly 40 templates with unique ids', () => {
-    expect(COVER_TEMPLATES.length).toBe(40);
+  it('has exactly 46 templates with unique ids', () => {
+    expect(COVER_TEMPLATES.length).toBe(46);
     const ids = COVER_TEMPLATES.map(t => t.id);
     expect(new Set(ids).size).toBe(ids.length);
     ids.forEach(id => expect(id).toMatch(/^[a-z0-9-]+$/));
+  });
+
+  it('includes all six new templates with metadata and text bounds', () => {
+    for (const id of NEW_TEMPLATE_IDS) {
+      const template = getTemplate(id);
+      expect(template, id).toBeTruthy();
+      expect(template.textBox?.titleWidth, `${id} title width`).toBeGreaterThan(0);
+      expect(template.textBox?.subtitleWidth, `${id} subtitle width`).toBeGreaterThan(0);
+      expect(TEMPLATE_META[id], `${id} metadata`).toBeTruthy();
+    }
   });
 
   it('removed layout templates are gone', () => {
@@ -71,7 +111,7 @@ describe('cover templates', () => {
     expect(label).toBeTruthy();
     expect(label.label).toBe('抽象艺术');
     const byCategory = getTemplates('abstract-art');
-    expect(byCategory.length).toBe(5);
+    expect(byCategory.length).toBe(6);
   });
 
   it('every template has metadata and renders a non-empty svg', () => {
@@ -89,25 +129,53 @@ describe('cover templates', () => {
     }
   });
 
-  it('flows realistic 20-30 char titles within the canvas and keeps subtitle below', () => {
-    const wrappedIds = COVER_TEMPLATES
-      .filter(t => t.id.startsWith('mag-') || t.id.startsWith('abs-'))
-      .map(t => t.id);
-    expect(wrappedIds.length).toBe(10);
+  it('flows realistic 20-30 char copy within every canvas and keeps subtitle below', () => {
+    for (const template of COVER_TEMPLATES) {
+      const svg = renderCover(template.id, LONG, DEFAULT_TYPOGRAPHY);
+      const titleLines = fieldLines(svg, 'title');
+      const subtitleLines = fieldLines(svg, 'subtitle');
 
-    for (const id of wrappedIds) {
-      const svg = renderCover(id, LONG, DEFAULT_TYPOGRAPHY);
-      const titleYs = fieldLineYs(svg, 'title');
-      const subYs = fieldLineYs(svg, 'subtitle');
-      // Long title must wrap to multiple lines instead of overflowing the canvas
-      expect(titleYs.length, `${id} wraps title`).toBeGreaterThan(1);
-      // No text line sits below the canvas
-      for (const y of [...titleYs, ...subYs]) {
-        expect(y, `${id} line within canvas`).toBeLessThan(510);
+      expect(titleLines.length, `${template.id} wraps title`).toBeGreaterThan(1);
+      expect(subtitleLines.length, `${template.id} renders subtitle`).toBeGreaterThan(0);
+      for (const line of [...titleLines, ...subtitleLines]) {
+        expect(line.left, `${template.id} left edge`).toBeGreaterThanOrEqual(0);
+        expect(line.right, `${template.id} right edge`).toBeLessThanOrEqual(1200);
+        expect(line.y, `${template.id} top edge`).toBeGreaterThan(0);
+        expect(line.y, `${template.id} bottom edge`).toBeLessThan(510);
       }
-      // Subtitle always starts below the last title line (never overlaps)
-      expect(Math.min(...subYs), `${id} subtitle below title`).toBeGreaterThan(Math.max(...titleYs));
+      expect(Math.min(...subtitleLines.map(line => line.y)), `${template.id} subtitle below title`)
+        .toBeGreaterThan(Math.max(...titleLines.map(line => line.y)));
     }
+  });
+
+  it('keeps text out of composition artwork in narrow layouts', () => {
+    const limits = {
+      'data-brief': { title: 740, subtitle: 740 },
+      'pixel-future': { title: 740, subtitle: 740 },
+      'abs-line-art': { title: 840, subtitle: 840 },
+      'abs-op-art': { title: 840, subtitle: 840 },
+      'abs-bauhaus': { title: 800, subtitle: 600 },
+      'product-launch': { title: 720, subtitle: 720 }
+    };
+
+    for (const [id, fields] of Object.entries(limits)) {
+      const svg = renderCover(id, LONG, DEFAULT_TYPOGRAPHY);
+      for (const [field, rightEdge] of Object.entries(fields)) {
+        const renderedRight = Math.max(...fieldLines(svg, field).map(line => line.right));
+        expect(renderedRight, `${id} ${field} artwork boundary`).toBeLessThanOrEqual(rightEdge);
+      }
+    }
+  });
+
+  it('escapes dynamic text and avoids fragile decorative glyphs', () => {
+    const svg = renderCover('mag-swiss', {
+      ...SAMPLE,
+      tag: 'A&B <产品>',
+      title: '标题 "安全" & 可读'
+    });
+    expect(svg).toContain('A&amp;B &lt;产品&gt;');
+    expect(svg).toContain('标题 &quot;安全&quot; &amp; 可读');
+    expect(COVER_TEMPLATES.map(t => t.render.toString()).join('\n')).not.toContain('№');
   });
 
   it('every template can be looked up by id', () => {

@@ -3,7 +3,7 @@
  * @module cover/renderer
  */
 
-import { COVER_TEMPLATES } from './templates.js';
+import { COVER_TEMPLATES, wrapText } from './templates.js';
 
 /** Default typography settings for cover images */
 export const DEFAULT_TYPOGRAPHY = {
@@ -79,6 +79,31 @@ export function getCategories() {
   return result;
 }
 
+function lineHeightPx(fontSize, lineHeight) {
+  return lineHeight <= 4 ? fontSize * lineHeight : lineHeight;
+}
+
+function flowCoverText(template, content, typography) {
+  if (!template.textBox) return { content, typography };
+
+  const title = wrapText(content.title, typography.titleSize, template.textBox.titleWidth);
+  const subtitle = wrapText(
+    content.subtitle,
+    typography.subtitleSize,
+    template.textBox.subtitleWidth || template.textBox.titleWidth
+  );
+  const titleLines = title ? title.split('\n').length : 0;
+
+  return {
+    content: { ...content, title, subtitle },
+    typography: {
+      ...typography,
+      subtitleOffsetY: typography.subtitleOffsetY
+        + Math.max(0, titleLines - 1) * lineHeightPx(typography.titleSize, typography.titleLineHeight)
+    }
+  };
+}
+
 /**
  * Render a cover SVG string.
  * @param {string} templateId
@@ -102,8 +127,10 @@ export function renderCover(templateId, content, typography = {}) {
     layerOrder: content.layerOrder || 'text-top'
   };
 
+  const flowed = flowCoverText(template, safeContent, mergedTypo);
+
   // Template renders at 1200x510 (~900:383 ratio for WeChat covers)
-  const svg = template.render(safeContent, mergedTypo);
+  const svg = template.render(flowed.content, flowed.typography);
   if (safeContent.layerOrder !== 'image-top') return svg;
 
   const illustrationBlocks = [];

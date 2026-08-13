@@ -8,6 +8,10 @@ export const COVER_RATIOS = {
   '900×383': { width: 900, height: 383, label: '900×383 · 公众号封面' }
 };
 
+export async function waitForDocumentFonts(fontSet = globalThis.document?.fonts) {
+  if (fontSet?.ready) await fontSet.ready;
+}
+
 /**
  * Export an SVG string as a downloadable PNG file.
  * @param {string} svgString - Complete SVG markup
@@ -15,6 +19,8 @@ export const COVER_RATIOS = {
  * @returns {Promise<void>}
  */
 export async function exportCoverPng(svgString, filename = 'cover') {
+  await waitForDocumentFonts();
+
   const parser = new DOMParser();
   const doc = parser.parseFromString(svgString, 'image/svg+xml');
   const svgEl = doc.documentElement;

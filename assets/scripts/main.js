@@ -83,19 +83,21 @@ const coverTypography = reactive({
   titleFontFamily: "system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif",
   subtitleFontFamily: "system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif"
 });
+const coverSansFallback = "'PingFang SC', 'Microsoft YaHei', sans-serif";
+const coverSerifFallback = "'Songti SC', 'SimSun', serif";
 const coverFontOptions = [
   { label: '系统默认', value: "system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif" },
-  { label: '思源黑体', value: "'Noto Sans SC', sans-serif" },
-  { label: '思源宋体', value: "'Noto Serif SC', serif" },
-  { label: '霞鹜文楷', value: "'LXGW WenKai', cursive" },
-  { label: 'ZCOOL 小薇', value: "'ZCOOL XiaoWei', sans-serif" },
-  { label: '站酷快乐体', value: "'ZCOOL KuaiLe', sans-serif" },
-  { label: '站酷庆黄油', value: "'ZCOOL QingKe HuangYou', sans-serif" },
-  { label: 'Ma Shan Zheng', value: "'Ma Shan Zheng', cursive" },
-  { label: '刘健毛草', value: "'Liu Jian Mao Cao', cursive" },
-  { label: '龙藏体', value: "'Long Cang', cursive" },
-  { label: 'Fraunces', value: "'Fraunces', 'Noto Serif SC', serif" },
-  { label: 'Plus Jakarta Sans', value: "'Plus Jakarta Sans', 'Noto Sans SC', sans-serif" }
+  { label: '思源黑体', value: `'Noto Sans SC', ${coverSansFallback}` },
+  { label: '思源宋体', value: `'Noto Serif SC', ${coverSerifFallback}` },
+  { label: '霞鹜文楷', value: `'LXGW WenKai', ${coverSansFallback}` },
+  { label: 'ZCOOL 小薇', value: `'ZCOOL XiaoWei', ${coverSansFallback}` },
+  { label: '站酷快乐体', value: `'ZCOOL KuaiLe', ${coverSansFallback}` },
+  { label: '站酷庆黄油', value: `'ZCOOL QingKe HuangYou', ${coverSansFallback}` },
+  { label: 'Ma Shan Zheng', value: `'Ma Shan Zheng', ${coverSansFallback}` },
+  { label: '刘健毛草', value: `'Liu Jian Mao Cao', ${coverSansFallback}` },
+  { label: '龙藏体', value: `'Long Cang', ${coverSansFallback}` },
+  { label: 'Fraunces', value: `'Fraunces', 'Noto Serif SC', ${coverSerifFallback}` },
+  { label: 'Plus Jakarta Sans', value: `'Plus Jakarta Sans', 'Noto Sans SC', ${coverSansFallback}` }
 ];
 const coverUndoStack = ref([]);
 const coverRedoStack = ref([]);
@@ -1311,10 +1313,10 @@ function loadDefaultExample() {
 
 切换到顶部 **「封面图」** 标签页，快速生成公众号封面：
 
-- **40 套精选模板**，涵盖深色、浅色、渐变、几何、插画、抽象艺术等风格
+- **46 套精选模板**，涵盖深色、浅色、渐变、几何、插画、抽象艺术等风格
 - **73 幅精选插画**，支持自定义颜色替换
 - 自由调整标题、副标题、标签的 **字体、字号、行高、字间距**
-- 导出 **2400 × 960** 高清 PNG
+- 导出 **2400 × 1020** 高清 PNG
 
 ### 一键发布
 
@@ -1372,7 +1374,7 @@ def analyze_articles(df):
 |------|------|------|
 | 文章主题 | 27 套风格主题 | 五类场景分类 |
 | 代码主题 | 17 种高亮方案 | 跟随文章主题联动 |
-| 封面模板 | 40 套 + 73 幅插画 | 场景标签辅助选择 |
+| 封面模板 | 46 套 + 73 幅插画 | 场景标签辅助选择 |
 | 手机预览 | 29 款机型 | 含折叠屏 |
 | 数学公式 | LaTeX 渲染 | 导出自动转 SVG |
 

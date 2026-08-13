@@ -54,8 +54,10 @@ function textW(text, fontSize) {
  * @param {number} maxWidth
  * @returns {string} text with '\n' inserted between visual lines
  */
-function wrapText(text, fontSize, maxWidth) {
+export function wrapText(text, fontSize, maxWidth) {
   if (!text) return '';
+  // ponytail: Cover fields are short UI copy. If unbounded text is supported,
+  // replace repeated textW calls with an incremental line width to make this O(n).
   const lines = [];
   for (const paragraph of String(text).split('\n')) {
     if (paragraph === '') { lines.push(''); continue; }
@@ -1318,11 +1320,10 @@ const magPopArt = {
   render(content, typo) {
     const bw = Math.max(150, tagW(content.tag, typo.tagSize) + 60);
     const bxc = 96 + bw / 2;
-    const TITLE_X = 80, TITLE_Y = 175, TITLE_W = 620, SUB_W = 620;
-    const titleWrapped = wrapText(content.title, typo.titleSize, TITLE_W);
-    const titleLines = titleWrapped === '' ? 0 : titleWrapped.split('\n').length;
+    const TITLE_X = 80, TITLE_Y = 175, TITLE_W = 620;
+    const titleLines = content.title === '' ? 0 : content.title.split('\n').length;
     const titlePx = lineHeightPx(typo.titleSize, typo.titleLineHeight);
-    const SUB_Y = TITLE_Y + titleLines * titlePx + 34;
+    const SUB_Y = TITLE_Y + titlePx + 34;
     const illustBlock = content.illustrationSvg
       ? illustrationLayer(embedIllustration(content.illustrationSvg, 756, 40, 388, 408, illustrationOpacity(content, 0.95)))
       : `<g opacity="0.92">
@@ -1347,8 +1348,8 @@ const magPopArt = {
   ${renderTextLines(content.tag, bxc, 105, typo.tagSize, typo.tagSize * 1.2, 2, 'center', '#E63946', '900', typo.subtitleFontFamily, 'tag')}` : ''}
   <!-- Pop highlight bar behind title, scales with wrapped block -->
   <rect x="66" y="${TITLE_Y - typo.titleSize + 14}" width="${TITLE_W + 28}" height="${titleLines * titlePx + typo.titleSize * 0.6}" fill="#FFB703" opacity="0.55"/>
-  ${renderTextLines(titleWrapped, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#111111', '900', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(wrapText(content.subtitle, typo.subtitleSize, SUB_W), TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#E63946', '700', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.title, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#111111', '900', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#E63946', '700', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
   <line x1="80" y1="478" x2="380" y2="478" stroke="#111111" stroke-width="5"/>
   <circle cx="420" cy="478" r="10" fill="#219EBC" stroke="#111111" stroke-width="3"/>
   <!-- Pop-art illustration frame -->
@@ -1368,11 +1369,8 @@ const magCollage = {
   illustFit: 'side',
   elements: { tag: true, title: true, subtitle: true, author: false, image: false, illustration: true },
   render(content, typo) {
-    const TITLE_X = 80, TITLE_Y = 190, TITLE_W = 620, SUB_W = 620;
-    const titleWrapped = wrapText(content.title, typo.titleSize, TITLE_W);
-    const titleLines = titleWrapped === '' ? 0 : titleWrapped.split('\n').length;
-    const titlePx = lineHeightPx(typo.titleSize, typo.titleLineHeight);
-    const SUB_Y = TITLE_Y + titleLines * titlePx + 30;
+    const TITLE_X = 80, TITLE_Y = 190;
+    const SUB_Y = TITLE_Y + lineHeightPx(typo.titleSize, typo.titleLineHeight) + 30;
     const illustBlock = content.illustrationSvg
       ? illustrationLayer(embedIllustration(content.illustrationSvg, 746, 46, 398, 418, illustrationOpacity(content, 0.95)))
       : `<g opacity="0.85">
@@ -1390,8 +1388,8 @@ const magCollage = {
   <!-- Typewriter tag -->
   ${content.tag ? renderTextLines(content.tag, 82, 138, typo.tagSize, typo.tagSize * 1.2, 2, 'left', '#2B2620', '600', typo.subtitleFontFamily, 'tag') : ''}
   ${content.tag ? `<rect x="80" y="152" width="${Math.max(30, tagW(content.tag, typo.tagSize) * 0.7)}" height="4" fill="#E56B4A"/>` : ''}
-  ${renderTextLines(titleWrapped, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#2B2620', '700', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(wrapText(content.subtitle, typo.subtitleSize, SUB_W), TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#7A6A58', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.title, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#2B2620', '700', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#7A6A58', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
   <!-- Illustration paper card, slightly rotated -->
   <g transform="rotate(1.5, 950, 260)">
     <rect x="730" y="30" width="430" height="450" fill="#FFFDF6" stroke="#2B2620" stroke-width="2"/>
@@ -1411,11 +1409,8 @@ const magDuotone = {
   illustFit: 'side',
   elements: { tag: true, title: true, subtitle: true, author: false, image: false, illustration: true },
   render(content, typo) {
-    const TITLE_X = 80, TITLE_Y = 185, TITLE_W = 620, SUB_W = 620;
-    const titleWrapped = wrapText(content.title, typo.titleSize, TITLE_W);
-    const titleLines = titleWrapped === '' ? 0 : titleWrapped.split('\n').length;
-    const titlePx = lineHeightPx(typo.titleSize, typo.titleLineHeight);
-    const SUB_Y = TITLE_Y + titleLines * titlePx + 30;
+    const TITLE_X = 80, TITLE_Y = 185;
+    const SUB_Y = TITLE_Y + lineHeightPx(typo.titleSize, typo.titleLineHeight) + 30;
     const illustBlock = content.illustrationSvg
       ? illustrationLayer(embedIllustration(content.illustrationSvg, 764, 62, 388, 376, illustrationOpacity(content, 0.9)))
       : `<g opacity="0.85">
@@ -1438,8 +1433,8 @@ const magDuotone = {
   ${content.tag ? `<rect x="80" y="66" width="${Math.max(60, tagW(content.tag, typo.tagSize) + 34)}" height="40" fill="none" stroke="#FF4D6D" stroke-width="2"/>
   <rect x="86" y="72" width="${Math.max(60, tagW(content.tag, typo.tagSize) + 34)}" height="40" fill="none" stroke="#00E5FF" stroke-width="1" opacity="0.8"/>
   ${renderTextLines(content.tag, 97, 94, typo.tagSize, typo.tagSize * 1.2, 2, 'left', '#FFD6DE', '600', typo.subtitleFontFamily, 'tag')}` : ''}
-  ${renderTextLines(titleWrapped, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#F5F5F7', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(wrapText(content.subtitle, typo.subtitleSize, SUB_W), TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#00E5FF', '500', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.title, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#F5F5F7', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#00E5FF', '500', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
   <!-- Duotone neon frame -->
   <rect x="748" y="36" width="420" height="438" fill="none" stroke="#00E5FF" stroke-width="2"/>
   <rect x="756" y="44" width="404" height="422" fill="none" stroke="#FF4D6D" stroke-width="2"/>
@@ -1456,11 +1451,8 @@ const magSwiss = {
   illustFit: 'side',
   elements: { tag: true, title: true, subtitle: true, author: false, image: false, illustration: true },
   render(content, typo) {
-    const TITLE_X = 80, TITLE_Y = 205, TITLE_W = 620, SUB_W = 620;
-    const titleWrapped = wrapText(content.title, typo.titleSize, TITLE_W);
-    const titleLines = titleWrapped === '' ? 0 : titleWrapped.split('\n').length;
-    const titlePx = lineHeightPx(typo.titleSize, typo.titleLineHeight);
-    const SUB_Y = TITLE_Y + titleLines * titlePx + 26;
+    const TITLE_X = 80, TITLE_Y = 205;
+    const SUB_Y = TITLE_Y + lineHeightPx(typo.titleSize, typo.titleLineHeight) + 26;
     const illustBlock = content.illustrationSvg
       ? illustrationLayer(embedIllustration(content.illustrationSvg, 754, 84, 372, 272, illustrationOpacity(content, 0.95)))
       : `<g opacity="0.85">
@@ -1478,10 +1470,10 @@ const magSwiss = {
   <line x1="440" y1="60" x2="440" y2="496" stroke="#111111" stroke-width="0.5" opacity="0.18"/>
   <!-- Red accent block -->
   <rect x="80" y="60" width="56" height="56" fill="#E63946"/>
-  <text x="108" y="96" font-size="30" font-family="${SERIF_FAMILY}" fill="#FFFFFF" font-weight="700" text-anchor="middle">№</text>
+  <text x="108" y="94" font-size="20" font-family="${SERIF_FAMILY}" fill="#FFFFFF" font-weight="700" text-anchor="middle">NO.</text>
   ${content.tag ? renderTextLines(content.tag, 80, 166, typo.tagSize, typo.tagSize * 1.2, 3, 'left', '#E63946', '700', typo.subtitleFontFamily, 'tag') : ''}
-  ${renderTextLines(titleWrapped, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#111111', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(wrapText(content.subtitle, typo.subtitleSize, SUB_W), TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#555555', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.title, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#111111', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#555555', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
   <!-- Illustration in grid cell -->
   <rect x="740" y="70" width="400" height="300" fill="none" stroke="#111111" stroke-width="1.5"/>
   ${illustBlock}
@@ -1502,11 +1494,8 @@ const magRetroMasthead = {
   illustFit: 'side',
   elements: { tag: true, title: true, subtitle: true, author: true, issue: true, image: false, illustration: true },
   render(content, typo) {
-    const TITLE_X = 80, TITLE_Y = 210, TITLE_W = 620, SUB_W = 620;
-    const titleWrapped = wrapText(content.title, typo.titleSize, TITLE_W);
-    const titleLines = titleWrapped === '' ? 0 : titleWrapped.split('\n').length;
-    const titlePx = lineHeightPx(typo.titleSize, typo.titleLineHeight);
-    const SUB_Y = TITLE_Y + titleLines * titlePx + 26;
+    const TITLE_X = 80, TITLE_Y = 210;
+    const SUB_Y = TITLE_Y + lineHeightPx(typo.titleSize, typo.titleLineHeight) + 26;
     const illustBlock = content.illustrationSvg
       ? illustrationLayer(embedIllustration(content.illustrationSvg, 756, 56, 388, 398, illustrationOpacity(content, 0.95)))
       : `<g opacity="0.85">
@@ -1529,8 +1518,8 @@ const magRetroMasthead = {
   <!-- Sunburst behind headline -->
   <circle cx="210" cy="250" r="160" fill="url(#rm-sun)"/>
   ${content.tag ? renderTextLines(content.tag, 82, 140, typo.tagSize, typo.tagSize * 1.2, 4, 'left', '#F97316', '800', typo.subtitleFontFamily, 'tag') : ''}
-  ${renderTextLines(titleWrapped, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#2B2620', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(wrapText(content.subtitle, typo.subtitleSize, SUB_W), TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#8A6D4F', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.title, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#2B2620', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#8A6D4F', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
   <!-- Portrait frame -->
   <g transform="rotate(2, 950, 260)">
     <rect x="740" y="30" width="420" height="450" fill="none" stroke="#2B2620" stroke-width="3"/>
@@ -1554,11 +1543,8 @@ const absFluidBlobs = {
   id: 'abs-fluid-blobs', name: '流体色块', category: 'abstract-art',
   elements: { tag: true, title: true, subtitle: true, author: false, image: false },
   render(content, typo) {
-    const TITLE_X = 80, TITLE_Y = 210, TITLE_W = 1040, SUB_W = 1040;
-    const titleWrapped = wrapText(content.title, typo.titleSize, TITLE_W);
-    const titleLines = titleWrapped === '' ? 0 : titleWrapped.split('\n').length;
-    const titlePx = lineHeightPx(typo.titleSize, typo.titleLineHeight);
-    const SUB_Y = TITLE_Y + titleLines * titlePx + 30;
+    const TITLE_X = 80, TITLE_Y = 210;
+    const SUB_Y = TITLE_Y + lineHeightPx(typo.titleSize, typo.titleLineHeight) + 30;
     return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <radialGradient id="fb-g1" cx="0.5" cy="0.5"><stop offset="0%" stop-color="#C4B5FD" stop-opacity="0.9"/><stop offset="100%" stop-color="#C4B5FD" stop-opacity="0"/></radialGradient>
@@ -1575,8 +1561,8 @@ const absFluidBlobs = {
   ${content.tag ? `<rect x="80" y="90" width="${Math.max(60, tagW(content.tag, typo.tagSize) + 30)}" height="36" rx="18" fill="#A78BFA" opacity="0.16"/>
   <rect x="80" y="90" width="${Math.max(60, tagW(content.tag, typo.tagSize) + 30)}" height="36" rx="18" fill="none" stroke="#7C3AED" stroke-width="1" opacity="0.3"/>
   ${renderTextLines(content.tag, 96, 116, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#6D28D9', '600', typo.subtitleFontFamily, 'tag')}` : ''}
-  ${renderTextLines(titleWrapped, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#1F2937', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(wrapText(content.subtitle, typo.subtitleSize, SUB_W), TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#6B7280', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.title, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#1F2937', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#6B7280', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
   <line x1="80" y1="470" x2="260" y2="470" stroke="#C4B5FD" stroke-width="2.5" opacity="0.6"/>
   <circle cx="270" cy="470" r="4" fill="#FCD34D" opacity="0.9"/>
 </svg>`;
@@ -1590,11 +1576,8 @@ const absLineArt = {
   id: 'abs-line-art', name: '极简线构', category: 'abstract-art',
   elements: { tag: true, title: true, subtitle: true, author: false, image: false },
   render(content, typo) {
-    const TITLE_X = 80, TITLE_Y = 230, TITLE_W = 1040, SUB_W = 1040;
-    const titleWrapped = wrapText(content.title, typo.titleSize, TITLE_W);
-    const titleLines = titleWrapped === '' ? 0 : titleWrapped.split('\n').length;
-    const titlePx = lineHeightPx(typo.titleSize, typo.titleLineHeight);
-    const SUB_Y = TITLE_Y + titleLines * titlePx + 30;
+    const TITLE_X = 80, TITLE_Y = 230;
+    const SUB_Y = TITLE_Y + lineHeightPx(typo.titleSize, typo.titleLineHeight) + 30;
     return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <rect width="1200" height="510" fill="#FAF7F0"/>
   <circle cx="980" cy="130" r="130" fill="none" stroke="#1F2937" stroke-width="1.5"/>
@@ -1607,8 +1590,8 @@ const absLineArt = {
   <circle cx="500" cy="120" r="3" fill="#1F2937" opacity="0.6"/>
   <circle cx="1120" cy="330" r="2.5" fill="#1F2937" opacity="0.5"/>
   ${content.tag ? renderTextLines(content.tag, 80, 152, typo.tagSize, typo.tagSize * 1.2, 3, 'left', '#F97316', '700', typo.subtitleFontFamily, 'tag') : ''}
-  ${renderTextLines(titleWrapped, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#1F2937', '700', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(wrapText(content.subtitle, typo.subtitleSize, SUB_W), TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#6B7280', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.title, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#1F2937', '700', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#6B7280', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -1620,11 +1603,8 @@ const absOpArt = {
   id: 'abs-op-art', name: '视错觉波纹', category: 'abstract-art',
   elements: { tag: true, title: true, subtitle: true, author: false, image: false },
   render(content, typo) {
-    const TITLE_X = 80, TITLE_Y = 235, TITLE_W = 1040, SUB_W = 1040;
-    const titleWrapped = wrapText(content.title, typo.titleSize, TITLE_W);
-    const titleLines = titleWrapped === '' ? 0 : titleWrapped.split('\n').length;
-    const titlePx = lineHeightPx(typo.titleSize, typo.titleLineHeight);
-    const SUB_Y = TITLE_Y + titleLines * titlePx + 30;
+    const TITLE_X = 80, TITLE_Y = 235;
+    const SUB_Y = TITLE_Y + lineHeightPx(typo.titleSize, typo.titleLineHeight) + 30;
     let arcs = '';
     for (let i = 1; i <= 6; i++) {
       const r = i * 66;
@@ -1642,10 +1622,11 @@ const absOpArt = {
   ${arcs}
   <circle cx="600" cy="640" r="44" fill="#E63946"/>
   <circle cx="600" cy="640" r="18" fill="#111111"/>
+  <rect x="52" y="154" width="824" height="330" rx="8" fill="#FDFBF7" opacity="0.94"/>
   ${content.tag ? `<rect x="80" y="170" width="${Math.max(60, tagW(content.tag, typo.tagSize) + 28)}" height="30" fill="#111111"/>
   ${renderTextLines(content.tag, 94, 191, typo.tagSize, typo.tagSize * 1.2, 2, 'left', '#FFFFFF', '800', typo.subtitleFontFamily, 'tag')}` : ''}
-  ${renderTextLines(titleWrapped, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#111111', '900', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(wrapText(content.subtitle, typo.subtitleSize, SUB_W), TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#444444', '500', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.title, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#111111', '900', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#444444', '500', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -1657,11 +1638,8 @@ const absBauhaus = {
   id: 'abs-bauhaus', name: '包豪斯构成', category: 'abstract-art',
   elements: { tag: true, title: true, subtitle: true, author: false, image: false },
   render(content, typo) {
-    const TITLE_X = 80, TITLE_Y = 210, TITLE_W = 1040, SUB_W = 1040;
-    const titleWrapped = wrapText(content.title, typo.titleSize, TITLE_W);
-    const titleLines = titleWrapped === '' ? 0 : titleWrapped.split('\n').length;
-    const titlePx = lineHeightPx(typo.titleSize, typo.titleLineHeight);
-    const SUB_Y = TITLE_Y + titleLines * titlePx + 32;
+    const TITLE_X = 80, TITLE_Y = 210;
+    const SUB_Y = TITLE_Y + lineHeightPx(typo.titleSize, typo.titleLineHeight) + 32;
     return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <rect width="1200" height="510" fill="#F5F1EA"/>
   <!-- Bauhaus composition -->
@@ -1678,11 +1656,11 @@ const absBauhaus = {
   <circle cx="430" cy="496" r="14" fill="#1D4ED8"/>
   ${content.tag ? `<rect x="80" y="78" width="${Math.max(60, tagW(content.tag, typo.tagSize) + 32)}" height="34" fill="#111111"/>
   ${renderTextLines(content.tag, 96, 102, typo.tagSize, typo.tagSize * 1.2, 2, 'left', '#F5F1EA', '700', typo.subtitleFontFamily, 'tag')}` : ''}
-  ${renderTextLines(titleWrapped, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#111111', '900', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  <rect x="80" y="${SUB_Y - 26}" width="140" height="10" fill="#E63946"/>
-  <rect x="230" y="${SUB_Y - 26}" width="60" height="10" fill="#1D4ED8"/>
-  <rect x="300" y="${SUB_Y - 26}" width="40" height="10" fill="#F59E0B"/>
-  ${content.subtitle ? renderTextLines(wrapText(content.subtitle, typo.subtitleSize, SUB_W), TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#4B5563', '500', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.title, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#111111', '900', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  <rect x="80" y="${SUB_Y + (typo.subtitleOffsetY || 0) - 26}" width="140" height="10" fill="#E63946"/>
+  <rect x="230" y="${SUB_Y + (typo.subtitleOffsetY || 0) - 26}" width="60" height="10" fill="#1D4ED8"/>
+  <rect x="300" y="${SUB_Y + (typo.subtitleOffsetY || 0) - 26}" width="40" height="10" fill="#F59E0B"/>
+  ${content.subtitle ? renderTextLines(content.subtitle, TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#4B5563', '500', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
@@ -1694,11 +1672,8 @@ const absRetroSun = {
   id: 'abs-retro-sun', name: '复古日出', category: 'abstract-art',
   elements: { tag: true, title: true, subtitle: true, author: false, image: false },
   render(content, typo) {
-    const TITLE_X = 520, TITLE_Y = 205, TITLE_W = 660, SUB_W = 660;
-    const titleWrapped = wrapText(content.title, typo.titleSize, TITLE_W);
-    const titleLines = titleWrapped === '' ? 0 : titleWrapped.split('\n').length;
-    const titlePx = lineHeightPx(typo.titleSize, typo.titleLineHeight);
-    const SUB_Y = TITLE_Y + titleLines * titlePx + 26;
+    const TITLE_X = 520, TITLE_Y = 205;
+    const SUB_Y = TITLE_Y + lineHeightPx(typo.titleSize, typo.titleLineHeight) + 26;
     return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="rs-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1E1B4B"/><stop offset="55%" stop-color="#6D28D9"/><stop offset="100%" stop-color="#7C3AED"/></linearGradient>
@@ -1728,14 +1703,232 @@ const absRetroSun = {
   ${content.tag ? `<rect x="520" y="72" width="${Math.max(64, tagW(content.tag, typo.tagSize) + 30)}" height="36" rx="18" fill="#22D3EE" opacity="0.18"/>
   <rect x="520" y="72" width="${Math.max(64, tagW(content.tag, typo.tagSize) + 30)}" height="36" rx="18" fill="none" stroke="#67E8F9" stroke-width="1" opacity="0.5"/>
   ${renderTextLines(content.tag, 536, 98, typo.tagSize, typo.tagSize * 1.2, 1.5, 'left', '#A5F3FC', '600', typo.subtitleFontFamily, 'tag')}` : ''}
-  ${renderTextLines(titleWrapped, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#FFF8E7', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(wrapText(content.subtitle, typo.subtitleSize, SUB_W), TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#E9D5FF', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${renderTextLines(content.title, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#FFF8E7', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#E9D5FF', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
 </svg>`;
   }
 };
 
 // ============================================================
-// Export all 40 templates
+// Professional editorial: editorial-depth / 深度社论
+// ============================================================
+const editorialDepth = {
+  id: 'editorial-depth', name: '深度社论', category: 'editorial',
+  elements: { tag: true, title: true, subtitle: true, author: true, image: false },
+  render(content, typo) {
+    const TITLE_X = 80, TITLE_Y = 165;
+    const SUB_Y = TITLE_Y + lineHeightPx(typo.titleSize, typo.titleLineHeight) + 30;
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="510" fill="#F4F0E8"/>
+  <rect x="0" y="0" width="22" height="510" fill="#9F2D24"/>
+  <line x1="56" y1="42" x2="1144" y2="42" stroke="#24211D" stroke-width="2"/>
+  <line x1="56" y1="50" x2="1144" y2="50" stroke="#24211D" stroke-width="0.7" opacity="0.45"/>
+  <rect x="860" y="82" width="276" height="344" fill="#E9E1D3"/>
+  <line x1="884" y1="116" x2="1112" y2="116" stroke="#9F2D24" stroke-width="7"/>
+  <line x1="884" y1="154" x2="1080" y2="154" stroke="#24211D" stroke-width="2" opacity="0.7"/>
+  <line x1="884" y1="188" x2="1100" y2="188" stroke="#24211D" stroke-width="1" opacity="0.35"/>
+  <line x1="884" y1="212" x2="1086" y2="212" stroke="#24211D" stroke-width="1" opacity="0.35"/>
+  <line x1="884" y1="236" x2="1112" y2="236" stroke="#24211D" stroke-width="1" opacity="0.35"/>
+  <rect x="884" y="284" width="86" height="86" fill="#9F2D24"/>
+  <rect x="986" y="284" width="126" height="86" fill="#24211D" opacity="0.88"/>
+  <circle cx="927" cy="327" r="22" fill="#F4F0E8" opacity="0.88"/>
+  <path d="M1014 344L1044 308L1070 330L1092 300" fill="none" stroke="#F4F0E8" stroke-width="4"/>
+  <text x="1120" y="404" font-size="13" font-family="${typo.subtitleFontFamily}" fill="#655E55" text-anchor="end" letter-spacing="2">OPINION / ANALYSIS</text>
+  ${content.tag ? `<rect x="80" y="76" width="${Math.max(72, tagW(content.tag, typo.tagSize) + 34)}" height="38" fill="#9F2D24"/>
+  ${renderTextLines(content.tag, 97, 103, typo.tagSize, typo.tagSize * 1.2, 2, 'left', '#FFF9F0', '700', typo.subtitleFontFamily, 'tag')}` : ''}
+  ${renderTextLines(content.title, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#24211D', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#655E55', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  <line x1="80" y1="466" x2="760" y2="466" stroke="#24211D" stroke-width="1" opacity="0.5"/>
+  ${content.author ? renderTextLines(content.author, 80, 492, typo.authorSize, typo.authorSize * 1.3, 1.5, 'left', '#9F2D24', '700', typo.subtitleFontFamily, 'author') : ''}
+</svg>`;
+  }
+};
+
+// ============================================================
+// Professional editorial: data-brief / 数据简报
+// ============================================================
+const dataBrief = {
+  id: 'data-brief', name: '数据简报', category: 'solid-dark',
+  elements: { tag: true, title: true, subtitle: true, author: false, image: false },
+  render(content, typo) {
+    const TITLE_X = 80, TITLE_Y = 180;
+    const SUB_Y = TITLE_Y + lineHeightPx(typo.titleSize, typo.titleLineHeight) + 30;
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="db-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#071A2B"/><stop offset="100%" stop-color="#102D3D"/></linearGradient>
+    <pattern id="db-grid" width="36" height="36" patternUnits="userSpaceOnUse"><path d="M36 0H0V36" fill="none" stroke="#6EE7D2" stroke-width="0.8" opacity="0.12"/></pattern>
+  </defs>
+  <rect width="1200" height="510" fill="url(#db-bg)"/>
+  <rect x="744" y="0" width="456" height="510" fill="url(#db-grid)"/>
+  <rect x="774" y="64" width="364" height="382" rx="24" fill="#061521" stroke="#6EE7D2" stroke-width="1.5" stroke-opacity="0.38"/>
+  <line x1="816" y1="370" x2="1098" y2="370" stroke="#A8B8C5" stroke-width="1" opacity="0.2"/>
+  <line x1="816" y1="282" x2="1098" y2="282" stroke="#A8B8C5" stroke-width="1" opacity="0.14"/>
+  <line x1="816" y1="194" x2="1098" y2="194" stroke="#A8B8C5" stroke-width="1" opacity="0.14"/>
+  <path d="M816 350C862 330 882 342 916 292C954 236 984 266 1018 204C1044 158 1076 172 1098 126" fill="none" stroke="#6EE7D2" stroke-width="6" stroke-linecap="round"/>
+  <path d="M816 330C862 302 904 326 940 284C978 240 1028 260 1098 216" fill="none" stroke="#5DA9FF" stroke-width="3" stroke-linecap="round" opacity="0.7"/>
+  <circle cx="1098" cy="126" r="9" fill="#6EE7D2"/>
+  <circle cx="1098" cy="216" r="7" fill="#5DA9FF"/>
+  <text x="816" y="108" font-size="14" font-family="${typo.subtitleFontFamily}" fill="#8CA1B1" letter-spacing="3">SIGNAL / 24H</text>
+  <text x="1098" y="416" font-size="13" font-family="${typo.subtitleFontFamily}" fill="#6EE7D2" text-anchor="end" letter-spacing="2">OPEN DATA BRIEF</text>
+  ${content.tag ? `<rect x="80" y="78" width="${Math.max(76, tagW(content.tag, typo.tagSize) + 34)}" height="38" rx="19" fill="#6EE7D2" fill-opacity="0.12" stroke="#6EE7D2" stroke-opacity="0.5"/>
+  ${renderTextLines(content.tag, 97, 105, typo.tagSize, typo.tagSize * 1.2, 2, 'left', '#8CF1DF', '700', typo.subtitleFontFamily, 'tag')}` : ''}
+  ${renderTextLines(content.title, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#F6FAFC', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#B5C5D0', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  <rect x="80" y="462" width="220" height="5" fill="#6EE7D2"/>
+  <rect x="310" y="462" width="86" height="5" fill="#5DA9FF" opacity="0.8"/>
+</svg>`;
+  }
+};
+
+// ============================================================
+// Professional editorial: product-launch / 产品发布
+// ============================================================
+const productLaunch = {
+  id: 'product-launch', name: '产品发布', category: 'geometric',
+  elements: { tag: true, title: true, subtitle: true, author: false, issue: true, image: false },
+  render(content, typo) {
+    const TITLE_X = 80, TITLE_Y = 180;
+    const SUB_Y = TITLE_Y + lineHeightPx(typo.titleSize, typo.titleLineHeight) + 30;
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="pl-panel" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#155EEF"/><stop offset="100%" stop-color="#1237A4"/></linearGradient>
+    <pattern id="pl-grid" width="48" height="48" patternUnits="userSpaceOnUse"><path d="M48 0H0V48" fill="none" stroke="#155EEF" stroke-width="0.8" opacity="0.1"/></pattern>
+  </defs>
+  <rect width="1200" height="510" fill="#F6F8FC"/>
+  <rect width="1200" height="510" fill="url(#pl-grid)"/>
+  <path d="M788 0H1200V510H698L788 0Z" fill="url(#pl-panel)"/>
+  <rect x="826" y="72" width="292" height="340" rx="34" fill="#FFFFFF" fill-opacity="0.1" stroke="#FFFFFF" stroke-width="2" stroke-opacity="0.5"/>
+  <rect x="856" y="112" width="232" height="112" rx="20" fill="#FFFFFF"/>
+  <rect x="884" y="140" width="88" height="16" rx="8" fill="#155EEF" opacity="0.22"/>
+  <rect x="884" y="176" width="164" height="14" rx="7" fill="#0B214A" opacity="0.12"/>
+  <circle cx="1052" cy="148" r="18" fill="#155EEF"/>
+  <path d="M884 314L930 270L968 298L1038 246L1082 276" fill="none" stroke="#A8D7FF" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="930" cy="270" r="8" fill="#FFFFFF"/><circle cx="1038" cy="246" r="8" fill="#FFFFFF"/>
+  <text x="1088" y="382" font-size="13" font-family="${typo.subtitleFontFamily}" fill="#FFFFFF" text-anchor="end" letter-spacing="2">READY TO SHIP</text>
+  ${content.tag ? renderTextLines(content.tag, 80, 102, typo.tagSize, typo.tagSize * 1.2, 2, 'left', '#155EEF', '800', typo.subtitleFontFamily, 'tag') : ''}
+  ${renderTextLines(content.issueNumber || 'No.01', 704, 76, 18, 22, 2, 'right', '#155EEF', '700', typo.subtitleFontFamily, 'issueNumber')}
+  ${renderTextLines(content.title, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#0B214A', '850', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#4D607C', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  <rect x="80" y="454" width="308" height="8" rx="4" fill="#155EEF"/>
+  <rect x="398" y="454" width="88" height="8" rx="4" fill="#9DCBFF"/>
+</svg>`;
+  }
+};
+
+// ============================================================
+// Creative visual: prism-spectrum / 棱镜光谱
+// ============================================================
+const prismSpectrum = {
+  id: 'prism-spectrum', name: '棱镜光谱', category: 'gradient',
+  elements: { tag: true, title: true, subtitle: true, author: false, image: false },
+  render(content, typo) {
+    const TITLE_X = 80, TITLE_Y = 195;
+    const SUB_Y = TITLE_Y + lineHeightPx(typo.titleSize, typo.titleLineHeight) + 30;
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="ps-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#090B1B"/><stop offset="55%" stop-color="#17152E"/><stop offset="100%" stop-color="#081726"/></linearGradient>
+    <linearGradient id="ps-ray" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#6EE7F9" stop-opacity="0"/><stop offset="45%" stop-color="#6EE7F9" stop-opacity="0.9"/><stop offset="70%" stop-color="#F472B6" stop-opacity="0.9"/><stop offset="100%" stop-color="#FDE047" stop-opacity="0"/></linearGradient>
+    <linearGradient id="ps-glass" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#DFFAFF" stop-opacity="0.65"/><stop offset="50%" stop-color="#A78BFA" stop-opacity="0.18"/><stop offset="100%" stop-color="#F472B6" stop-opacity="0.5"/></linearGradient>
+  </defs>
+  <rect width="1200" height="510" fill="url(#ps-bg)"/>
+  <path d="M640 270L1200 72" stroke="url(#ps-ray)" stroke-width="30" opacity="0.62"/>
+  <path d="M640 270L1200 438" stroke="url(#ps-ray)" stroke-width="22" opacity="0.48"/>
+  <polygon points="790,66 1062,254 822,452 674,270" fill="url(#ps-glass)" stroke="#E8F7FF" stroke-width="2" stroke-opacity="0.62"/>
+  <polygon points="790,66 822,452 674,270" fill="#67E8F9" opacity="0.1"/>
+  <polygon points="790,66 1062,254 674,270" fill="#FDE047" opacity="0.08"/>
+  <polygon points="1062,254 822,452 674,270" fill="#F472B6" opacity="0.12"/>
+  <circle cx="1082" cy="88" r="5" fill="#FDE047"/>
+  <circle cx="1132" cy="392" r="7" fill="#67E8F9"/>
+  <circle cx="716" cy="92" r="4" fill="#F472B6"/>
+  <path d="M54 54H122M54 54V122" stroke="#E8F7FF" stroke-width="2" opacity="0.3"/>
+  <path d="M1146 456H1078M1146 456V388" stroke="#E8F7FF" stroke-width="2" opacity="0.3"/>
+  ${content.tag ? `<rect x="80" y="86" width="${Math.max(76, tagW(content.tag, typo.tagSize) + 36)}" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.08" stroke="#67E8F9" stroke-opacity="0.5"/>
+  ${renderTextLines(content.tag, 98, 113, typo.tagSize, typo.tagSize * 1.2, 2, 'left', '#BFF7FF', '700', typo.subtitleFontFamily, 'tag')}` : ''}
+  ${renderTextLines(content.title, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#F8FAFF', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#C8C9E8', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  <line x1="80" y1="466" x2="424" y2="466" stroke="url(#ps-ray)" stroke-width="5"/>
+</svg>`;
+  }
+};
+
+// ============================================================
+// Creative visual: paper-cut-window / 纸雕窗口
+// ============================================================
+const paperCutWindow = {
+  id: 'paper-cut-window', name: '纸雕窗口', category: 'abstract-art',
+  elements: { tag: true, title: true, subtitle: true, author: false, image: false },
+  render(content, typo) {
+    const TITLE_X = 80, TITLE_Y = 175;
+    const SUB_Y = TITLE_Y + lineHeightPx(typo.titleSize, typo.titleLineHeight) + 30;
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="pcw-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FFF7ED"/><stop offset="100%" stop-color="#F6E7D8"/></linearGradient>
+    <radialGradient id="pcw-core" cx="0.4" cy="0.35"><stop offset="0%" stop-color="#FFD37D"/><stop offset="100%" stop-color="#F47B61"/></radialGradient>
+  </defs>
+  <rect width="1200" height="510" fill="url(#pcw-bg)"/>
+  <path d="M1200 28C1038 -8 876 44 814 154C756 256 824 364 942 510H1200Z" fill="#E9B8A6" opacity="0.7"/>
+  <path d="M1200 78C1060 38 928 82 878 170C830 254 888 344 990 510H1200Z" fill="#C98080" opacity="0.76"/>
+  <path d="M1200 130C1082 90 978 124 938 196C900 266 948 338 1032 510H1200Z" fill="#80556F" opacity="0.82"/>
+  <path d="M1200 186C1104 148 1026 176 998 228C970 280 1008 336 1072 510H1200Z" fill="#3C3D63" opacity="0.9"/>
+  <ellipse cx="1108" cy="292" rx="112" ry="148" fill="url(#pcw-core)"/>
+  <ellipse cx="1108" cy="292" rx="72" ry="102" fill="#FFE8B5" opacity="0.78"/>
+  <circle cx="1088" cy="258" r="24" fill="#FFF7ED" opacity="0.74"/>
+  <path d="M754 84C806 46 872 48 914 88" fill="none" stroke="#C98080" stroke-width="4" opacity="0.46"/>
+  <path d="M714 430C774 386 844 388 900 432" fill="none" stroke="#80556F" stroke-width="3" opacity="0.36"/>
+  ${content.tag ? `<rect x="80" y="78" width="${Math.max(76, tagW(content.tag, typo.tagSize) + 36)}" height="38" rx="19" fill="#80556F" fill-opacity="0.12" stroke="#80556F" stroke-opacity="0.35"/>
+  ${renderTextLines(content.tag, 98, 105, typo.tagSize, typo.tagSize * 1.2, 2, 'left', '#80556F', '700', typo.subtitleFontFamily, 'tag')}` : ''}
+  ${renderTextLines(content.title, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#342A35', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#725C67', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  <path d="M80 466H348" stroke="#C98080" stroke-width="6" stroke-linecap="round"/>
+  <path d="M362 466H438" stroke="#80556F" stroke-width="6" stroke-linecap="round"/>
+</svg>`;
+  }
+};
+
+// ============================================================
+// Creative visual: pixel-future / 像素未来
+// ============================================================
+const pixelFuture = {
+  id: 'pixel-future', name: '像素未来', category: 'solid-dark',
+  elements: { tag: true, title: true, subtitle: true, author: false, image: false },
+  render(content, typo) {
+    const TITLE_X = 80, TITLE_Y = 180;
+    const SUB_Y = TITLE_Y + lineHeightPx(typo.titleSize, typo.titleLineHeight) + 30;
+    const pixels = [
+      [812, 84, 52, '#6EE7F9'], [876, 84, 24, '#A78BFA'], [912, 84, 84, '#F472B6'],
+      [1008, 84, 42, '#FDE047'], [1062, 84, 70, '#6EE7F9'], [812, 148, 84, '#A78BFA'],
+      [908, 148, 42, '#6EE7F9'], [962, 148, 88, '#172554'], [1062, 148, 70, '#F472B6'],
+      [812, 212, 42, '#FDE047'], [866, 212, 84, '#172554'], [962, 212, 42, '#A78BFA'],
+      [1016, 212, 116, '#6EE7F9'], [812, 276, 116, '#F472B6'], [940, 276, 52, '#FDE047'],
+      [1004, 276, 52, '#A78BFA'], [1068, 276, 64, '#172554'], [812, 340, 52, '#6EE7F9'],
+      [876, 340, 116, '#172554'], [1004, 340, 42, '#F472B6'], [1058, 340, 74, '#FDE047']
+    ].map(([x, y, size, color]) => `<rect x="${x}" y="${y}" width="${size}" height="52" rx="4" fill="${color}" opacity="${color === '#172554' ? 0.8 : 0.78}"/>`).join('');
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="pf-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#06101E"/><stop offset="100%" stop-color="#10152D"/></linearGradient>
+    <pattern id="pf-scan" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="1" fill="#FFFFFF" opacity="0.025"/></pattern>
+  </defs>
+  <rect width="1200" height="510" fill="url(#pf-bg)"/>
+  <rect width="1200" height="510" fill="url(#pf-scan)"/>
+  <rect x="778" y="52" width="388" height="374" rx="14" fill="#030712" stroke="#6EE7F9" stroke-width="2" stroke-opacity="0.32"/>
+  ${pixels}
+  <path d="M778 446H1166M798 470H1082" stroke="#6EE7F9" stroke-width="2" opacity="0.34"/>
+  <rect x="1122" y="454" width="44" height="16" fill="#F472B6"/>
+  <path d="M48 48H112V60H60V112H48Z" fill="#6EE7F9" opacity="0.5"/>
+  <path d="M1152 40H1096V52H1140V96H1152Z" fill="#FDE047" opacity="0.5"/>
+  ${content.tag ? `<rect x="80" y="78" width="${Math.max(76, tagW(content.tag, typo.tagSize) + 34)}" height="38" rx="4" fill="#6EE7F9" fill-opacity="0.12" stroke="#6EE7F9" stroke-opacity="0.5"/>
+  ${renderTextLines(content.tag, 97, 105, typo.tagSize, typo.tagSize * 1.2, 2, 'left', '#A6F6FF', '700', typo.subtitleFontFamily, 'tag')}` : ''}
+  ${renderTextLines(content.title, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'left', '#F8FAFC', '850', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(content.subtitle, TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'left', '#B6C3D5', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  <rect x="80" y="458" width="216" height="7" fill="#6EE7F9"/>
+  <rect x="308" y="458" width="72" height="7" fill="#F472B6"/>
+  <rect x="392" y="458" width="44" height="7" fill="#FDE047"/>
+</svg>`;
+  }
+};
+
+// ============================================================
+// Export all templates
 // ============================================================
 /**
  * Template metadata for preview UI — scenario descriptions and style tags.
@@ -1781,33 +1974,93 @@ export const TEMPLATE_META = {
   'tech-blueprint':     { scenario: '系统方案、工具链文章',   styleTags: ['技术', '蓝图', '结构'] },
   'tech-terminal-map':  { scenario: '工程日志、故障复盘',     styleTags: ['技术', '深色', '终端'] },
   'product-roadmap':    { scenario: '路线图、增长复盘',       styleTags: ['产品', '卡片', '指标'] },
-  'product-decision-board': { scenario: '产品决策、用户研究', styleTags: ['产品', '看板', '研究'] }
+  'product-decision-board': { scenario: '产品决策、用户研究', styleTags: ['产品', '看板', '研究'] },
+  'editorial-depth':    { scenario: '行业观点、深度评论',     styleTags: ['编辑', '克制', '深度'] },
+  'data-brief':         { scenario: '数据复盘、研究摘要',     styleTags: ['数据', '深色', '理性'] },
+  'product-launch':     { scenario: '产品更新、功能发布',     styleTags: ['产品', '发布', '网格'] },
+  'prism-spectrum':     { scenario: 'AI 趋势、设计前沿',      styleTags: ['光谱', '棱镜', '未来'] },
+  'paper-cut-window':   { scenario: '品牌故事、生活方式',     styleTags: ['纸雕', '层次', '柔和'] },
+  'pixel-future':       { scenario: '科技内容、游戏文化',     styleTags: ['像素', '高对比', '未来'] }
+};
+
+const TEMPLATE_TEXT_BOXES = {
+  'black-gold': { titleWidth: 1000, subtitleWidth: 1000 },
+  'pure-white': { titleWidth: 820, subtitleWidth: 820 },
+  'warm-cream': { titleWidth: 900, subtitleWidth: 900 },
+  'lavender-light': { titleWidth: 820, subtitleWidth: 820 },
+  'indigo-violet': { titleWidth: 1000, subtitleWidth: 1000 },
+  'dark-fade': { titleWidth: 820, subtitleWidth: 820 },
+  'dawn-light': { titleWidth: 1000, subtitleWidth: 1000 },
+  'aurora': { titleWidth: 1000, subtitleWidth: 1000 },
+  'warm-showcase': { titleWidth: 680, subtitleWidth: 680 },
+  'playful-mascot': { titleWidth: 680, subtitleWidth: 680 },
+  'dot-matrix': { titleWidth: 1000, subtitleWidth: 1000 },
+  'geo-overlap': { titleWidth: 1000, subtitleWidth: 1000 },
+  'triangle-comp': { titleWidth: 1000, subtitleWidth: 1000 },
+  'frosted-glass': { titleWidth: 900, subtitleWidth: 900 },
+  'paper-texture': { titleWidth: 900, subtitleWidth: 900 },
+  'frame-border': { titleWidth: 900, subtitleWidth: 900 },
+  'split-screen': { titleWidth: 620, subtitleWidth: 620 },
+  'digital-scene': { titleWidth: 680, subtitleWidth: 680 },
+  'illust-card': { titleWidth: 900, subtitleWidth: 900 },
+  'illust-wave': { titleWidth: 640, subtitleWidth: 640 },
+  'illust-dark-glow': { titleWidth: 680, subtitleWidth: 680 },
+  'illust-magazine': { titleWidth: 680, subtitleWidth: 680 },
+  'tech-neural-grid': { titleWidth: 620, subtitleWidth: 620 },
+  'tech-lab-console': { titleWidth: 620, subtitleWidth: 620 },
+  'product-launch-pad': { titleWidth: 620, subtitleWidth: 620 },
+  'product-canvas': { titleWidth: 620, subtitleWidth: 620 },
+  'tech-blueprint': { titleWidth: 620, subtitleWidth: 620 },
+  'tech-terminal-map': { titleWidth: 620, subtitleWidth: 620 },
+  'product-roadmap': { titleWidth: 620, subtitleWidth: 620 },
+  'product-decision-board': { titleWidth: 620, subtitleWidth: 620 },
+  'mag-pop-art': { titleWidth: 620, subtitleWidth: 620 },
+  'mag-collage': { titleWidth: 620, subtitleWidth: 620 },
+  'mag-duotone': { titleWidth: 620, subtitleWidth: 620 },
+  'mag-swiss': { titleWidth: 620, subtitleWidth: 620 },
+  'mag-retro-masthead': { titleWidth: 620, subtitleWidth: 620 },
+  'abs-fluid-blobs': { titleWidth: 1040, subtitleWidth: 1040 },
+  'abs-line-art': { titleWidth: 760, subtitleWidth: 760 },
+  'abs-op-art': { titleWidth: 760, subtitleWidth: 760 },
+  'abs-bauhaus': { titleWidth: 720, subtitleWidth: 520 },
+  'abs-retro-sun': { titleWidth: 660, subtitleWidth: 660 },
+  'editorial-depth': { titleWidth: 720, subtitleWidth: 720 },
+  'data-brief': { titleWidth: 660, subtitleWidth: 660 },
+  'product-launch': { titleWidth: 640, subtitleWidth: 640 },
+  'prism-spectrum': { titleWidth: 760, subtitleWidth: 760 },
+  'paper-cut-window': { titleWidth: 720, subtitleWidth: 720 },
+  'pixel-future': { titleWidth: 660, subtitleWidth: 660 }
 };
 
 export const COVER_TEMPLATES = [
-  // Solid Dark (2)
+  // Solid Dark
   blackGold,
+  dataBrief,
+  pixelFuture,
   // Solid Light (3)
   pureWhite,
   warmCream,
   lavenderLight,
-  // Gradient (6)
+  // Gradient
   indigoViolet,
   darkFade,
   dawnLight,
   aurora,
   warmShowcase,
   playfulMascot,
-  // Geometric (4)
+  prismSpectrum,
+  // Geometric
   dotMatrix,
   geoOverlap,
   triangleComp,
+  productLaunch,
   // Glass & Texture (2)
   frostedGlass,
   paperTexture,
-  // Editorial & Layout (4)
+  // Editorial & Layout
   frameBorder,
   splitScreen,
+  editorialDepth,
   // Illustration (14)
   digitalScene,
   illustCard,
@@ -1823,15 +2076,16 @@ export const COVER_TEMPLATES = [
   techLabConsole,
   productLaunchPad,
   productCanvas,
-  // Abstract Art (5)
+  // Abstract Art
   absFluidBlobs,
   absLineArt,
   absOpArt,
   absBauhaus,
   absRetroSun,
+  paperCutWindow,
   // New technical/product decorative covers (4)
   techBlueprint,
   techTerminalMap,
   productRoadmap,
   productDecisionBoard,
-];
+].map(template => ({ ...template, textBox: TEMPLATE_TEXT_BOXES[template.id] }));
