@@ -46,6 +46,10 @@ export function buildTableSvgMarkup(xhtml, width, height, background = '#ffffff'
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><foreignObject width="100%" height="100%"><div xmlns="${XHTML_NAMESPACE}" style="width:${width}px;height:${height}px;background:${safeBackground};">${xhtml}</div></foreignObject></svg>`;
 }
 
+export function buildTableSvgDataUrl(svg) {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
 export function resolveTableLogicalWidth(documentRef = globalThis.document) {
   const view = documentRef?.defaultView;
   const computedStyle = view?.getComputedStyle
@@ -131,32 +135,24 @@ function canvasToPngBlob(canvas) {
 async function rasterizeTableSvg(svg, size, {
   documentRef,
   ImageCtor,
-  URLRef,
   logicalWidth,
   logicalHeight,
   scale,
   background,
 }) {
-  const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
-  const objectURL = URLRef.createObjectURL(svgBlob);
+  const image = await loadImage(buildTableSvgDataUrl(svg), ImageCtor);
+  const canvas = documentRef.createElement('canvas');
+  canvas.width = size.width;
+  canvas.height = size.height;
 
-  try {
-    const image = await loadImage(objectURL, ImageCtor);
-    const canvas = documentRef.createElement('canvas');
-    canvas.width = size.width;
-    canvas.height = size.height;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('浏览器不支持 Canvas 2D');
 
-    const context = canvas.getContext('2d');
-    if (!context) throw new Error('浏览器不支持 Canvas 2D');
-
-    context.scale(scale, scale);
-    context.fillStyle = background;
-    context.fillRect(0, 0, logicalWidth, logicalHeight);
-    context.drawImage(image, 0, 0, logicalWidth, logicalHeight);
-    return canvasToPngBlob(canvas);
-  } finally {
-    URLRef.revokeObjectURL(objectURL);
-  }
+  context.scale(scale, scale);
+  context.fillStyle = background;
+  context.fillRect(0, 0, logicalWidth, logicalHeight);
+  context.drawImage(image, 0, 0, logicalWidth, logicalHeight);
+  return canvasToPngBlob(canvas);
 }
 
 export async function renderTableToPng(table, options = {}) {
@@ -168,7 +164,6 @@ export async function renderTableToPng(table, options = {}) {
     || documentRef?.defaultView?.XMLSerializer
     || globalThis.XMLSerializer;
   const ImageCtor = options.ImageCtor || documentRef?.defaultView?.Image || globalThis.Image;
-  const URLRef = options.URLRef || globalThis.URL;
   const fontsReady = options.fontsReady || documentRef?.fonts?.ready || Promise.resolve();
   const measureTable = options.measureTable || ((node) => mountTableForCapture(node, {
     documentRef,
@@ -191,7 +186,6 @@ export async function renderTableToPng(table, options = {}) {
     const blob = await rasterize(svg, canvasSize, {
       documentRef,
       ImageCtor,
-      URLRef,
       logicalWidth: capture.width,
       logicalHeight: capture.height,
       scale,

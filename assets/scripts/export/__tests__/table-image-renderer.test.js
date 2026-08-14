@@ -3,6 +3,7 @@ import {
   TABLE_IMAGE_SCALE,
   TABLE_LOGICAL_WIDTH_FALLBACK,
   buildTableImageAlt,
+  buildTableSvgDataUrl,
   buildTableSvgMarkup,
   getTableCanvasSize,
   renderTableToPng,
@@ -39,6 +40,12 @@ describe('table image helpers', () => {
     expect(svg).toContain('<foreignObject width="100%" height="100%">');
     expect(svg).toContain('background:rgb(1, 2, 3)');
     expect(svg).toContain('width="750" height="120"');
+  });
+
+  it('uses an origin-clean data URL for SVG rasterization', () => {
+    const url = buildTableSvgDataUrl('<svg><text>中文</text></svg>');
+    expect(url).toMatch(/^data:image\/svg\+xml;charset=utf-8,/);
+    expect(decodeURIComponent(url.split(',')[1])).toBe('<svg><text>中文</text></svg>');
   });
 });
 
