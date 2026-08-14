@@ -6,6 +6,7 @@
 import { convertMathForWechat, stripFormulaExportMetadata } from './math-exporter.js';
 import { applyCodeHighlighting, serializeHighlightedCodeHtml } from '../core/code-highlight.js';
 import { buildEndDividerGif, END_DIVIDER_META } from './end-divider-gif.js';
+import { buildTableImageAlt, renderTableToPng } from './table-image-renderer.js';
 
 function extractBackgroundColor(styleString) {
   if (!styleString) return null;
@@ -191,17 +192,82 @@ async function convertImageToBase64(imgElement, imageStore) {
   if (!src) throw new Error('Image src is empty');
   if (src.startsWith('data:')) return src;
 
-  try {
+  const imageId = imgElement.getAttribute('data-image-id');
+  if (imageId) {
     const storedBlob = await readStoredImageBlob(imgElement, imageStore);
-    if (storedBlob) {
-      return blobToDataURL(await recompressForClipboard(storedBlob));
-    }
-  } catch (error) {
-    console.warn('Read stored clipboard image failed:', error);
+    if (!storedBlob) throw new Error(`本地图片记录不存在: ${imageId}`);
+    return blobToDataURL(await recompressForClipboard(storedBlob));
   }
 
+  if (!/^(?:https?:|blob:|\/\/)/i.test(src)) {
+    throw new Error(`本地图片尚未导入: ${src}`);
+  }
   const blob = await fetchImageBlob(src);
   return blobToDataURL(await recompressForClipboard(blob));
+}
+
+export async function materializeClipboardImages(images, {
+  imageStore,
+  isGif = (image) => isGifImage(image, imageStore),
+  convert = (image) => convertImageToBase64(image, imageStore),
+  replaceGif = replaceGifWithPlaceholder,
+} = {}) {
+  let successCount = 0;
+  let gifCount = 0;
+  const failures = [];
+
+  for (const image of images) {
+    try {
+      if (await isGif(image)) {
+        replaceGif(image);
+        gifCount += 1;
+        continue;
+      }
+
+      image.setAttribute('src', await convert(image));
+      successCount += 1;
+    } catch (error) {
+      failures.push({
+        src: image.getAttribute('src') || image.getAttribute('data-image-id') || 'unknown',
+        message: error?.message || '图片处理失败',
+      });
+    }
+  }
+
+  return { successCount, gifCount, failures };
+}
+
+export async function materializeMarkdownTables(tables, {
+  background = '#ffffff',
+  renderTable = renderTableToPng,
+  toDataURL = blobToDataURL,
+} = {}) {
+  for (let index = 0; index < tables.length; index += 1) {
+    const table = tables[index];
+    try {
+      const { blob } = await renderTable(table, { background });
+      const image = table.ownerDocument.createElement('img');
+      const tableStyle = table.getAttribute('style') || '';
+      const marginTop = cleanStyleValue(extractLastStyleValue(tableStyle, 'margin-top')) || '16px';
+      const marginBottom = cleanStyleValue(extractLastStyleValue(tableStyle, 'margin-bottom')) || '16px';
+
+      image.setAttribute('src', await toDataURL(blob));
+      image.setAttribute('alt', buildTableImageAlt(table));
+      image.setAttribute('data-table-image', 'true');
+      image.setAttribute(
+        'style',
+        `display: block !important; width: 100% !important; max-width: 100% !important; height: auto !important; margin: ${marginTop} auto ${marginBottom} !important;`
+      );
+
+      if (typeof table.replaceWith === 'function') table.replaceWith(image);
+      else table.parentNode.replaceChild(image, table);
+    } catch (error) {
+      const tableError = new Error(`第 ${index + 1} 个表格转换失败：${error?.message || '未知错误'}`);
+      tableError.tableIndex = index + 1;
+      tableError.cause = error;
+      throw tableError;
+    }
+  }
 }
 
 function convertGridToTable(doc) {
@@ -798,35 +864,27 @@ export async function copyToWechat({ renderedHTML, styleConfig, imageStore, show
     const parser = new DOMParser();
     const doc = parser.parseFromString(renderedHTML, 'text/html');
 
+    doc.querySelectorAll('table').forEach((table) => {
+      table.setAttribute('data-markdown-table', 'true');
+    });
     convertGridToTable(doc);
     normalizeTablesForWechat(doc);
 
     const images = Array.from(doc.querySelectorAll('img'));
     if (images.length > 0) {
       showToast(`正在处理 ${images.length} 张图片...`, 'success');
-      let successCount = 0;
-      let failCount = 0;
-      let gifCount = 0;
-
-      for (const img of images) {
-        try {
-          if (await isGifImage(img, imageStore)) {
-            replaceGifWithPlaceholder(img);
-            gifCount += 1;
-            continue;
-          }
-
-          const base64 = await convertImageToBase64(img, imageStore);
-          img.setAttribute('src', base64);
-          successCount += 1;
-        } catch (_error) {
-          console.warn('Clipboard image conversion failed, keeping original src:', _error);
-          failCount += 1;
-        }
+      const imageResult = await materializeClipboardImages(images, { imageStore });
+      if (imageResult.failures.length > 0) {
+        const failedSources = imageResult.failures.map((failure) => failure.src).join('、');
+        console.warn('Clipboard image conversion failed:', imageResult.failures);
+        showToast(`图片处理失败 ${imageResult.failures.length} 张：${failedSources}`, 'error');
+        return false;
       }
-
-      if (gifCount > 0 || failCount > 0) {
-        showToast(`图片处理完成：成功 ${successCount} 张，GIF ${gifCount} 张，失败 ${failCount} 张`, failCount > 0 ? 'error' : 'success');
+      if (imageResult.gifCount > 0) {
+        showToast(
+          `图片处理完成：成功 ${imageResult.successCount} 张，GIF ${imageResult.gifCount} 张`,
+          'success'
+        );
       }
     }
 
@@ -843,6 +901,16 @@ export async function copyToWechat({ renderedHTML, styleConfig, imageStore, show
     maybeReplaceAnimatedEndWithGif(doc, { styleConfig, displaySettings });
 
     const text = buildClipboardPlainText(doc);
+    const tableBackground = extractBackgroundColor(effectiveStyleConfig.styles.container) || '#ffffff';
+    const markdownTables = Array.from(doc.querySelectorAll('table[data-markdown-table="true"]'));
+    try {
+      await materializeMarkdownTables(markdownTables, { background: tableBackground });
+    } catch (error) {
+      console.error('表格转图失败:', error);
+      showToast(error.message, 'error');
+      return false;
+    }
+
     stripFormulaExportMetadata(doc.body);
     const html = doc.body.innerHTML;
 
