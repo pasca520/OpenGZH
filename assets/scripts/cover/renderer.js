@@ -26,10 +26,10 @@ export const DEFAULT_TYPOGRAPHY = {
 
 /** Default cover content */
 export const DEFAULT_COVER_CONTENT = {
-  tag: '',
+  tag: '技术分享',
   title: '在此输入标题',
   subtitle: '副标题文字',
-  author: '',
+  author: 'AI产品零度',
   issueNumber: 'No.01',
   illustrationSvg: ''
 };
@@ -68,7 +68,8 @@ export function getCategories() {
     'glass-texture': '质感纹理',
     'editorial': '版式布局',
     'illustration': '插画风格',
-    'abstract-art': '抽象艺术'
+    'abstract-art': '抽象艺术',
+    'centered': '居中布局'
   };
   COVER_TEMPLATES.forEach(t => {
     if (!seen.has(t.category)) {
@@ -122,6 +123,7 @@ export function renderCover(templateId, content, typography = {}) {
     subtitle: content.subtitle || '',
     author: content.author || '',
     issueNumber: content.issueNumber || 'No.01',
+    backgroundId: content.backgroundId || '',
     illustrationSvg: content.illustrationSvg || '',
     illustrationOpacity: content.illustrationOpacity ?? 1,
     layerOrder: content.layerOrder || 'text-top'
