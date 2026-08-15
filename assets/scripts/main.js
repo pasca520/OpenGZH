@@ -25,7 +25,11 @@ import { renderCover, getTemplate, getTemplates, getCategories, DEFAULT_TYPOGRAP
 import { exportCoverPng as doExportCoverPng } from './cover/export-png.js';
 import { DEFAULT_ILLUSTRATIONS, ILLUSTRATION_CATEGORIES, ILLUSTRATION_MARKETS, getIllustration, getIllustrationsByCategory, getAllIllustrations } from './cover/illustration-registry.js';
 import { loadIllustrationSvg, replaceIllustrationColor, extractPrimaryColor } from './cover/illustration-color.js';
-import { resolveLocalImages } from './core/markdown-image-resolver.js';
+import {
+  createDirectoryFileSource,
+  createFileMapSource,
+  resolveLocalImages
+} from './core/markdown-image-resolver.js';
 
 const { createApp, ref, reactive, watch, nextTick, onMounted, computed } = window.Vue;
 
@@ -44,6 +48,9 @@ const previewMode = ref('desktop');
 const tocVisible = ref(false);
 const isDraggingOver = ref(false);
 const copySuccess = ref(false);
+const markdownImportDialog = reactive({ show: false, names: [], selectedIndex: 0 });
+let pendingMarkdownImports = [];
+let pendingSupplementalDirectoryResolve = null;
 
 const showDevicePicker = ref(false);
 const showExportMenu = ref(false);
@@ -816,60 +823,201 @@ function handleDragLeave(event) {
   }
 }
 
-async function handleFileUpload(event) {
-  const file = event.target.files[0];
-  if (!file) return;
+function getDirectoryUploadEntries(fileList) {
+  return Array.from(fileList || []).map((file) => {
+    const rawPath = file.webkitRelativePath || file.name;
+    const segments = rawPath.split('/').filter(Boolean);
+    const path = segments.length > 1 ? segments.slice(1).join('/') : file.name;
+    return { path, file };
+  });
+}
 
-  const fileTitle = file.name.replace(/\.(md|markdown)$/i, '');
-  let content;
+function getRootMarkdownCandidates(entries, source) {
+  return entries
+    .filter(({ path }) => !path.includes('/') && /\.(md|markdown)$/i.test(path))
+    .map(({ path, file }) => ({ name: path, getFile: async () => file, source }))
+    .sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'));
+}
+
+async function getDirectoryHandleCandidates(directoryHandle) {
+  const source = createDirectoryFileSource(directoryHandle);
+  const candidates = [];
+
+  for await (const [name, handle] of directoryHandle.entries()) {
+    if (handle.kind === 'file' && /\.(md|markdown)$/i.test(name)) {
+      candidates.push({ name, getFile: () => handle.getFile(), source });
+    }
+  }
+
+  return candidates.sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'));
+}
+
+function showMarkdownCandidates(candidates, supplementalInput) {
+  if (candidates.length === 0) {
+    toast.show('所选目录根层没有 Markdown 文件', 'error');
+    return;
+  }
+
+  if (candidates.length === 1) {
+    importMarkdownCandidate(candidates[0], supplementalInput);
+    return;
+  }
+
+  pendingMarkdownImports = candidates.map((candidate) => ({ ...candidate, supplementalInput }));
+  markdownImportDialog.names = candidates.map((candidate) => candidate.name);
+  markdownImportDialog.selectedIndex = 0;
+  markdownImportDialog.show = true;
+}
+
+async function startMarkdownImport(directoryInput, supplementalInput) {
+  if (typeof globalThis.showDirectoryPicker !== 'function') {
+    directoryInput.value = '';
+    directoryInput.click();
+    return;
+  }
 
   try {
-    content = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target.result || '');
-      reader.onerror = () => reject(new Error('文件读取失败'));
-      reader.readAsText(file);
-    });
+    const directoryHandle = await globalThis.showDirectoryPicker({ mode: 'read' });
+    showMarkdownCandidates(await getDirectoryHandleCandidates(directoryHandle), supplementalInput);
+  } catch (error) {
+    if (error?.name !== 'AbortError') {
+      console.error('读取文章目录失败:', error);
+      toast.show(`读取文章目录失败: ${error.message}`, 'error');
+    }
+  }
+}
+
+function handleMarkdownDirectoryUpload(event, supplementalInput) {
+  const entries = getDirectoryUploadEntries(event.target.files);
+  const source = createFileMapSource(entries);
+
+  showMarkdownCandidates(getRootMarkdownCandidates(entries, source), supplementalInput);
+  event.target.value = '';
+}
+
+function cancelMarkdownImport() {
+  markdownImportDialog.show = false;
+  markdownImportDialog.names = [];
+  markdownImportDialog.selectedIndex = 0;
+  pendingMarkdownImports = [];
+}
+
+function confirmMarkdownImport() {
+  const candidate = pendingMarkdownImports[markdownImportDialog.selectedIndex];
+  if (!candidate) {
+    cancelMarkdownImport();
+    return;
+  }
+
+  cancelMarkdownImport();
+  importMarkdownCandidate(candidate, candidate.supplementalInput);
+}
+
+function chooseSupplementalDirectory(directoryInput) {
+  if (typeof globalThis.showDirectoryPicker === 'function') {
+    return globalThis.showDirectoryPicker({ mode: 'read' })
+      .then((handle) => createDirectoryFileSource(handle))
+      .catch((error) => {
+        if (error?.name === 'AbortError') return null;
+        throw error;
+      });
+  }
+
+  if (!directoryInput) return Promise.resolve(null);
+
+  return new Promise((resolve) => {
+    pendingSupplementalDirectoryResolve = resolve;
+    directoryInput.value = '';
+    directoryInput.click();
+  });
+}
+
+function handleSupplementalDirectoryUpload(event) {
+  const resolve = pendingSupplementalDirectoryResolve;
+  pendingSupplementalDirectoryResolve = null;
+  if (!resolve) return;
+
+  const entries = getDirectoryUploadEntries(event.target.files);
+  event.target.value = '';
+  resolve(entries.length > 0 ? createFileMapSource(entries) : null);
+}
+
+function cancelSupplementalDirectoryUpload() {
+  const resolve = pendingSupplementalDirectoryResolve;
+  pendingSupplementalDirectoryResolve = null;
+  if (resolve) resolve(null);
+}
+
+async function readMarkdownFile(file) {
+  if (typeof file.text === 'function') return file.text();
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (event) => resolve(event.target.result || '');
+    reader.onerror = () => reject(new Error('文件读取失败'));
+    reader.readAsText(file);
+  });
+}
+
+async function importMarkdownCandidate(candidate, supplementalInput) {
+  let file;
+  let content;
+  try {
+    file = await candidate.getFile();
+    content = await readMarkdownFile(file);
   } catch (_error) {
     toast.show('文件读取失败', 'error');
-    event.target.value = '';
     return;
   }
 
+  const fileTitle = file.name.replace(/\.(md|markdown)$/i, '');
   if (!imageStore) {
     createNewDocument(content, fileTitle);
-    event.target.value = '';
     return;
   }
 
   try {
-    const result = await resolveLocalImages(content, {
+    let result = await resolveLocalImages(content, {
+      source: candidate.source,
       imageStore,
       imageCompressor,
       createImageId: () => createDocumentId('img'),
     });
 
-    if (result.total > 0) {
-      if (result.cancelled) {
-        toast.show(`检测到 ${result.total} 张本地图片，已跳过导入`, 'info');
-      } else if (result.unmatched.length === 0) {
-        toast.show(`已导入 ${result.matched.length} 张本地图片`, 'success');
-      } else {
-        toast.show(
-          `已导入 ${result.matched.length} 张图片，${result.unmatched.length} 张未在目录中找到`,
-          'info'
-        );
+    let matchedCount = result.matched.length;
+    if (result.unmatched.length > 0 || result.conflicts.length > 0) {
+      const missingCount = result.unmatched.length + result.conflicts.length;
+      toast.show(`有 ${missingCount} 张图片未找到，请选择图片目录`, 'info');
+      const supplementalSource = await chooseSupplementalDirectory(supplementalInput);
+
+      if (supplementalSource) {
+        const supplementalResult = await resolveLocalImages(result.resolvedMarkdown, {
+          source: supplementalSource,
+          allowBasenameFallback: true,
+          imageStore,
+          imageCompressor,
+          createImageId: () => createDocumentId('img'),
+        });
+        result = supplementalResult;
+        matchedCount += supplementalResult.matched.length;
       }
     }
 
     createNewDocument(result.resolvedMarkdown, fileTitle);
+    const remainingCount = result.unmatched.length + result.conflicts.length;
+    if (remainingCount > 0) {
+      const paths = [...result.unmatched, ...result.conflicts].map((item) => item.path).join('、');
+      toast.show(`文章已导入，仍有 ${remainingCount} 张图片未找到：${paths}`, 'error');
+    } else if (matchedCount > 0) {
+      toast.show(`文章已导入，自动导入 ${matchedCount} 张图片`, 'success');
+    } else {
+      toast.show('文章已导入', 'success');
+    }
   } catch (error) {
     console.error('图片解析失败:', error);
     toast.show(`图片解析失败: ${error.message}`, 'error');
     createNewDocument(content, fileTitle);
   }
-
-  event.target.value = '';
 }
 
 function exportMarkdown() {
@@ -2120,6 +2268,7 @@ const app = createApp({
       tocItems,
       isDraggingOver,
       copySuccess,
+      markdownImportDialog,
       activePanel,
       toastState,
       sidebarOpen,
@@ -2160,7 +2309,12 @@ const app = createApp({
       handleDragOver,
       handleDragEnter,
       handleDragLeave,
-      handleFileUpload,
+      startMarkdownImport,
+      handleMarkdownDirectoryUpload,
+      handleSupplementalDirectoryUpload,
+      cancelSupplementalDirectoryUpload,
+      cancelMarkdownImport,
+      confirmMarkdownImport,
       handleToolbarImageUpload,
       resetEditor,
       resetToDefault,
