@@ -16,7 +16,7 @@
 - Modify: `assets/scripts/cover/__tests__/templates.test.js`
 - Test: `assets/scripts/cover/__tests__/templates.test.js`
 
-- [ ] **Step 1: Add the centered-template fixtures and assertions**
+- [x] **Step 1: Add the centered-template fixtures and assertions**
 
 ```js
 const CENTERED_IDS = [
@@ -43,7 +43,7 @@ it('includes 4 editable centered covers', () => {
 
 Update the exact total from `40` to `44`, and include the four centered IDs in the long-copy layout test.
 
-- [ ] **Step 2: Run the focused test and confirm the red state**
+- [x] **Step 2: Run the focused test and confirm the red state**
 
 Run: `npm test -- assets/scripts/cover/__tests__/templates.test.js`
 
@@ -56,7 +56,7 @@ Expected: FAIL because the total is still 40, the `centered` category does not e
 - Modify: `assets/scripts/cover/renderer.js`
 - Test: `assets/scripts/cover/__tests__/templates.test.js`
 
-- [ ] **Step 1: Add a narrow shared metadata-row renderer**
+- [x] **Step 1: Add a narrow shared metadata-row renderer**
 
 Add `renderCenteredMetaRow(content, typo, y, palette)` next to the existing text helpers. It must:
 
@@ -70,7 +70,7 @@ function renderCenteredMetaRow(content, typo, y, palette) {
 
 The helper accepts only colors needed by all four variants. It must not add a new data field or state object.
 
-- [ ] **Step 2: Add the four template objects**
+- [x] **Step 2: Add the four template objects**
 
 Use this complete text-layout contract in each object, changing only the ID, name, palette, and decorative SVG primitives listed below:
 
@@ -109,7 +109,7 @@ Use these bounded visual primitives:
 
 All text is `text-anchor="middle"`; title and subtitle use `renderTextLines`, and decorative primitives stay outside the text-safe rectangle bounded by x=150–1050 and y=150–440.
 
-- [ ] **Step 3: Register metadata and templates**
+- [x] **Step 3: Register metadata and templates**
 
 Add four `TEMPLATE_META` entries with centered/scenario tags, append the four objects to `COVER_TEMPLATES`, update the top comments to 44 templates / 9 categories, and add this category label in `renderer.js`:
 
@@ -117,7 +117,7 @@ Add four `TEMPLATE_META` entries with centered/scenario tags, append the four ob
 'centered': '居中布局'
 ```
 
-- [ ] **Step 4: Run the focused tests**
+- [x] **Step 4: Run the focused tests**
 
 Run: `npm test -- assets/scripts/cover/__tests__/templates.test.js`
 
@@ -130,7 +130,7 @@ Expected: all template tests pass, including 44 unique IDs and four centered cov
 - Modify: `README.md`
 - Test: `assets/scripts/cover/__tests__/templates.test.js`
 
-- [ ] **Step 1: Change only the new-user/reset author default**
+- [x] **Step 1: Change only the new-user/reset author default**
 
 Replace both occurrences in cover initialization and `resetToDefault()`:
 
@@ -140,11 +140,11 @@ author: 'AI产品零度'
 
 Keep `tag: '技术分享'` and every persistence key unchanged.
 
-- [ ] **Step 2: Update user-visible counts**
+- [x] **Step 2: Update user-visible counts**
 
 Replace the three visible `40 套` cover-template claims in `README.md` and `assets/scripts/main.js` with `44 套`. Do not change unrelated copy or export behavior.
 
-- [ ] **Step 3: Verify the focused contract again**
+- [x] **Step 3: Verify the focused contract again**
 
 Run: `npm test -- assets/scripts/cover/__tests__/templates.test.js`
 
@@ -156,25 +156,25 @@ Expected: PASS.
 - Verify: `assets/scripts/cover/templates.js`
 - Verify: `assets/scripts/cover/export-png.js`
 
-- [ ] **Step 1: Run the full test suite**
+- [x] **Step 1: Run the full test suite**
 
 Run: `npm test`
 
 Expected: every Vitest test passes with zero failures.
 
-- [ ] **Step 2: Validate generated SVG as XML**
+- [x] **Step 2: Validate generated SVG as XML**
 
 Render each new template with long Chinese content, write only the temporary outputs to a `mktemp -d` directory, and run `xmllint --noout` on all four files.
 
 Expected: `4/4` SVG files parse successfully.
 
-- [ ] **Step 3: Export and inspect 2× PNGs**
+- [x] **Step 3: Export and inspect 2× PNGs**
 
 Serve the repository root locally, load the four templates through the real cover UI/export path, and export each at 2×.
 
 Expected: four `2400 × 1020` PNG files; no missing glyphs, text overlap, clipping, or decoration crossing the title/subtitle safe area.
 
-- [ ] **Step 4: Run the final repository checks**
+- [x] **Step 4: Run the final repository checks**
 
 Run: `git diff --check && git status --short`
 

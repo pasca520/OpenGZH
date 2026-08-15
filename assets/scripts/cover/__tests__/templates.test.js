@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { COVER_TEMPLATES, TEMPLATE_META } from '../templates.js';
-import { renderCover, getCategories, getTemplate, getTemplates, DEFAULT_TYPOGRAPHY } from '../renderer.js';
+import { renderCover, getCategories, getTemplate, getTemplates, DEFAULT_COVER_CONTENT, DEFAULT_TYPOGRAPHY } from '../renderer.js';
 
 const SAMPLE = {
   tag: '产品思考',
@@ -21,6 +22,13 @@ const LONG = {
   illustrationSvg: ''
 };
 
+const CENTERED_IDS = [
+  'center-midnight-prism',
+  'center-editorial-seal',
+  'center-circuit-grid',
+  'center-orbit-glow'
+];
+
 /** Parse y-position of every rendered line for a data-field. */
 function fieldLineYs(svg, field) {
   const re = new RegExp(`y="([\\d.]+)"[^>]*data-field="${field}"`, 'g');
@@ -31,8 +39,8 @@ function fieldLineYs(svg, field) {
 }
 
 describe('cover templates', () => {
-  it('has exactly 40 templates with unique ids', () => {
-    expect(COVER_TEMPLATES.length).toBe(40);
+  it('has exactly 44 templates with unique ids', () => {
+    expect(COVER_TEMPLATES.length).toBe(44);
     const ids = COVER_TEMPLATES.map(t => t.id);
     expect(new Set(ids).size).toBe(ids.length);
     ids.forEach(id => expect(id).toMatch(/^[a-z0-9-]+$/));
@@ -74,6 +82,39 @@ describe('cover templates', () => {
     expect(byCategory.length).toBe(5);
   });
 
+  it('includes 4 editable centered covers with type and author labels', () => {
+    const centered = getTemplates('centered');
+    expect(centered.map(t => t.id)).toEqual(CENTERED_IDS);
+    expect(getCategories().find(c => c.id === 'centered')?.label).toBe('居中布局');
+
+    for (const tpl of centered) {
+      expect(tpl.elements).toMatchObject({
+        tag: true,
+        title: true,
+        subtitle: true,
+        author: true
+      });
+      const svg = renderCover(
+        tpl.id,
+        { ...SAMPLE, tag: '技术分享', author: 'AI产品零度' },
+        DEFAULT_TYPOGRAPHY
+      );
+      expect(svg, `${tpl.id} type label`).toContain('类型');
+      expect(svg, `${tpl.id} author label`).toContain('作者');
+      expect(svg, `${tpl.id} editable type`).toContain('data-field="tag"');
+      expect(svg, `${tpl.id} editable author`).toContain('data-field="author"');
+      expect(svg, `${tpl.id} type value`).toContain('技术分享');
+      expect(svg, `${tpl.id} author value`).toContain('AI产品零度');
+    }
+  });
+
+  it('uses the requested type and author defaults for initialization and reset', () => {
+    const mainSource = readFileSync(new URL('../../main.js', import.meta.url), 'utf8');
+    expect(mainSource.match(/tag: '技术分享'/g)).toHaveLength(2);
+    expect(mainSource.match(/author: 'AI产品零度'/g)).toHaveLength(2);
+    expect(DEFAULT_COVER_CONTENT).toMatchObject({ tag: '技术分享', author: 'AI产品零度' });
+  });
+
   it('every template has metadata and renders a non-empty svg', () => {
     for (const tpl of COVER_TEMPLATES) {
       expect(TEMPLATE_META[tpl.id], `${tpl.id} meta`).toBeTruthy();
@@ -91,9 +132,9 @@ describe('cover templates', () => {
 
   it('flows realistic 20-30 char titles within the canvas and keeps subtitle below', () => {
     const wrappedIds = COVER_TEMPLATES
-      .filter(t => t.id.startsWith('mag-') || t.id.startsWith('abs-'))
+      .filter(t => t.id.startsWith('mag-') || t.id.startsWith('abs-') || t.category === 'centered')
       .map(t => t.id);
-    expect(wrappedIds.length).toBe(10);
+    expect(wrappedIds.length).toBe(14);
 
     for (const id of wrappedIds) {
       const svg = renderCover(id, LONG, DEFAULT_TYPOGRAPHY);

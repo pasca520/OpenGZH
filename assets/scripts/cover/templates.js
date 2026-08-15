@@ -1,6 +1,6 @@
 // ============================================================
 // Cover Templates for WeChat Article Cover Image Editor
-// 40 unique SVG templates across 8 categories
+// 44 unique SVG templates across 9 categories
 // ============================================================
 
 const FONT_FAMILY = "'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif";
@@ -122,6 +122,38 @@ function renderTextLines(text, x, y, fontSize, lineHeight, letterSpacing, textAl
     const dy = i * resolvedLineHeight;
     const lineAttr = dataField ? ` data-field-line="${i}"` : '';
     return `<text x="${baseX}" y="${baseY + dy}" font-size="${fontSize}" font-weight="${fontWeight || 'normal'}" font-family="${fontFamily || FONT_FAMILY}" fill="${fill}" text-anchor="${anchor}" letter-spacing="${letterSpacing || 0}"${fieldAttr}${lineAttr}${lhAttr}>${esc(line)}</text>`;
+  }).join('\n');
+}
+
+function renderCenteredMetaRow(content, typo, y, palette) {
+  const entries = [
+    { label: '类型', value: content.tag, field: 'tag' },
+    { label: '作者', value: content.author, field: 'author' }
+  ].filter(entry => entry.value);
+  if (!entries.length) return '';
+
+  const fontSize = 16;
+  const labelWidth = 32;
+  const valueGap = 12;
+  const horizontalPadding = 18;
+  const groupGap = 18;
+  const groups = entries.map(entry => ({
+    ...entry,
+    width: horizontalPadding * 2 + labelWidth + valueGap + tagW(entry.value, fontSize)
+  }));
+  const rowWidth = groups.reduce((sum, group) => sum + group.width, 0) + groupGap * (groups.length - 1);
+  let x = 600 - rowWidth / 2;
+
+  return groups.map(group => {
+    const valueX = x + horizontalPadding + labelWidth + valueGap;
+    const markup = `<g class="centered-meta-group">
+  <rect x="${x}" y="${y - 23}" width="${group.width}" height="34" rx="17" fill="${palette.pill}" stroke="${palette.line}" stroke-width="1"/>
+  <text x="${x + horizontalPadding}" y="${y}" font-size="12" font-weight="700" font-family="${typo.subtitleFontFamily}" fill="${palette.label}" letter-spacing="1">${group.label}</text>
+  <line x1="${x + horizontalPadding + labelWidth}" y1="${y - 13}" x2="${x + horizontalPadding + labelWidth}" y2="${y + 2}" stroke="${palette.line}" stroke-width="1"/>
+  ${renderTextLines(group.value, valueX, y, fontSize, fontSize * 1.2, 0.5, 'left', palette.value, '600', typo.subtitleFontFamily, group.field)}
+</g>`;
+    x += group.width + groupGap;
+    return markup;
   }).join('\n');
 }
 
@@ -1735,7 +1767,142 @@ const absRetroSun = {
 };
 
 // ============================================================
-// Export all 40 templates
+// Centered A. center-midnight-prism / 午夜棱镜
+// ============================================================
+const centerMidnightPrism = {
+  id: 'center-midnight-prism', name: '午夜棱镜', category: 'centered',
+  elements: { tag: true, title: true, subtitle: true, author: true, image: false },
+  render(content, typo) {
+    const TITLE_X = 600, TITLE_Y = 220, TITLE_W = 900, SUB_W = 900;
+    const titleWrapped = wrapText(content.title, typo.titleSize, TITLE_W);
+    const titleLines = titleWrapped === '' ? 0 : titleWrapped.split('\n').length;
+    const SUB_Y = TITLE_Y + titleLines * lineHeightPx(typo.titleSize, typo.titleLineHeight) + 26;
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="cmp-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#111827"/><stop offset="100%" stop-color="#18243A"/></linearGradient>
+    <radialGradient id="cmp-glow" cx="0.5" cy="0.48"><stop offset="0%" stop-color="#4338CA" stop-opacity="0.16"/><stop offset="100%" stop-color="#4338CA" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="1200" height="510" fill="url(#cmp-bg)"/>
+  <rect width="1200" height="510" fill="url(#cmp-glow)"/>
+  <polygon points="0,0 360,0 0,242" fill="#312E81" opacity="0.24"/>
+  <polygon points="1200,510 905,510 1102,332" fill="#4338CA" opacity="0.22"/>
+  <polygon points="675,0 760,0 1160,214" fill="#24324A" opacity="0.56"/>
+  <path d="M0 510 L392 142 L838 510" fill="none" stroke="#52637E" stroke-width="1.3" opacity="0.38"/>
+  <path d="M750 0 L1200 242" fill="none" stroke="#52637E" stroke-width="1" opacity="0.26"/>
+  <path d="M950 82 L1012 20 L1074 82 Z" fill="none" stroke="#6366F1" stroke-width="1.2" opacity="0.55"/>
+  <circle cx="258" cy="398" r="4" fill="#6366F1" opacity="0.8"/><circle cx="842" cy="80" r="3" fill="#818CF8" opacity="0.7"/>
+  ${renderCenteredMetaRow(content, typo, 96, { pill: '#1A2740', label: '#8FA0BA', value: '#E5EAF2', line: '#536A95' })}
+  ${renderTextLines(titleWrapped, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#F7F8FB', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(wrapText(content.subtitle, typo.subtitleSize, SUB_W), TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#B8C3D5', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+</svg>`;
+  }
+};
+
+// ============================================================
+// Centered B. center-editorial-seal / 编辑印记
+// ============================================================
+const centerEditorialSeal = {
+  id: 'center-editorial-seal', name: '编辑印记', category: 'centered',
+  elements: { tag: true, title: true, subtitle: true, author: true, image: false },
+  render(content, typo) {
+    const TITLE_X = 600, TITLE_Y = 220, TITLE_W = 900, SUB_W = 900;
+    const titleWrapped = wrapText(content.title, typo.titleSize, TITLE_W);
+    const titleLines = titleWrapped === '' ? 0 : titleWrapped.split('\n').length;
+    const SUB_Y = TITLE_Y + titleLines * lineHeightPx(typo.titleSize, typo.titleLineHeight) + 26;
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <pattern id="ces-grain" width="18" height="18" patternUnits="userSpaceOnUse"><circle cx="3" cy="4" r="0.7" fill="#2D2923" opacity="0.08"/><circle cx="13" cy="11" r="0.6" fill="#9A2F2F" opacity="0.06"/></pattern>
+  </defs>
+  <rect width="1200" height="510" fill="#F4EFE6"/>
+  <rect width="1200" height="510" fill="url(#ces-grain)"/>
+  <rect x="38" y="34" width="1124" height="442" fill="none" stroke="#282520" stroke-width="1.4"/>
+  <rect x="49" y="45" width="1102" height="420" fill="none" stroke="#B8AD9C" stroke-width="0.8"/>
+  <circle cx="1060" cy="116" r="66" fill="none" stroke="#B33A3A" stroke-width="8" opacity="0.18"/>
+  <circle cx="1060" cy="116" r="46" fill="none" stroke="#B33A3A" stroke-width="2" opacity="0.34"/>
+  <path d="M94 102 H230 M970 410 H1106" stroke="#B33A3A" stroke-width="5"/>
+  <path d="M94 112 H176 M1024 420 H1106" stroke="#282520" stroke-width="1.2"/>
+  <path d="M74 74 h28 M74 74 v28 M1126 436 h-28 M1126 436 v-28" fill="none" stroke="#282520" stroke-width="2"/>
+  <text x="84" y="447" font-size="12" font-family="${typo.subtitleFontFamily}" fill="#756C60" letter-spacing="3">EDITORIAL NOTES</text>
+  <text x="1116" y="447" font-size="12" font-family="${typo.subtitleFontFamily}" fill="#B33A3A" text-anchor="end" letter-spacing="2">OPEN GZH</text>
+  ${renderCenteredMetaRow(content, typo, 96, { pill: '#FFFDF8', label: '#8B8174', value: '#282520', line: '#D5CABB' })}
+  ${renderTextLines(titleWrapped, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#211F1C', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(wrapText(content.subtitle, typo.subtitleSize, SUB_W), TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#6C6257', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+</svg>`;
+  }
+};
+
+// ============================================================
+// Centered C. center-circuit-grid / 电路网格
+// ============================================================
+const centerCircuitGrid = {
+  id: 'center-circuit-grid', name: '电路网格', category: 'centered',
+  elements: { tag: true, title: true, subtitle: true, author: true, image: false },
+  render(content, typo) {
+    const TITLE_X = 600, TITLE_Y = 220, TITLE_W = 900, SUB_W = 900;
+    const titleWrapped = wrapText(content.title, typo.titleSize, TITLE_W);
+    const titleLines = titleWrapped === '' ? 0 : titleWrapped.split('\n').length;
+    const SUB_Y = TITLE_Y + titleLines * lineHeightPx(typo.titleSize, typo.titleLineHeight) + 26;
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="ccg-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#061820"/><stop offset="100%" stop-color="#0B2831"/></linearGradient>
+    <pattern id="ccg-grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M32 0 H0 V32" fill="none" stroke="#56CFE1" stroke-width="0.7" opacity="0.11"/></pattern>
+    <radialGradient id="ccg-glow" cx="0.5" cy="0.5"><stop offset="0%" stop-color="#22D3EE" stop-opacity="0.1"/><stop offset="100%" stop-color="#22D3EE" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="1200" height="510" fill="url(#ccg-bg)"/>
+  <rect width="1200" height="510" fill="url(#ccg-grid)"/>
+  <ellipse cx="600" cy="270" rx="440" ry="210" fill="url(#ccg-glow)"/>
+  <g fill="none" stroke="#36C4D8" stroke-width="1.5" opacity="0.42">
+    <path d="M0 126 H118 L168 176 H246"/><path d="M0 388 H142 L198 332 H268"/>
+    <path d="M1200 118 H1088 L1038 168 H964"/><path d="M1200 396 H1060 L1004 340 H934"/>
+  </g>
+  <g fill="#67E8F9">
+    <circle cx="118" cy="126" r="4"/><circle cx="246" cy="176" r="3"/><circle cx="142" cy="388" r="4"/><circle cx="268" cy="332" r="3"/>
+    <circle cx="1088" cy="118" r="4"/><circle cx="964" cy="168" r="3"/><circle cx="1060" cy="396" r="4"/><circle cx="934" cy="340" r="3"/>
+  </g>
+  <path d="M70 58 H260" stroke="#22D3EE" stroke-width="4"/><path d="M940 452 H1130" stroke="#22D3EE" stroke-width="4"/>
+  <text x="70" y="82" font-size="11" font-family="${typo.subtitleFontFamily}" fill="#67E8F9" letter-spacing="3">SIGNAL / KNOWLEDGE</text>
+  <text x="1130" y="438" font-size="11" font-family="${typo.subtitleFontFamily}" fill="#67E8F9" text-anchor="end" letter-spacing="3">SYSTEM ONLINE</text>
+  ${renderCenteredMetaRow(content, typo, 96, { pill: '#0A2A34', label: '#59A8B3', value: '#D5FAFF', line: '#247888' })}
+  ${renderTextLines(titleWrapped, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#EDFDFF', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(wrapText(content.subtitle, typo.subtitleSize, SUB_W), TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#91C9D0', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+</svg>`;
+  }
+};
+
+// ============================================================
+// Centered D. center-orbit-glow / 环形微光
+// ============================================================
+const centerOrbitGlow = {
+  id: 'center-orbit-glow', name: '环形微光', category: 'centered',
+  elements: { tag: true, title: true, subtitle: true, author: true, image: false },
+  render(content, typo) {
+    const TITLE_X = 600, TITLE_Y = 220, TITLE_W = 900, SUB_W = 900;
+    const titleWrapped = wrapText(content.title, typo.titleSize, TITLE_W);
+    const titleLines = titleWrapped === '' ? 0 : titleWrapped.split('\n').length;
+    const SUB_Y = TITLE_Y + titleLines * lineHeightPx(typo.titleSize, typo.titleLineHeight) + 26;
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="cog-bg" cx="0.5" cy="0.5"><stop offset="0%" stop-color="#31205C"/><stop offset="48%" stop-color="#1B1235"/><stop offset="100%" stop-color="#0E0A1C"/></radialGradient>
+    <radialGradient id="cog-halo" cx="0.5" cy="0.5"><stop offset="0%" stop-color="#A78BFA" stop-opacity="0.18"/><stop offset="100%" stop-color="#A78BFA" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="1200" height="510" fill="url(#cog-bg)"/>
+  <ellipse cx="600" cy="260" rx="500" ry="220" fill="url(#cog-halo)"/>
+  <ellipse cx="600" cy="260" rx="505" ry="218" fill="none" stroke="#8B5CF6" stroke-width="1.2" opacity="0.3"/>
+  <ellipse cx="600" cy="260" rx="450" ry="188" fill="none" stroke="#C4B5FD" stroke-width="0.8" opacity="0.2"/>
+  <path d="M128 186 A505 218 0 0 1 347 70" fill="none" stroke="#F0ABFC" stroke-width="3" opacity="0.5"/>
+  <path d="M852 448 A505 218 0 0 1 1074 330" fill="none" stroke="#8B5CF6" stroke-width="3" opacity="0.5"/>
+  <circle cx="206" cy="116" r="5" fill="#F0ABFC"/><circle cx="1040" cy="388" r="5" fill="#8B5CF6"/>
+  <circle cx="112" cy="286" r="3" fill="#C4B5FD" opacity="0.7"/><circle cx="1090" cy="212" r="3" fill="#C4B5FD" opacity="0.7"/>
+  <path d="M68 68 h54 M68 68 v54 M1132 442 h-54 M1132 442 v-54" fill="none" stroke="#A78BFA" stroke-width="1.2" opacity="0.42"/>
+  ${renderCenteredMetaRow(content, typo, 96, { pill: '#24183F', label: '#9B8DBA', value: '#F2ECFF', line: '#6F55B6' })}
+  ${renderTextLines(titleWrapped, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#FBF9FF', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(wrapText(content.subtitle, typo.subtitleSize, SUB_W), TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#CFC4E8', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+</svg>`;
+  }
+};
+
+// ============================================================
+// Export all 44 templates
 // ============================================================
 /**
  * Template metadata for preview UI — scenario descriptions and style tags.
@@ -1781,7 +1948,11 @@ export const TEMPLATE_META = {
   'tech-blueprint':     { scenario: '系统方案、工具链文章',   styleTags: ['技术', '蓝图', '结构'] },
   'tech-terminal-map':  { scenario: '工程日志、故障复盘',     styleTags: ['技术', '深色', '终端'] },
   'product-roadmap':    { scenario: '路线图、增长复盘',       styleTags: ['产品', '卡片', '指标'] },
-  'product-decision-board': { scenario: '产品决策、用户研究', styleTags: ['产品', '看板', '研究'] }
+  'product-decision-board': { scenario: '产品决策、用户研究', styleTags: ['产品', '看板', '研究'] },
+  'center-midnight-prism': { scenario: '技术分享、深度解析',   styleTags: ['居中', '深色', '几何'] },
+  'center-editorial-seal': { scenario: '方法论、观点文章',     styleTags: ['居中', '编辑', '纸感'] },
+  'center-circuit-grid':   { scenario: '工程实践、架构设计',   styleTags: ['居中', '技术', '网格'] },
+  'center-orbit-glow':     { scenario: 'AI 趋势、前沿观察',    styleTags: ['居中', '微光', '未来感'] }
 };
 
 export const COVER_TEMPLATES = [
@@ -1834,4 +2005,9 @@ export const COVER_TEMPLATES = [
   techTerminalMap,
   productRoadmap,
   productDecisionBoard,
+  // Centered Layout (4)
+  centerMidnightPrism,
+  centerEditorialSeal,
+  centerCircuitGrid,
+  centerOrbitGlow,
 ];

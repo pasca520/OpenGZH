@@ -63,7 +63,7 @@ const coverContent = reactive({
   tag: '技术分享',
   title: '用 AI 构建公众号封面工具',
   subtitle: '开箱即用，亦可自由迭代',
-  author: '@OpenGZH',
+  author: 'AI产品零度',
   issueNumber: 'No.01'
 });
 const coverTypography = reactive({
@@ -906,7 +906,7 @@ function resetToDefault() {
     tag: '技术分享',
     title: '用 AI 构建公众号封面工具',
     subtitle: '开箱即用，亦可自由迭代',
-    author: '@OpenGZH',
+    author: 'AI产品零度',
     issueNumber: 'No.01'
   });
   Object.assign(coverTypography, {
@@ -1311,7 +1311,7 @@ function loadDefaultExample() {
 
 切换到顶部 **「封面图」** 标签页，快速生成公众号封面：
 
-- **40 套精选模板**，涵盖深色、浅色、渐变、几何、插画、抽象艺术等风格
+- **44 套精选模板**，涵盖深色、浅色、渐变、几何、插画、抽象艺术等风格
 - **73 幅精选插画**，支持自定义颜色替换
 - 自由调整标题、副标题、标签的 **字体、字号、行高、字间距**
 - 导出 **2400 × 960** 高清 PNG
@@ -1372,7 +1372,7 @@ def analyze_articles(df):
 |------|------|------|
 | 文章主题 | 27 套风格主题 | 五类场景分类 |
 | 代码主题 | 17 种高亮方案 | 跟随文章主题联动 |
-| 封面模板 | 40 套 + 73 幅插画 | 场景标签辅助选择 |
+| 封面模板 | 44 套 + 73 幅插画 | 场景标签辅助选择 |
 | 手机预览 | 29 款机型 | 含折叠屏 |
 | 数学公式 | LaTeX 渲染 | 导出自动转 SVG |
 
