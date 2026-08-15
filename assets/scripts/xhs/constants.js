@@ -6,7 +6,7 @@
  */
 
 /** Master feature switch; keep false until browser acceptance passes. */
-export const XHS_FEATURE_ENABLED = false;
+export const XHS_FEATURE_ENABLED = true;
 
 /** Logical preview size of a single card (3:4). */
 export const XHS_LOGICAL_WIDTH = 540;

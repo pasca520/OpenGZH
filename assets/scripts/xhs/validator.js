@@ -87,21 +87,44 @@ export function contrastRatio(foreground, background) {
 }
 
 /**
- * Walk ancestors to find the first non-transparent background.
+ * Walk ancestors compositing translucent backgrounds over each other until
+ * an opaque surface is found; falls back to white.
  * @param {HTMLElement} element
  * @param {(el:HTMLElement) => CSSStyleDeclaration} getComputedStyleImpl
  * @returns {{r:number,g:number,b:number,a:number}}
  */
 export function resolveEffectiveBackground(element, getComputedStyleImpl) {
   let node = element;
-  const defaultBackground = { r: 255, g: 255, b: 255, a: 1 };
+  let color = null;
   while (node && typeof node.nodeType === 'number') {
     const style = getComputedStyleImpl(node);
     const background = parseCssColor(style.backgroundColor);
-    if (background && background.a > 0) return background;
+    if (background && background.a > 0) {
+      if (color === null) {
+        color = { r: background.r, g: background.g, b: background.b, a: background.a };
+      } else {
+        const alpha = Math.min(1, background.a * (1 - color.a));
+        color = {
+          r: Math.round(background.r * alpha + color.r * (1 - alpha)),
+          g: Math.round(background.g * alpha + color.g * (1 - alpha)),
+          b: Math.round(background.b * alpha + color.b * (1 - alpha)),
+          a: Math.min(1, color.a + alpha)
+        };
+      }
+      if (color.a >= 0.999) {
+        return { r: color.r, g: color.g, b: color.b, a: 1 };
+      }
+    }
     node = node.parentElement || null;
   }
-  return defaultBackground;
+  if (color === null) return { r: 255, g: 255, b: 255, a: 1 };
+  // composite the remaining transparency over white
+  return {
+    r: Math.round(color.r * color.a + 255 * (1 - color.a)),
+    g: Math.round(color.g * color.a + 255 * (1 - color.a)),
+    b: Math.round(color.b * color.a + 255 * (1 - color.a)),
+    a: 1
+  };
 }
 
 const MIN_FONT_BY_KIND = {
@@ -120,10 +143,13 @@ const KIND_BY_SELECTOR = [
 
 /**
  * Browser default inspector: turn a real card DOM into a validation snapshot.
+ * Remote (http/https) refs are NOT resolved here — CORS enforcement happens
+ * at rasterize time; this inspector only verifies local refs exist.
  * @param {HTMLElement} card
+ * @param {{getImageBlob?: (id:string) => Promise<Blob|null>}} [imageStore]
  * @returns {Promise<object>}
  */
-export async function inspectCardInBrowser(card) {
+export async function inspectCardInBrowser(card, imageStore) {
   const body = card.querySelector('.xhs-card-body') || card;
   const cardRect = card.getBoundingClientRect();
   const bodyRect = body.getBoundingClientRect();
@@ -168,8 +194,21 @@ export async function inspectCardInBrowser(card) {
     }
   }
 
-  const mediaFailures = Array.from(card.querySelectorAll('[data-media-ref], video[src]'))
-    .map((element) => ({ blockId: element.closest('.xhs-block')?.getAttribute('data-block-id') || null }));
+  const mediaFailures = [];
+  const mediaTargets = Array.from(card.querySelectorAll('[data-media-ref], video[src]'));
+  for (const element of mediaTargets) {
+    const ref = element.getAttribute('data-media-ref') || element.getAttribute('src') || '';
+    const blockId = element.closest('.xhs-block')?.getAttribute('data-block-id') || null;
+    if (/^data:|^blob:/i.test(ref)) continue;
+    if (/^https?:/i.test(ref)) continue; // CORS checked only at rasterize
+    if (ref.startsWith('img://')) {
+      const id = ref.slice('img://'.length);
+      const blob = imageStore ? await imageStore.getImageBlob(id) : null;
+      if (!blob) mediaFailures.push({ blockId });
+    } else if (ref) {
+      mediaFailures.push({ blockId });
+    }
+  }
 
   const formulaFailures = [];
   for (const formula of card.querySelectorAll('.xhs-formula')) {
@@ -179,11 +218,18 @@ export async function inspectCardInBrowser(card) {
   }
 
   let fontsReady = true;
-  if (typeof document !== 'undefined' && document.fonts) {
+  if (typeof document !== 'undefined' && document.fonts?.load) {
     try {
-      await document.fonts.ready;
       const cardStyle = getComputedStyle(card);
       const family = cardStyle.fontFamily.split(',')[0].replace(/['"]/g, '').trim();
+      const pending = [
+        document.fonts.load(`16px "${family}"`),
+        document.fonts.load(`700 16px "${family}"`)
+      ];
+      await Promise.race([
+        Promise.all(pending).catch(() => undefined),
+        new Promise((resolve) => setTimeout(resolve, 3000))
+      ]);
       fontsReady = document.fonts.check(`16px "${family}"`)
         && document.fonts.check(`700 16px "${family}"`);
     } catch (_error) {
@@ -317,11 +363,11 @@ export function deriveIssuesFromSnapshot(snapshot, pageIndex) {
  * Validate one card.
  * @param {HTMLElement} card
  * @param {number} pageIndex
- * @param {{inspectCard?: Function}} [runtime]
+ * @param {{inspectCard?: Function, imageStore?: object}} [runtime]
  * @returns {Promise<object[]>} XhsValidationIssue[]
  */
 export async function validateXhsCard(card, pageIndex, runtime = {}) {
-  const inspect = runtime.inspectCard || inspectCardInBrowser;
+  const inspect = runtime.inspectCard || ((target) => inspectCardInBrowser(target, runtime.imageStore));
   const snapshot = await inspect(card);
   return deriveIssuesFromSnapshot(snapshot, pageIndex);
 }
@@ -329,7 +375,7 @@ export async function validateXhsCard(card, pageIndex, runtime = {}) {
 /**
  * Validate a whole set; any failure blocks the set export.
  * @param {object[]} cards
- * @param {{validateCard?: Function}} [runtime]
+ * @param {{validateCard?: Function, imageStore?: object}} [runtime]
  * @returns {Promise<{ok:boolean, issues:object[], validPageIndexes:number[]}>}
  */
 export async function validateXhsSet(cards, runtime = {}) {
@@ -337,7 +383,7 @@ export async function validateXhsSet(cards, runtime = {}) {
   const issues = [];
   const validPageIndexes = [];
   for (let index = 0; index < cards.length; index += 1) {
-    const pageIssues = await validateCard(cards[index], index);
+    const pageIssues = await validateCard(cards[index], index, runtime);
     if (pageIssues && pageIssues.length) {
       issues.push(...pageIssues);
     } else {

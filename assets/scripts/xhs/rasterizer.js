@@ -229,6 +229,9 @@ function defaultMountStage() {
 
 function defaultSerialize(clone) {
   const xml = new XMLSerializer().serializeToString(clone);
+  // Chrome's XMLSerializer already namespaces HTML elements; only add the
+  // XHTML namespace when the serializer left the root tag unqualified.
+  if (/^<[a-zA-Z0-9-]+\s[^>]*\bxmlns=/.test(xml)) return xml;
   return xml.replace(/^<([a-zA-Z0-9-]+)/, `<$1 xmlns="${XHTML_NS}"`);
 }
 

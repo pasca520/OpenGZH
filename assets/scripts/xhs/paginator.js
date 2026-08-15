@@ -73,13 +73,13 @@ async function largestFittingPrefix(candidates, fits, makeChunk) {
 
 /**
  * Split a long paragraph at sentence boundaries. Paragraphs containing
- * media are treated as unbreakable.
+ * media (images or raw video) are treated as unbreakable.
  * @param {object} block
  * @param {(blocks:object[]) => Promise<boolean>} fits
  * @returns {Promise<object[]>}
  */
 export async function splitParagraphBySentences(block, fits) {
-  if (/data-media-ref=|<img\b/i.test(block.html || '')) throw createUnbreakableError(block);
+  if (/data-media-ref=|<img\b|<video\b/i.test(block.html || '')) throw createUnbreakableError(block);
   const sentences = splitIntoSentences(block.text);
   if (sentences.length < 2) throw createUnbreakableError(block);
 

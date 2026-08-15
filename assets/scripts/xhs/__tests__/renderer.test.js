@@ -68,7 +68,7 @@ describe('xhs renderer', () => {
       id: 'c', kind: 'content', variant: 'code',
       blocks: [{
         id: 'code-1', type: 'code', html: '', text: '',
-        data: { language: 'js', lines: ['const a = 1;', 'const b = 2;'], startLineNumber: 5, partIndex: 1, partTotal: 2 }
+        data: { language: 'js', lines: ['const a = 1;', 'const b = 2;'], startLineNumber: 5, partIndex: 2, partTotal: 2 }
       }],
       pageNumber: 1, totalPages: 1, sourceStart: 0, sourceEnd: 1,
       manualBreakBefore: false, manualBreakMarkerStart: null

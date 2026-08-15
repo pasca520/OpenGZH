@@ -99,11 +99,12 @@ export async function exportXhsSet(cards, settings, options = {}) {
       blobs.push(await rasterize(cards[index], options.rasterizeOptions || {}));
       completedPageIndexes.push(index);
     } catch (error) {
+      const raw = error.message || '导出失败';
       issues.push({
         code: error.code || 'capture-failed',
         pageIndex: index,
         blockId: error.blockId || null,
-        message: error.message || '导出失败'
+        message: raw.includes('第') ? raw : `第 ${index + 1} 页：${raw}`
       });
       break;
     }

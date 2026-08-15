@@ -5,7 +5,7 @@
  * @module xhs/semantic-parser
  */
 
-const PAGE_BREAK_RE = /^<!--\s*xhs-page\s*-->$/i;
+const PAGE_BREAK_RE = /^<!--\s*xhs-page\s*-->\s*$/i;
 
 const ALLOWED_RAW_TAGS = new Set([
   'p', 'br', 'strong', 'em', 'del', 'code', 'pre', 'blockquote',
@@ -35,7 +35,8 @@ export function buildLineOffsets(markdown) {
 }
 
 function cloneToken(token) {
-  const copy = { ...token };
+  const copy = Object.create(Object.getPrototypeOf(token) || Object.prototype);
+  Object.assign(copy, token);
   if (token.children) copy.children = token.children.map(cloneToken);
   if (token.attrs) copy.attrs = token.attrs.map((attr) => [attr[0], attr[1]]);
   return copy;

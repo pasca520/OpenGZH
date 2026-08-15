@@ -87,7 +87,7 @@ function renderBlock(block) {
     case 'table': {
       const headers = Array.isArray(data.headers) ? data.headers : [];
       const rows = Array.isArray(data.rows) ? data.rows : [];
-      const continued = data.partIndex > 0 && data.partTotal > 1
+      const continued = data.partIndex > 1 && data.partTotal > 1
         ? '<div class="xhs-table-cont">续表</div>'
         : '';
       const headRow = headers.length
@@ -101,7 +101,7 @@ function renderBlock(block) {
       const lines = Array.isArray(data.lines) ? data.lines : [];
       const language = data.language || '';
       const startLine = Number(data.startLineNumber) || 1;
-      const continued = data.partIndex > 0 && data.partTotal > 1
+      const continued = data.partIndex > 1 && data.partTotal > 1
         ? '<span class="xhs-code-cont">续</span>'
         : '';
       const rows = lines.map((line, index) => (
@@ -218,15 +218,55 @@ export function renderXhsStack(pages, settings, options = {}) {
 async function waitForImages(root) {
   const images = Array.from(root.querySelectorAll('img'));
   await Promise.all(images.map((img) => {
+    const timeout = new Promise((resolve) => setTimeout(resolve, 800));
     if (typeof img.decode === 'function') {
-      return img.decode().catch(() => undefined);
+      return Promise.race([img.decode().catch(() => undefined), timeout]);
     }
     if (img.complete) return Promise.resolve();
-    return new Promise((resolve) => {
-      img.addEventListener('load', resolve, { once: true });
-      img.addEventListener('error', resolve, { once: true });
-    });
+    return Promise.race([
+      new Promise((resolve) => {
+        img.addEventListener('load', resolve, { once: true });
+        img.addEventListener('error', resolve, { once: true });
+      }),
+      timeout
+    ]);
   }));
+}
+
+/**
+ * Render just the block markup of a page (no card chrome) — used by the
+ * DOM measurer so the 540×720 card shell is never nested inside the body.
+ * @param {object[]} blocks
+ * @returns {string}
+ */
+export function renderXhsBlocks(blocks) {
+  return blocks
+    .filter((block) => block.type !== 'page-break')
+    .map((block) => renderBlock(block))
+    .join('');
+}
+
+/**
+ * Explicitly load the theme's body/code families so measurement uses real
+ * font metrics. Never waits on document.fonts.ready (other page fonts such
+ * as the WeChat theme webfonts may still be loading or fail).
+ * @param {object} settings
+ * @returns {Promise<void>}
+ */
+async function ensureXhsFonts(settings) {
+  if (typeof document === 'undefined' || !document.fonts?.load) return;
+  const theme = XHS_THEMES[settings.themeId] || XHS_THEMES['minimal-white'];
+  const families = new Set([theme.fonts.body, theme.fonts.code]);
+  const pending = [];
+  for (const family of families) {
+    for (const weight of [400, 700]) {
+      pending.push(document.fonts.load(`${weight} 16px "${family}"`).catch(() => undefined));
+    }
+  }
+  await Promise.race([
+    Promise.all(pending),
+    new Promise((resolve) => setTimeout(resolve, 3000))
+  ]);
 }
 
 /**
@@ -250,24 +290,17 @@ export function createXhsDomMeasurer(stage, settings, options = {}) {
   stage.appendChild(card);
 
   async function fits(blocks) {
-    const html = renderXhsPage({
-      id: '__xhs-measure__',
-      kind: 'content',
-      variant: selectPageVariant(blocks),
-      blocks,
-      pageNumber: 1,
-      totalPages: 1,
-      sourceStart: null,
-      sourceEnd: null,
-      manualBreakBefore: false,
-      manualBreakMarkerStart: null
-    }, settings);
-    body.innerHTML = html;
+    await ensureXhsFonts(settings);
+    body.innerHTML = renderXhsBlocks(blocks);
     if (options.hydrateMedia) await options.hydrateMedia(body);
     await waitForImages(body);
-    // Read layout after forcing a frame so web fonts / images settle.
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    return body.scrollHeight <= body.clientHeight && body.scrollWidth <= body.clientWidth;
+    // settle font swaps and layout across several frames before measuring
+    for (let frame = 0; frame < 3; frame += 1) {
+      void body.offsetHeight;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
+    const TOLERANCE = 2; // sub-pixel rounding
+    return body.scrollHeight <= body.clientHeight + TOLERANCE && body.scrollWidth <= body.clientWidth + TOLERANCE;
   }
 
   function destroy() {

@@ -88,6 +88,7 @@ const xhsExporting = ref(false);
 const XHS_DENSITY_LABELS = { relaxed: '舒展', standard: '标准', compact: '紧凑' };
 let xhsPaginationTimer = null;
 let xhsPaginationRevision = 0;
+let xhsFontsReadyHandled = false;
 let xhsPreviewObserver = null;
 let xhsMeasureStageEl = null;
 const xhsPreviewUrlCache = new Map();
@@ -699,6 +700,18 @@ function scheduleXhsPagination(delay = 450) {
     await nextTick();
     await hydrateXhsMediaRoot(document.querySelector('.xhs-image-stack'));
     restoreSelectedXhsPage();
+    // font swaps can change metrics; re-paginate once when the fonts settle
+    if (!xhsFontsReadyHandled && typeof document !== 'undefined' && document.fonts) {
+      xhsFontsReadyHandled = true;
+      Promise.race([
+        document.fonts.ready.catch(() => undefined),
+        new Promise((resolve) => setTimeout(resolve, 5000))
+      ]).then(() => {
+        if (contentOutputMode.value === 'image' && revision === xhsPaginationRevision) {
+          scheduleXhsPagination(0);
+        }
+      });
+    }
   }, delay);
 }
 
@@ -767,6 +780,7 @@ function updateXhsFocalPoint(x, y) {
 }
 
 function markXhsExportErrors(issues) {
+  console.error('[xhs] export blocked:', issues.map((issue) => `${issue.pageIndex}:${issue.code}:${issue.blockId || '-'}`).join(', '));
   xhsExportErrorPageIndexes.value = issues.map((issue) => issue.pageIndex).filter((index) => index != null);
   const first = issues[0];
   if (first) {
@@ -790,7 +804,10 @@ async function exportSingleXhsPage(pageId) {
   xhsExportErrorPageIndexes.value = [];
   xhsExporting.value = true;
   try {
-    const result = await exportXhsPage(card, page, {});
+    const result = await exportXhsPage(card, page, {
+      validateRuntime: { imageStore },
+      rasterizeOptions: { mediaOptions: { imageStore } }
+    });
     if (!result.ok) {
       markXhsExportErrors(result.issues);
       return;
@@ -811,7 +828,10 @@ async function exportAllXhsPages() {
   const doc = getActiveDocument();
   const title = resolveDocumentDisplayTitle(doc);
   try {
-    const result = await exportXhsSet(cards, { articleTitle: title }, {});
+    const result = await exportXhsSet(cards, { articleTitle: title }, {
+      validateRuntime: { imageStore },
+      rasterizeOptions: { mediaOptions: { imageStore } }
+    });
     if (!result.ok) {
       markXhsExportErrors(result.issues);
       return;
