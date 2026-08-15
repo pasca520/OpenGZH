@@ -1,0 +1,195 @@
+/* ═══════════════════════════════════════════════════════════════
+   Xiaohongshu 图片模式样式
+   - 540×720 逻辑卡片，导出 1080×1440
+   - 五套主题 × 三档密度，全部装饰为真实 DOM 子节点（捕获时只序列化真实节点）
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── 自托管字体（图片模式只允许这三族字体） ─────────────────── */
+@font-face {
+  font-family: 'Noto Sans SC';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/xhs/NotoSansSC-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Noto Sans SC';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../fonts/xhs/NotoSansSC-Medium.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Noto Sans SC';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../fonts/xhs/NotoSansSC-Bold.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Noto Serif SC';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/xhs/NotoSerifSC-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Noto Serif SC';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../fonts/xhs/NotoSerifSC-SemiBold.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Noto Serif SC';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../fonts/xhs/NotoSerifSC-Bold.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/xhs/JetBrainsMono-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../fonts/xhs/JetBrainsMono-Bold.woff2') format('woff2');
+}
+
+/* ── 540×720 卡片合同 ────────────────────────────────────────── */
+.xhs-card {
+  position: relative;
+  width: 540px;
+  height: 720px;
+  overflow: hidden;
+  box-sizing: border-box;
+  font-family: var(--xhs-font-body);
+  font-size: var(--xhs-body-size);
+  line-height: var(--xhs-line-height);
+  color: var(--xhs-text);
+  background: var(--xhs-background);
+  --xhs-body-size: 24px;
+  --xhs-line-height: 1.65;
+  --xhs-block-gap: 20px;
+  --xhs-font-code: 'JetBrains Mono';
+}
+
+.xhs-card-body {
+  position: absolute;
+  inset: 48px 44px 64px;
+  overflow: hidden;
+}
+
+.xhs-card[data-density="relaxed"] { --xhs-body-size: 26px; --xhs-line-height: 1.75; --xhs-block-gap: 24px; }
+.xhs-card[data-density="standard"] { --xhs-body-size: 24px; --xhs-line-height: 1.65; --xhs-block-gap: 20px; }
+.xhs-card[data-density="compact"] { --xhs-body-size: 22px; --xhs-line-height: 1.55; --xhs-block-gap: 16px; }
+
+.xhs-block {
+  margin: 0 0 var(--xhs-block-gap);
+}
+.xhs-block:last-child {
+  margin-bottom: 0;
+}
+
+/* 正文不小于 22px；代码/表格不小于 16px；页脚不小于 14px */
+.xhs-block p {
+  margin: 0 0 calc(var(--xhs-block-gap) * 0.5);
+}
+.xhs-block p:last-child {
+  margin-bottom: 0;
+}
+
+/* ── 页脚 ────────────────────────────────────────────────────── */
+.xhs-footer {
+  position: absolute;
+  left: 44px;
+  right: 44px;
+  bottom: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--xhs-text);
+  opacity: 0.72;
+  z-index: 5;
+}
+.xhs-footer .xhs-author {
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.xhs-page-number {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+/* ── 主题基础变量 ────────────────────────────────────────────── */
+.xhs-card[data-theme="minimal-white"] {
+  --xhs-background: #F8F8F6;
+  --xhs-text: #171717;
+  --xhs-accent: #1B7A5E;
+  --xhs-muted: rgba(23, 23, 23, 0.55);
+  --xhs-rule: rgba(23, 23, 23, 0.16);
+  --xhs-code-bg: rgba(23, 23, 23, 0.06);
+  --xhs-quote-bg: rgba(27, 122, 94, 0.08);
+}
+.xhs-card[data-theme="editorial-magazine"] {
+  --xhs-background: #F4EFE6;
+  --xhs-text: #1B1B1B;
+  --xhs-accent: #B42318;
+  --xhs-muted: rgba(27, 27, 27, 0.58);
+  --xhs-rule: rgba(27, 27, 27, 0.22);
+  --xhs-code-bg: rgba(27, 27, 27, 0.07);
+  --xhs-quote-bg: rgba(180, 35, 24, 0.07);
+}
+.xhs-card[data-theme="warm-paper"] {
+  --xhs-background: #F7EEDC;
+  --xhs-text: #302820;
+  --xhs-accent: #A05A2C;
+  --xhs-muted: rgba(48, 40, 32, 0.56);
+  --xhs-rule: rgba(160, 90, 44, 0.28);
+  --xhs-code-bg: rgba(160, 90, 44, 0.09);
+  --xhs-quote-bg: rgba(160, 90, 44, 0.1);
+}
+.xhs-card[data-theme="dark-tech"] {
+  --xhs-background: #111827;
+  --xhs-text: #F9FAFB;
+  --xhs-accent: #22D3EE;
+  --xhs-muted: rgba(249, 250, 251, 0.58);
+  --xhs-rule: rgba(34, 211, 238, 0.3);
+  --xhs-code-bg: rgba(249, 250, 251, 0.08);
+  --xhs-quote-bg: rgba(34, 211, 238, 0.1);
+}
+.xhs-card[data-theme="bright-knowledge"] {
+  --xhs-background: #FFFDF7;
+  --xhs-text: #202124;
+  --xhs-accent: #F97316;
+  --xhs-muted: rgba(32, 33, 36, 0.55);
+  --xhs-rule: rgba(249, 115, 22, 0.3);
+  --xhs-code-bg: rgba(249, 115, 22, 0.08);
+  --xhs-quote-bg: rgba(249, 115, 22, 0.08);
+}
+
+/* ── 预览壳（工作区外框，不进捕获） ─────────────────────────── */
+.xhs-card-shell {
+  position: relative;
+  margin: 0 auto;
+}
+.xhs-card-shell .xhs-card {
+  transform-origin: top left;
+}
+.xhs-card-shell-label {
+  position: absolute;
+  top: -26px;
+  left: 0;
+  font-size: 12px;
+  color: var(--color-text-secondary, #666);
+}
