@@ -19,6 +19,7 @@ import {
 import { createToast } from './ui/toast.js';
 import { createPanelManager } from './ui/panel-manager.js';
 import { loadPreferences, savePreferences, debounceSaveContent, getDefaultCodeBlockSettings, getDefaultDisplaySettings } from './storage/preferences.js';
+import { createDefaultXhsSettings, normalizeXhsSettings } from './xhs/constants.js';
 import { STYLES } from '../styles/themes/index.js';
 import { COVER_TEMPLATES, TEMPLATE_META } from './cover/templates.js';
 import { renderCover, getTemplate, getTemplates, getCategories, DEFAULT_TYPOGRAPHY, DEFAULT_COVER_CONTENT } from './cover/renderer.js';
@@ -368,7 +369,8 @@ function buildDocument({
   createdAt = Date.now(),
   updatedAt = createdAt,
   sortOrder = documents.value.length,
-  dirty = false
+  dirty = false,
+  xhs = createDefaultXhsSettings()
 } = {}) {
   return {
     id,
@@ -378,7 +380,8 @@ function buildDocument({
     createdAt,
     updatedAt,
     sortOrder,
-    dirty
+    dirty,
+    xhs: normalizeXhsSettings(xhs)
   };
 }
 
@@ -637,7 +640,8 @@ function duplicateDocument(documentId) {
     manualTitle: duplicateTitle,
     title: duplicateTitle,
     content: source.content,
-    sortOrder: documents.value.length
+    sortOrder: documents.value.length,
+    xhs: source.xhs
   });
 
   documents.value.push(doc);

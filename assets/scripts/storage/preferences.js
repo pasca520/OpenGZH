@@ -4,6 +4,8 @@
  * @module preferences
  */
 
+import { normalizeXhsSettings } from '../xhs/constants.js';
+
 const KEY_STYLE = 'currentStyle';
 const KEY_CONTENT = 'markdownInput';
 const KEY_DOCUMENTS = 'documents';
@@ -96,7 +98,8 @@ function normalizeDocument(doc, index = 0) {
     createdAt,
     updatedAt,
     sortOrder: typeof doc.sortOrder === 'number' ? doc.sortOrder : index,
-    dirty: Boolean(doc.dirty)
+    dirty: Boolean(doc.dirty),
+    xhs: normalizeXhsSettings(doc.xhs)
   };
 }
 
