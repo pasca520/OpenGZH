@@ -230,13 +230,16 @@ const editorSelection = ref({ start: 0, end: 0 });
 
 const categorizedThemes = ref(getCategorizedThemes());
 const codeThemeList = getCodeThemeList();
+// 字号档位：以 14px 为 1.0x 基准（推荐），其余档位按 14px 折算（value = px / 14）
+// 与 storage/preferences.js 的 FONT_SCALE_VALUES 保持一致
 const fontScaleOptions = [
-  { label: '更小', value: 0.75, meta: '0.75x' },
-  { label: '稍小', value: 0.85, meta: '0.85x' },
-  { label: '推荐', value: 1, meta: '1.0x' },
-  { label: '稍大', value: 1.15, meta: '1.15x' },
-  { label: '更大', value: 1.3, meta: '1.3x' },
-  { label: '超大', value: 1.5, meta: '1.5x' }
+  { label: '更小', value: 12 / 14, meta: '12px · 0.86x' },
+  { label: '稍小', value: 13 / 14, meta: '13px · 0.93x' },
+  { label: '推荐', value: 1, meta: '14px · 1.0x' },
+  { label: '稍大', value: 15 / 14, meta: '15px · 1.07x' },
+  { label: '更大', value: 16 / 14, meta: '16px · 1.14x' },
+  { label: '超大', value: 17 / 14, meta: '17px · 1.21x' },
+  { label: '最大', value: 18 / 14, meta: '18px · 1.29x' }
 ];
 const fontFamilyOptions = [
   { label: '跟随模板', value: 'theme', meta: '保留风格' },

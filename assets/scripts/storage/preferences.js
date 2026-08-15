@@ -21,7 +21,9 @@ const DEFAULT_CODE_BLOCK_SETTINGS = {
   showMacDecorations: true
 };
 
-const FONT_SCALE_VALUES = [0.75, 0.85, 1, 1.15, 1.3, 1.5];
+// 字号档位倍数：以 14px 为 1.0x（推荐），其余档位按 14px 折算
+// 与 main.js 的 fontScaleOptions 保持一致
+const FONT_SCALE_VALUES = [12, 13, 14, 15, 16, 17, 18].map((px) => px / 14);
 const FONT_FAMILY_VALUES = ['theme', 'sans', 'serif', 'mono'];
 const IMAGE_STYLE_MODES = ['theme', 'custom'];
 const IMAGE_RADIUS_MODES = ['px', 'circle'];
