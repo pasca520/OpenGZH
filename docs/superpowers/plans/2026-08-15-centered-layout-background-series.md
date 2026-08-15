@@ -15,7 +15,7 @@
 **Files:**
 - Modify: `assets/scripts/cover/__tests__/templates.test.js`
 
-- [ ] **Step 1: Replace the four-template assertions**
+- [x] **Step 1: Replace the four-template assertions**
 
 Assert exactly 41 unique templates and exactly one template in the `centered` category:
 
@@ -34,7 +34,7 @@ it('uses one centered layout with 16 selectable backgrounds', () => {
 });
 ```
 
-- [ ] **Step 2: Lock the new label and author placement**
+- [x] **Step 2: Lock the new label and author placement**
 
 For every background, render `centered-layout` with `{ tag: '技术分享', author: 'AI产品零度', backgroundId }` and assert:
 
@@ -50,7 +50,7 @@ expect(svg.match(/@AI产品零度/g)).toHaveLength(1);
 
 Also render with `author: '@AI产品零度'` and assert the output still contains one `@`.
 
-- [ ] **Step 3: Run the focused test in the red state**
+- [x] **Step 3: Run the focused test in the red state**
 
 Run: `npm test -- assets/scripts/cover/__tests__/templates.test.js`
 
@@ -63,7 +63,7 @@ Expected: FAIL because four centered templates still exist, no template owns 16 
 - Modify: `assets/scripts/cover/renderer.js`
 - Test: `assets/scripts/cover/__tests__/templates.test.js`
 
-- [ ] **Step 1: Define the background data contract**
+- [x] **Step 1: Define the background data contract**
 
 Create and export `CENTERED_BACKGROUNDS`; every item has this exact shape:
 
@@ -88,7 +88,7 @@ Create and export `CENTERED_BACKGROUNDS`; every item has this exact shape:
 
 Declare all 16 IDs from Task 1. Each `artwork()` returns a complete background layer and must use its own SVG definition IDs.
 
-- [ ] **Step 2: Implement the one shared layout**
+- [x] **Step 2: Implement the one shared layout**
 
 Replace `renderCenteredMetaRow` and the four centered template objects with:
 
@@ -108,7 +108,7 @@ function renderAuthorHandle(author) {
 
 Create `centeredLayout` with `id: 'centered-layout'`, `backgrounds: CENTERED_BACKGROUNDS`, and one render function. It resolves unknown background IDs to the first background, emits `data-background`, keeps title/subtitle centered, renders the tag at the top, and renders the author handle at x=1120 / y=456 with `text-anchor="end"`.
 
-- [ ] **Step 3: Update registration and pass-through**
+- [x] **Step 3: Update registration and pass-through**
 
 Remove the four old centered IDs and their metadata, register one `centered-layout` meta entry, set the top file comment to 41 templates / 9 categories, and add this field to `safeContent` in `renderer.js`:
 
@@ -116,7 +116,7 @@ Remove the four old centered IDs and their metadata, register one `centered-layo
 backgroundId: content.backgroundId || ''
 ```
 
-- [ ] **Step 4: Verify the template green state**
+- [x] **Step 4: Verify the template green state**
 
 Run: `npm test -- assets/scripts/cover/__tests__/templates.test.js`
 
@@ -130,7 +130,7 @@ Expected: every cover-template test passes with 41 templates, one centered layou
 - Modify: `assets/styles/cover.css`
 - Test: `assets/scripts/cover/__tests__/templates.test.js`
 
-- [ ] **Step 1: Add background state and validation**
+- [x] **Step 1: Add background state and validation**
 
 In `main.js`, add:
 
@@ -151,11 +151,11 @@ function selectCoverBackground(id) {
 
 Import `getTemplate`, pass `backgroundId` into `renderCover`, reset the background to the first valid value when changing templates, and return the new state/functions from `setup()`.
 
-- [ ] **Step 2: Integrate undo, redo, restore, and reset**
+- [x] **Step 2: Integrate undo, redo, restore, and reset**
 
 Add `backgroundId` to `getCoverStateSnapshot()`. In `restoreCoverState()`, accept the saved ID only when it belongs to the restored template; otherwise use the template's first background or `DEFAULT_COVER_BACKGROUND_ID`. Reset both reset paths to the default ID.
 
-- [ ] **Step 3: Render the 4 × 4 selector**
+- [x] **Step 3: Render the 4 × 4 selector**
 
 In `index.html`, insert this section above typography controls:
 
@@ -181,7 +181,7 @@ In `index.html`, insert this section above typography controls:
 </div>
 ```
 
-- [ ] **Step 4: Style the selector**
+- [x] **Step 4: Style the selector**
 
 Add a four-column grid with 8px gaps. Each option is a compact accessible button with a 16:7 swatch, 10px Chinese label, visible hover/focus, and an accent outline for the active option. Do not add animations or dependencies.
 
@@ -192,24 +192,24 @@ Add a four-column grid with 8px gaps. Each option is a compact accessible button
 - Modify: `assets/scripts/main.js`
 - Verify: `assets/scripts/cover/export-png.js`
 
-- [ ] **Step 1: Update visible template counts**
+- [x] **Step 1: Update visible template counts**
 
 Replace current `44 套` claims with `41 套`; mention the centered template's 16 selectable backgrounds in the cover feature copy without changing unrelated claims.
 
-- [ ] **Step 2: Run the full automated suite**
+- [x] **Step 2: Run the full automated suite**
 
 Run: `npm test`
 
 Expected: all tests pass with zero failures.
 
-- [ ] **Step 3: Run browser interaction and export checks**
+- [x] **Step 3: Run browser interaction and export checks**
 
 Using the real local app, select “居中布局”, assert 16 background radio buttons, cycle through all 16, verify the same title/tag/subtitle/author coordinates, exercise undo/redo/reset, and export all 16 backgrounds.
 
 Expected: `BACKGROUND_OPTIONS_OK 16/16`, `UNDO_REDO_RESET_OK`, `LONG_LAYOUT_OK 16/16`, and 16 PNG files of `2400 × 1020`.
 
-- [ ] **Step 4: Validate SVG and repository scope**
+- [x] **Step 4: Validate SVG and repository scope**
 
 Render all 16 backgrounds with long Chinese text, pipe each SVG through `xmllint --noout`, then run `git diff --check` and inspect `git status --short`.
 
-Expected: `XML_VALIDATION_OK 16/16`, no whitespace errors, and only the planned source/doc files modified.
+Expected: `SVG_XML_OK 56/56`, no whitespace errors, and only the planned source/doc files modified.

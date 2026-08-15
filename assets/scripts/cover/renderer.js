@@ -98,6 +98,7 @@ export function renderCover(templateId, content, typography = {}) {
     subtitle: content.subtitle || '',
     author: content.author || '',
     issueNumber: content.issueNumber || 'No.01',
+    backgroundId: content.backgroundId || '',
     illustrationSvg: content.illustrationSvg || '',
     illustrationOpacity: content.illustrationOpacity ?? 1,
     layerOrder: content.layerOrder || 'text-top'

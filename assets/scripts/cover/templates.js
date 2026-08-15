@@ -1,6 +1,6 @@
 // ============================================================
 // Cover Templates for WeChat Article Cover Image Editor
-// 44 unique SVG templates across 9 categories
+// 41 unique SVG templates across 9 categories
 // ============================================================
 
 const FONT_FAMILY = "'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif";
@@ -125,36 +125,14 @@ function renderTextLines(text, x, y, fontSize, lineHeight, letterSpacing, textAl
   }).join('\n');
 }
 
-function renderCenteredMetaRow(content, typo, y, palette) {
-  const entries = [
-    { label: '类型', value: content.tag, field: 'tag' },
-    { label: '作者', value: content.author, field: 'author' }
-  ].filter(entry => entry.value);
-  if (!entries.length) return '';
-
-  const fontSize = 16;
-  const labelWidth = 32;
-  const valueGap = 12;
-  const horizontalPadding = 18;
-  const groupGap = 18;
-  const groups = entries.map(entry => ({
-    ...entry,
-    width: horizontalPadding * 2 + labelWidth + valueGap + tagW(entry.value, fontSize)
-  }));
-  const rowWidth = groups.reduce((sum, group) => sum + group.width, 0) + groupGap * (groups.length - 1);
-  let x = 600 - rowWidth / 2;
-
-  return groups.map(group => {
-    const valueX = x + horizontalPadding + labelWidth + valueGap;
-    const markup = `<g class="centered-meta-group">
-  <rect x="${x}" y="${y - 23}" width="${group.width}" height="34" rx="17" fill="${palette.pill}" stroke="${palette.line}" stroke-width="1"/>
-  <text x="${x + horizontalPadding}" y="${y}" font-size="12" font-weight="700" font-family="${typo.subtitleFontFamily}" fill="${palette.label}" letter-spacing="1">${group.label}</text>
-  <line x1="${x + horizontalPadding + labelWidth}" y1="${y - 13}" x2="${x + horizontalPadding + labelWidth}" y2="${y + 2}" stroke="${palette.line}" stroke-width="1"/>
-  ${renderTextLines(group.value, valueX, y, fontSize, fontSize * 1.2, 0.5, 'left', palette.value, '600', typo.subtitleFontFamily, group.field)}
+function renderCenteredTag(content, typo, y, palette) {
+  if (!content.tag) return '';
+  const fontSize = Math.max(14, Math.min(22, typo.tagSize));
+  const width = Math.max(82, tagW(content.tag, fontSize) + 38);
+  return `<g class="centered-tag">
+  <rect x="${600 - width / 2}" y="${y - 28}" width="${width}" height="40" rx="20" fill="${palette.tagFill}" stroke="${palette.tagStroke}" stroke-width="1"/>
+  ${renderTextLines(content.tag, 600, y, fontSize, fontSize * 1.2, 1, 'center', palette.tagText, '700', typo.subtitleFontFamily, 'tag')}
 </g>`;
-    x += group.width + groupGap;
-    return markup;
-  }).join('\n');
 }
 
 /**
@@ -1767,142 +1745,147 @@ const absRetroSun = {
 };
 
 // ============================================================
-// Centered A. center-midnight-prism / 午夜棱镜
+// Centered layout background series
 // ============================================================
-const centerMidnightPrism = {
-  id: 'center-midnight-prism', name: '午夜棱镜', category: 'centered',
+export const CENTERED_BACKGROUNDS = [
+  {
+    id: 'midnight-prism', name: '午夜棱镜',
+    preview: 'linear-gradient(135deg, #111827 0%, #25315a 52%, #121a2c 100%)',
+    palette: { title: '#F7F8FB', subtitle: '#B8C3D5', tagFill: '#1A2740', tagStroke: '#536A95', tagText: '#E5EAF2', author: '#8FA0BA' },
+    artwork: () => `<defs><linearGradient id="cbg-mp" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#111827"/><stop offset="1" stop-color="#18243A"/></linearGradient></defs>
+  <rect width="1200" height="510" fill="url(#cbg-mp)"/><polygon points="0,0 360,0 0,242" fill="#312E81" opacity=".24"/><polygon points="1200,510 905,510 1102,332" fill="#4338CA" opacity=".22"/><polygon points="675,0 760,0 1160,214" fill="#24324A" opacity=".56"/><path d="M0 510 392 142 838 510M750 0 1200 242" fill="none" stroke="#52637E" stroke-width="1.3" opacity=".38"/><path d="M950 82 1012 20 1074 82Z" fill="none" stroke="#6366F1" opacity=".55"/><circle cx="258" cy="398" r="4" fill="#6366F1"/><circle cx="842" cy="80" r="3" fill="#818CF8"/>`
+  },
+  {
+    id: 'editorial-seal', name: '编辑印记',
+    preview: 'linear-gradient(135deg, #f4efe6 0%, #f4efe6 72%, #b33a3a 73%, #8f2929 100%)',
+    palette: { title: '#211F1C', subtitle: '#6C6257', tagFill: '#FFFDF8', tagStroke: '#D5CABB', tagText: '#282520', author: '#9A3434' },
+    artwork: () => `<defs><pattern id="cbg-es" width="18" height="18" patternUnits="userSpaceOnUse"><circle cx="3" cy="4" r=".7" fill="#2D2923" opacity=".08"/><circle cx="13" cy="11" r=".6" fill="#9A2F2F" opacity=".06"/></pattern></defs>
+  <rect width="1200" height="510" fill="#F4EFE6"/><rect width="1200" height="510" fill="url(#cbg-es)"/><rect x="38" y="34" width="1124" height="442" fill="none" stroke="#282520" stroke-width="1.4"/><rect x="49" y="45" width="1102" height="420" fill="none" stroke="#B8AD9C"/><circle cx="1060" cy="116" r="66" fill="none" stroke="#B33A3A" stroke-width="8" opacity=".18"/><circle cx="1060" cy="116" r="46" fill="none" stroke="#B33A3A" stroke-width="2" opacity=".34"/><path d="M94 102H230M970 410h136" stroke="#B33A3A" stroke-width="5"/><path d="M74 74h28M74 74v28M1126 436h-28M1126 436v-28" fill="none" stroke="#282520" stroke-width="2"/>`
+  },
+  {
+    id: 'circuit-grid', name: '电路网格',
+    preview: 'linear-gradient(135deg, #061820 0%, #0b2831 70%, #146574 100%)',
+    palette: { title: '#EDFDFF', subtitle: '#91C9D0', tagFill: '#0A2A34', tagStroke: '#247888', tagText: '#D5FAFF', author: '#67E8F9' },
+    artwork: () => `<defs><linearGradient id="cbg-cg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#061820"/><stop offset="1" stop-color="#0B2831"/></linearGradient><pattern id="cbg-cgg" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M32 0H0V32" fill="none" stroke="#56CFE1" opacity=".11"/></pattern></defs>
+  <rect width="1200" height="510" fill="url(#cbg-cg)"/><rect width="1200" height="510" fill="url(#cbg-cgg)"/><g fill="none" stroke="#36C4D8" stroke-width="1.5" opacity=".42"><path d="M0 126h118l50 50h78M0 388h142l56-56h70M1200 118h-112l-50 50h-74M1200 396h-140l-56-56h-70"/></g><g fill="#67E8F9"><circle cx="118" cy="126" r="4"/><circle cx="246" cy="176" r="3"/><circle cx="1088" cy="118" r="4"/><circle cx="964" cy="168" r="3"/></g><path d="M70 58h190M940 452h190" stroke="#22D3EE" stroke-width="4"/>`
+  },
+  {
+    id: 'orbit-glow', name: '环形微光',
+    preview: 'radial-gradient(circle at center, #4a2b76 0%, #1b1235 54%, #0e0a1c 100%)',
+    palette: { title: '#FBF9FF', subtitle: '#CFC4E8', tagFill: '#24183F', tagStroke: '#6F55B6', tagText: '#F2ECFF', author: '#C4B5FD' },
+    artwork: () => `<defs><radialGradient id="cbg-og"><stop stop-color="#31205C"/><stop offset=".48" stop-color="#1B1235"/><stop offset="1" stop-color="#0E0A1C"/></radialGradient></defs>
+  <rect width="1200" height="510" fill="url(#cbg-og)"/><ellipse cx="600" cy="260" rx="505" ry="218" fill="none" stroke="#8B5CF6" stroke-width="1.2" opacity=".3"/><ellipse cx="600" cy="260" rx="450" ry="188" fill="none" stroke="#C4B5FD" opacity=".2"/><path d="M128 186A505 218 0 0 1 347 70M852 448A505 218 0 0 1 1074 330" fill="none" stroke="#F0ABFC" stroke-width="3" opacity=".5"/><circle cx="206" cy="116" r="5" fill="#F0ABFC"/><circle cx="1040" cy="388" r="5" fill="#8B5CF6"/><path d="M68 68h54M68 68v54M1132 442h-54M1132 442v-54" fill="none" stroke="#A78BFA" opacity=".42"/>`
+  },
+  {
+    id: 'cobalt-radar', name: '钴蓝雷达',
+    preview: 'radial-gradient(circle at 25% 40%, #275ccf 0%, #102b66 38%, #07152f 100%)',
+    palette: { title: '#F2F7FF', subtitle: '#AFC9F5', tagFill: '#123474', tagStroke: '#4D8DFF', tagText: '#DCEAFF', author: '#76A9FF' },
+    artwork: () => `<defs><radialGradient id="cbg-cr" cx=".25" cy=".4"><stop stop-color="#275CCF"/><stop offset=".38" stop-color="#102B66"/><stop offset="1" stop-color="#07152F"/></radialGradient><pattern id="cbg-crg" width="48" height="48" patternUnits="userSpaceOnUse"><path d="M48 0H0V48" fill="none" stroke="#6EA8FF" opacity=".08"/></pattern></defs>
+  <rect width="1200" height="510" fill="url(#cbg-cr)"/><rect width="1200" height="510" fill="url(#cbg-crg)"/><g transform="translate(205 260)" fill="none" stroke="#67A1FF" opacity=".36"><circle r="150"/><circle r="105"/><circle r="58"/><path d="M-178 0h356M0-178v356M0 0l125-94" stroke-width="2"/></g><path d="M1050 60v100M1000 110h100M82 410h160" stroke="#8BB7FF" stroke-width="2" opacity=".5"/>`
+  },
+  {
+    id: 'vermilion-fold', name: '朱红折面',
+    preview: 'linear-gradient(145deg, #4c1113 0%, #a82a25 45%, #e75b3f 100%)',
+    palette: { title: '#FFF7F2', subtitle: '#FFD0C2', tagFill: '#7E1F1D', tagStroke: '#F58A70', tagText: '#FFF1EA', author: '#FFC0AD' },
+    artwork: () => `<defs><linearGradient id="cbg-vf" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#481012"/><stop offset=".55" stop-color="#9F2924"/><stop offset="1" stop-color="#E65A3F"/></linearGradient></defs>
+  <rect width="1200" height="510" fill="url(#cbg-vf)"/><polygon points="0,0 410,0 250,510 0,510" fill="#2F0A0D" opacity=".42"/><polygon points="1200,0 820,0 1030,510 1200,510" fill="#FF896B" opacity=".2"/><polygon points="210,0 580,0 420,172" fill="#F07B61" opacity=".16"/><polygon points="750,510 1080,510 920,346" fill="#5D1014" opacity=".34"/><path d="M0 438 356 84M1200 92 896 402" stroke="#FFB09C" opacity=".28"/><circle cx="96" cy="88" r="5" fill="#FFC0AD"/><circle cx="1100" cy="422" r="5" fill="#FFC0AD"/>`
+  },
+  {
+    id: 'ink-wash', name: '水墨留白',
+    preview: 'linear-gradient(135deg, #eeeae1 0%, #faf8f2 52%, #c9c3b8 100%)',
+    palette: { title: '#25231F', subtitle: '#6A665F', tagFill: '#EFEAE0', tagStroke: '#A49D91', tagText: '#37332D', author: '#6F695F' },
+    artwork: () => `<defs><linearGradient id="cbg-iw" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#E9E4DA"/><stop offset=".55" stop-color="#FAF8F2"/><stop offset="1" stop-color="#DED8CC"/></linearGradient></defs>
+  <rect width="1200" height="510" fill="url(#cbg-iw)"/><path d="M0 394C148 302 220 336 328 406S528 472 644 414" fill="none" stroke="#2E3433" stroke-width="72" opacity=".1"/><path d="M812 28c90 40 118 96 170 182s128 104 218 70" fill="none" stroke="#1F2524" stroke-width="98" opacity=".08"/><circle cx="152" cy="110" r="48" fill="#A33832" opacity=".12"/><path d="M72 70h112M1016 436h112" stroke="#383530" opacity=".42"/><g fill="#302E29" opacity=".18"><circle cx="260" cy="430" r="3"/><circle cx="292" cy="452" r="2"/><circle cx="990" cy="94" r="3"/></g>`
+  },
+  {
+    id: 'emerald-contour', name: '翡翠等高线',
+    preview: 'linear-gradient(135deg, #062f2a 0%, #0d5746 55%, #092e2c 100%)',
+    palette: { title: '#F0FFF9', subtitle: '#A9D9C8', tagFill: '#0C463B', tagStroke: '#3D9C7B', tagText: '#D8F8EC', author: '#79C7AB' },
+    artwork: () => `<defs><linearGradient id="cbg-ec" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#062F2A"/><stop offset=".55" stop-color="#0D5746"/><stop offset="1" stop-color="#092E2C"/></linearGradient></defs>
+  <rect width="1200" height="510" fill="url(#cbg-ec)"/><g fill="none" stroke="#79D5B3" opacity=".18"><path d="M-80 420C80 254 220 246 350 354s260 104 390-22 290-152 540-40"/><path d="M-60 454C102 290 224 286 360 386s250 98 382-26 288-144 530-28"/><path d="M-30 486C120 332 240 326 374 418s250 88 376-30 282-132 512-16"/><path d="M650 38c70 54 88 116 38 168s-40 112 34 154"/><path d="M686 12c88 70 104 150 46 208s-46 128 42 178"/></g><circle cx="1068" cy="96" r="54" fill="none" stroke="#76D1B0" stroke-width="2" opacity=".3"/><path d="M82 82h124M994 430h124" stroke="#B4E9D6" stroke-width="2" opacity=".38"/>`
+  },
+  {
+    id: 'amber-horizon', name: '琥珀地平线',
+    preview: 'linear-gradient(180deg, #2a1720 0%, #8d4b24 58%, #e4a348 100%)',
+    palette: { title: '#FFF9EA', subtitle: '#F1D3A6', tagFill: '#513024', tagStroke: '#C98742', tagText: '#FFE9C2', author: '#F3C77E' },
+    artwork: () => `<defs><linearGradient id="cbg-ah" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#25151E"/><stop offset=".62" stop-color="#784020"/><stop offset="1" stop-color="#D99A43"/></linearGradient><radialGradient id="cbg-ahs"><stop stop-color="#FFD995"/><stop offset="1" stop-color="#F5A83D" stop-opacity="0"/></radialGradient></defs>
+  <rect width="1200" height="510" fill="url(#cbg-ah)"/><circle cx="600" cy="430" r="170" fill="url(#cbg-ahs)" opacity=".72"/><g stroke="#FFE0A3" opacity=".2"><path d="M0 400h1200M0 428h1200M0 458h1200M0 490h1200"/><path d="M120 510 520 352M1080 510 680 352M320 510 552 352M880 510 648 352"/></g><path d="M0 352h1200" stroke="#FFD080" stroke-width="2" opacity=".58"/><circle cx="1020" cy="92" r="3" fill="#FFE2A8"/><circle cx="1080" cy="140" r="2" fill="#FFE2A8"/>`
+  },
+  {
+    id: 'graphite-grid', name: '石墨网格',
+    preview: 'linear-gradient(135deg, #17191d 0%, #343941 58%, #111215 100%)',
+    palette: { title: '#F6F7F8', subtitle: '#B9BEC6', tagFill: '#292D33', tagStroke: '#686F79', tagText: '#F0F2F4', author: '#A7ADB5' },
+    artwork: () => `<defs><linearGradient id="cbg-gg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#17191D"/><stop offset=".58" stop-color="#343941"/><stop offset="1" stop-color="#111215"/></linearGradient><pattern id="cbg-ggp" width="44" height="44" patternUnits="userSpaceOnUse"><path d="M44 0H0V44" fill="none" stroke="#D6DAE0" opacity=".07"/></pattern></defs>
+  <rect width="1200" height="510" fill="url(#cbg-gg)"/><rect width="1200" height="510" fill="url(#cbg-ggp)"/><rect x="58" y="58" width="224" height="132" fill="#FFFFFF" opacity=".035"/><rect x="918" y="320" width="224" height="132" fill="#FFFFFF" opacity=".045"/><path d="M58 216h126M1016 294h126" stroke="#D9DDE3" stroke-width="3" opacity=".34"/><path d="M90 76v94M1110 340v94" stroke="#FAFAFA" opacity=".18"/>`
+  },
+  {
+    id: 'cyan-blueprint', name: '青蓝蓝图',
+    preview: 'linear-gradient(135deg, #05366c 0%, #086d91 55%, #04284f 100%)',
+    palette: { title: '#F2FCFF', subtitle: '#B6E3EF', tagFill: '#07557B', tagStroke: '#5CC6DE', tagText: '#E2FAFF', author: '#8FD9E9' },
+    artwork: () => `<defs><linearGradient id="cbg-cb" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#05366C"/><stop offset=".55" stop-color="#086D91"/><stop offset="1" stop-color="#04284F"/></linearGradient><pattern id="cbg-cbp" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0V24" fill="none" stroke="#B6F0FF" opacity=".08"/></pattern></defs>
+  <rect width="1200" height="510" fill="url(#cbg-cb)"/><rect width="1200" height="510" fill="url(#cbg-cbp)"/><g fill="none" stroke="#9BE8F8" opacity=".3"><rect x="54" y="54" width="1092" height="402"/><circle cx="168" cy="350" r="72"/><circle cx="168" cy="350" r="44"/><path d="M96 350h144M168 278v144M930 92h168v88H930zM954 116h120M954 140h82"/></g><path d="M54 210h120M1026 300h120" stroke="#C3F4FF" stroke-width="3" opacity=".5"/>`
+  },
+  {
+    id: 'coral-ripple', name: '珊瑚涟漪',
+    preview: 'radial-gradient(circle at 80% 20%, #ff8d77 0%, #f5d7c8 42%, #fff2e8 100%)',
+    palette: { title: '#432B28', subtitle: '#805953', tagFill: '#FFF6EF', tagStroke: '#E99B89', tagText: '#713E37', author: '#A85C50' },
+    artwork: () => `<defs><radialGradient id="cbg-cor" cx=".8" cy=".2"><stop stop-color="#FF8D77"/><stop offset=".42" stop-color="#F5D7C8"/><stop offset="1" stop-color="#FFF2E8"/></radialGradient></defs>
+  <rect width="1200" height="510" fill="url(#cbg-cor)"/><g fill="none" stroke="#C95F50" opacity=".18"><circle cx="1030" cy="90" r="78"/><circle cx="1030" cy="90" r="126"/><circle cx="1030" cy="90" r="176"/><circle cx="1030" cy="90" r="232"/></g><g fill="none" stroke="#805B55" opacity=".15"><circle cx="110" cy="450" r="76"/><circle cx="110" cy="450" r="124"/><circle cx="110" cy="450" r="172"/></g><path d="M72 72h118M1010 438h118" stroke="#B65D50" stroke-width="3" opacity=".46"/>`
+  },
+  {
+    id: 'forest-window', name: '森林窗口',
+    preview: 'linear-gradient(135deg, #0b2520 0%, #315949 56%, #102d27 100%)',
+    palette: { title: '#F2F8F1', subtitle: '#BDD0C4', tagFill: '#173C32', tagStroke: '#668B77', tagText: '#E3EFE7', author: '#A8C3B1' },
+    artwork: () => `<defs><linearGradient id="cbg-fw" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0B2520"/><stop offset=".56" stop-color="#315949"/><stop offset="1" stop-color="#102D27"/></linearGradient></defs>
+  <rect width="1200" height="510" fill="url(#cbg-fw)"/><path d="M0 510V112Q138 16 276 112V510ZM924 510V112Q1062 16 1200 112V510Z" fill="#061A17" opacity=".5"/><path d="M70 510V154Q138 92 206 154V510M994 510V154Q1062 92 1130 154V510" fill="none" stroke="#779B86" opacity=".22"/><g fill="#D9E8DC" opacity=".14"><circle cx="260" cy="76" r="4"/><circle cx="916" cy="126" r="3"/><circle cx="104" cy="286" r="3"/><circle cx="1110" cy="304" r="4"/></g><path d="M64 66h112M1024 444h112" stroke="#B8CCBD" stroke-width="2" opacity=".38"/>`
+  },
+  {
+    id: 'silver-glass', name: '银色玻璃',
+    preview: 'linear-gradient(135deg, #dce2e7 0%, #f7f9fa 45%, #b9c4cd 100%)',
+    palette: { title: '#26313A', subtitle: '#62717C', tagFill: '#EFF3F5', tagStroke: '#A8B4BD', tagText: '#35434D', author: '#667681' },
+    artwork: () => `<defs><linearGradient id="cbg-sg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#DCE2E7"/><stop offset=".45" stop-color="#F7F9FA"/><stop offset="1" stop-color="#B9C4CD"/></linearGradient><linearGradient id="cbg-sgg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#FFFFFF" stop-opacity=".7"/><stop offset="1" stop-color="#FFFFFF" stop-opacity=".08"/></linearGradient></defs>
+  <rect width="1200" height="510" fill="url(#cbg-sg)"/><rect x="48" y="44" width="340" height="164" rx="28" fill="url(#cbg-sgg)" stroke="#FFFFFF" opacity=".7"/><rect x="804" y="300" width="348" height="166" rx="28" fill="url(#cbg-sgg)" stroke="#FFFFFF" opacity=".6"/><circle cx="1080" cy="92" r="62" fill="#FFFFFF" opacity=".18"/><circle cx="136" cy="406" r="72" fill="#8798A5" opacity=".08"/><path d="M80 242h142M978 270h142" stroke="#6E7E8A" stroke-width="2" opacity=".28"/>`
+  },
+  {
+    id: 'burgundy-lines', name: '勃艮第线稿',
+    preview: 'linear-gradient(135deg, #2f101b 0%, #6d2235 58%, #3c101f 100%)',
+    palette: { title: '#FFF7F3', subtitle: '#E5C1C4', tagFill: '#542033', tagStroke: '#A86B73', tagText: '#F9E4E3', author: '#D9A6A8' },
+    artwork: () => `<defs><linearGradient id="cbg-bl" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#2F101B"/><stop offset=".58" stop-color="#6D2235"/><stop offset="1" stop-color="#3C101F"/></linearGradient></defs>
+  <rect width="1200" height="510" fill="url(#cbg-bl)"/><g fill="none" stroke="#D7A36D" opacity=".28"><path d="M0 92C180 20 280 20 420 110S710 230 880 118 1080 16 1200 54"/><path d="M0 126C178 54 284 56 422 144s282 116 450 8 214-112 328-72"/><path d="M0 420C180 350 290 352 430 434M760 434c142-78 274-70 440-10"/></g><rect x="54" y="48" width="1092" height="414" fill="none" stroke="#E1B27D" opacity=".24"/><path d="M78 74h64M1058 436h64" stroke="#E7BA83" stroke-width="4" opacity=".52"/>`
+  },
+  {
+    id: 'ultraviolet-noise', name: '紫外噪点',
+    preview: 'linear-gradient(135deg, #150a2e 0%, #4c1d95 55%, #161032 100%)',
+    palette: { title: '#FBF8FF', subtitle: '#D1C3EC', tagFill: '#35186B', tagStroke: '#8B5CF6', tagText: '#F1E9FF', author: '#C4B5FD' },
+    artwork: () => `<defs><linearGradient id="cbg-un" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#150A2E"/><stop offset=".55" stop-color="#4C1D95"/><stop offset="1" stop-color="#161032"/></linearGradient><pattern id="cbg-unp" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="3" cy="5" r="1" fill="#F0ABFC" opacity=".2"/><circle cx="15" cy="14" r=".8" fill="#67E8F9" opacity=".16"/></pattern></defs>
+  <rect width="1200" height="510" fill="url(#cbg-un)"/><rect width="1200" height="510" fill="url(#cbg-unp)"/><circle cx="170" cy="140" r="120" fill="#EC4899" opacity=".09"/><circle cx="1030" cy="370" r="150" fill="#22D3EE" opacity=".08"/><path d="M0 360 286 74M1200 148 930 418" stroke="#F0ABFC" stroke-width="2" opacity=".3"/><path d="M80 78h100M1020 432h100" stroke="#67E8F9" stroke-width="4" opacity=".45"/><g fill="#F5D0FE"><circle cx="90" cy="280" r="3"/><circle cx="1110" cy="230" r="3"/><circle cx="930" cy="88" r="2"/></g>`
+  }
+];
+
+const centeredLayout = {
+  id: 'centered-layout', name: '居中标题', category: 'centered',
   elements: { tag: true, title: true, subtitle: true, author: true, image: false },
+  backgrounds: CENTERED_BACKGROUNDS,
   render(content, typo) {
-    const TITLE_X = 600, TITLE_Y = 220, TITLE_W = 900, SUB_W = 900;
+    const background = CENTERED_BACKGROUNDS.find(item => item.id === content.backgroundId) || CENTERED_BACKGROUNDS[0];
+    const TITLE_X = 600, TITLE_Y = 215, TITLE_W = 900, SUB_W = 900;
     const titleWrapped = wrapText(content.title, typo.titleSize, TITLE_W);
     const titleLines = titleWrapped === '' ? 0 : titleWrapped.split('\n').length;
     const SUB_Y = TITLE_Y + titleLines * lineHeightPx(typo.titleSize, typo.titleLineHeight) + 26;
-    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="cmp-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#111827"/><stop offset="100%" stop-color="#18243A"/></linearGradient>
-    <radialGradient id="cmp-glow" cx="0.5" cy="0.48"><stop offset="0%" stop-color="#4338CA" stop-opacity="0.16"/><stop offset="100%" stop-color="#4338CA" stop-opacity="0"/></radialGradient>
-  </defs>
-  <rect width="1200" height="510" fill="url(#cmp-bg)"/>
-  <rect width="1200" height="510" fill="url(#cmp-glow)"/>
-  <polygon points="0,0 360,0 0,242" fill="#312E81" opacity="0.24"/>
-  <polygon points="1200,510 905,510 1102,332" fill="#4338CA" opacity="0.22"/>
-  <polygon points="675,0 760,0 1160,214" fill="#24324A" opacity="0.56"/>
-  <path d="M0 510 L392 142 L838 510" fill="none" stroke="#52637E" stroke-width="1.3" opacity="0.38"/>
-  <path d="M750 0 L1200 242" fill="none" stroke="#52637E" stroke-width="1" opacity="0.26"/>
-  <path d="M950 82 L1012 20 L1074 82 Z" fill="none" stroke="#6366F1" stroke-width="1.2" opacity="0.55"/>
-  <circle cx="258" cy="398" r="4" fill="#6366F1" opacity="0.8"/><circle cx="842" cy="80" r="3" fill="#818CF8" opacity="0.7"/>
-  ${renderCenteredMetaRow(content, typo, 96, { pill: '#1A2740', label: '#8FA0BA', value: '#E5EAF2', line: '#536A95' })}
-  ${renderTextLines(titleWrapped, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#F7F8FB', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(wrapText(content.subtitle, typo.subtitleSize, SUB_W), TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#B8C3D5', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+    const author = content.author ? `@${content.author.replace(/^@+/, '')}` : '';
+    const palette = background.palette;
+    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg" data-background="${background.id}">
+  ${background.artwork()}
+  ${renderCenteredTag(content, typo, 100, palette)}
+  ${renderTextLines(titleWrapped, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', palette.title, '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
+  ${content.subtitle ? renderTextLines(wrapText(content.subtitle, typo.subtitleSize, SUB_W), TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', palette.subtitle, '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
+  ${author ? renderTextLines(author, 1120, 462, Math.max(14, typo.authorSize), typo.authorSize * 1.2, 0.6, 'right', palette.author, '600', typo.subtitleFontFamily, 'author') : ''}
 </svg>`;
   }
 };
 
 // ============================================================
-// Centered B. center-editorial-seal / 编辑印记
-// ============================================================
-const centerEditorialSeal = {
-  id: 'center-editorial-seal', name: '编辑印记', category: 'centered',
-  elements: { tag: true, title: true, subtitle: true, author: true, image: false },
-  render(content, typo) {
-    const TITLE_X = 600, TITLE_Y = 220, TITLE_W = 900, SUB_W = 900;
-    const titleWrapped = wrapText(content.title, typo.titleSize, TITLE_W);
-    const titleLines = titleWrapped === '' ? 0 : titleWrapped.split('\n').length;
-    const SUB_Y = TITLE_Y + titleLines * lineHeightPx(typo.titleSize, typo.titleLineHeight) + 26;
-    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <pattern id="ces-grain" width="18" height="18" patternUnits="userSpaceOnUse"><circle cx="3" cy="4" r="0.7" fill="#2D2923" opacity="0.08"/><circle cx="13" cy="11" r="0.6" fill="#9A2F2F" opacity="0.06"/></pattern>
-  </defs>
-  <rect width="1200" height="510" fill="#F4EFE6"/>
-  <rect width="1200" height="510" fill="url(#ces-grain)"/>
-  <rect x="38" y="34" width="1124" height="442" fill="none" stroke="#282520" stroke-width="1.4"/>
-  <rect x="49" y="45" width="1102" height="420" fill="none" stroke="#B8AD9C" stroke-width="0.8"/>
-  <circle cx="1060" cy="116" r="66" fill="none" stroke="#B33A3A" stroke-width="8" opacity="0.18"/>
-  <circle cx="1060" cy="116" r="46" fill="none" stroke="#B33A3A" stroke-width="2" opacity="0.34"/>
-  <path d="M94 102 H230 M970 410 H1106" stroke="#B33A3A" stroke-width="5"/>
-  <path d="M94 112 H176 M1024 420 H1106" stroke="#282520" stroke-width="1.2"/>
-  <path d="M74 74 h28 M74 74 v28 M1126 436 h-28 M1126 436 v-28" fill="none" stroke="#282520" stroke-width="2"/>
-  <text x="84" y="447" font-size="12" font-family="${typo.subtitleFontFamily}" fill="#756C60" letter-spacing="3">EDITORIAL NOTES</text>
-  <text x="1116" y="447" font-size="12" font-family="${typo.subtitleFontFamily}" fill="#B33A3A" text-anchor="end" letter-spacing="2">OPEN GZH</text>
-  ${renderCenteredMetaRow(content, typo, 96, { pill: '#FFFDF8', label: '#8B8174', value: '#282520', line: '#D5CABB' })}
-  ${renderTextLines(titleWrapped, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#211F1C', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(wrapText(content.subtitle, typo.subtitleSize, SUB_W), TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#6C6257', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
-</svg>`;
-  }
-};
-
-// ============================================================
-// Centered C. center-circuit-grid / 电路网格
-// ============================================================
-const centerCircuitGrid = {
-  id: 'center-circuit-grid', name: '电路网格', category: 'centered',
-  elements: { tag: true, title: true, subtitle: true, author: true, image: false },
-  render(content, typo) {
-    const TITLE_X = 600, TITLE_Y = 220, TITLE_W = 900, SUB_W = 900;
-    const titleWrapped = wrapText(content.title, typo.titleSize, TITLE_W);
-    const titleLines = titleWrapped === '' ? 0 : titleWrapped.split('\n').length;
-    const SUB_Y = TITLE_Y + titleLines * lineHeightPx(typo.titleSize, typo.titleLineHeight) + 26;
-    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="ccg-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#061820"/><stop offset="100%" stop-color="#0B2831"/></linearGradient>
-    <pattern id="ccg-grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M32 0 H0 V32" fill="none" stroke="#56CFE1" stroke-width="0.7" opacity="0.11"/></pattern>
-    <radialGradient id="ccg-glow" cx="0.5" cy="0.5"><stop offset="0%" stop-color="#22D3EE" stop-opacity="0.1"/><stop offset="100%" stop-color="#22D3EE" stop-opacity="0"/></radialGradient>
-  </defs>
-  <rect width="1200" height="510" fill="url(#ccg-bg)"/>
-  <rect width="1200" height="510" fill="url(#ccg-grid)"/>
-  <ellipse cx="600" cy="270" rx="440" ry="210" fill="url(#ccg-glow)"/>
-  <g fill="none" stroke="#36C4D8" stroke-width="1.5" opacity="0.42">
-    <path d="M0 126 H118 L168 176 H246"/><path d="M0 388 H142 L198 332 H268"/>
-    <path d="M1200 118 H1088 L1038 168 H964"/><path d="M1200 396 H1060 L1004 340 H934"/>
-  </g>
-  <g fill="#67E8F9">
-    <circle cx="118" cy="126" r="4"/><circle cx="246" cy="176" r="3"/><circle cx="142" cy="388" r="4"/><circle cx="268" cy="332" r="3"/>
-    <circle cx="1088" cy="118" r="4"/><circle cx="964" cy="168" r="3"/><circle cx="1060" cy="396" r="4"/><circle cx="934" cy="340" r="3"/>
-  </g>
-  <path d="M70 58 H260" stroke="#22D3EE" stroke-width="4"/><path d="M940 452 H1130" stroke="#22D3EE" stroke-width="4"/>
-  <text x="70" y="82" font-size="11" font-family="${typo.subtitleFontFamily}" fill="#67E8F9" letter-spacing="3">SIGNAL / KNOWLEDGE</text>
-  <text x="1130" y="438" font-size="11" font-family="${typo.subtitleFontFamily}" fill="#67E8F9" text-anchor="end" letter-spacing="3">SYSTEM ONLINE</text>
-  ${renderCenteredMetaRow(content, typo, 96, { pill: '#0A2A34', label: '#59A8B3', value: '#D5FAFF', line: '#247888' })}
-  ${renderTextLines(titleWrapped, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#EDFDFF', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(wrapText(content.subtitle, typo.subtitleSize, SUB_W), TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#91C9D0', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
-</svg>`;
-  }
-};
-
-// ============================================================
-// Centered D. center-orbit-glow / 环形微光
-// ============================================================
-const centerOrbitGlow = {
-  id: 'center-orbit-glow', name: '环形微光', category: 'centered',
-  elements: { tag: true, title: true, subtitle: true, author: true, image: false },
-  render(content, typo) {
-    const TITLE_X = 600, TITLE_Y = 220, TITLE_W = 900, SUB_W = 900;
-    const titleWrapped = wrapText(content.title, typo.titleSize, TITLE_W);
-    const titleLines = titleWrapped === '' ? 0 : titleWrapped.split('\n').length;
-    const SUB_Y = TITLE_Y + titleLines * lineHeightPx(typo.titleSize, typo.titleLineHeight) + 26;
-    return `<svg viewBox="0 0 1200 510" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <radialGradient id="cog-bg" cx="0.5" cy="0.5"><stop offset="0%" stop-color="#31205C"/><stop offset="48%" stop-color="#1B1235"/><stop offset="100%" stop-color="#0E0A1C"/></radialGradient>
-    <radialGradient id="cog-halo" cx="0.5" cy="0.5"><stop offset="0%" stop-color="#A78BFA" stop-opacity="0.18"/><stop offset="100%" stop-color="#A78BFA" stop-opacity="0"/></radialGradient>
-  </defs>
-  <rect width="1200" height="510" fill="url(#cog-bg)"/>
-  <ellipse cx="600" cy="260" rx="500" ry="220" fill="url(#cog-halo)"/>
-  <ellipse cx="600" cy="260" rx="505" ry="218" fill="none" stroke="#8B5CF6" stroke-width="1.2" opacity="0.3"/>
-  <ellipse cx="600" cy="260" rx="450" ry="188" fill="none" stroke="#C4B5FD" stroke-width="0.8" opacity="0.2"/>
-  <path d="M128 186 A505 218 0 0 1 347 70" fill="none" stroke="#F0ABFC" stroke-width="3" opacity="0.5"/>
-  <path d="M852 448 A505 218 0 0 1 1074 330" fill="none" stroke="#8B5CF6" stroke-width="3" opacity="0.5"/>
-  <circle cx="206" cy="116" r="5" fill="#F0ABFC"/><circle cx="1040" cy="388" r="5" fill="#8B5CF6"/>
-  <circle cx="112" cy="286" r="3" fill="#C4B5FD" opacity="0.7"/><circle cx="1090" cy="212" r="3" fill="#C4B5FD" opacity="0.7"/>
-  <path d="M68 68 h54 M68 68 v54 M1132 442 h-54 M1132 442 v-54" fill="none" stroke="#A78BFA" stroke-width="1.2" opacity="0.42"/>
-  ${renderCenteredMetaRow(content, typo, 96, { pill: '#24183F', label: '#9B8DBA', value: '#F2ECFF', line: '#6F55B6' })}
-  ${renderTextLines(titleWrapped, TITLE_X, TITLE_Y, typo.titleSize, typo.titleLineHeight, typo.titleLetterSpacing, 'center', '#FBF9FF', '800', typo.titleFontFamily, 'title', typo.titleOffsetY || 0, typo.titleOffsetX || 0)}
-  ${content.subtitle ? renderTextLines(wrapText(content.subtitle, typo.subtitleSize, SUB_W), TITLE_X, SUB_Y, typo.subtitleSize, typo.subtitleLineHeight, typo.subtitleLetterSpacing, 'center', '#CFC4E8', '400', typo.subtitleFontFamily, 'subtitle', typo.subtitleOffsetY || 0, typo.subtitleOffsetX || 0) : ''}
-</svg>`;
-  }
-};
-
-// ============================================================
-// Export all 44 templates
+// Export all 41 templates
 // ============================================================
 /**
  * Template metadata for preview UI — scenario descriptions and style tags.
@@ -1949,10 +1932,7 @@ export const TEMPLATE_META = {
   'tech-terminal-map':  { scenario: '工程日志、故障复盘',     styleTags: ['技术', '深色', '终端'] },
   'product-roadmap':    { scenario: '路线图、增长复盘',       styleTags: ['产品', '卡片', '指标'] },
   'product-decision-board': { scenario: '产品决策、用户研究', styleTags: ['产品', '看板', '研究'] },
-  'center-midnight-prism': { scenario: '技术分享、深度解析',   styleTags: ['居中', '深色', '几何'] },
-  'center-editorial-seal': { scenario: '方法论、观点文章',     styleTags: ['居中', '编辑', '纸感'] },
-  'center-circuit-grid':   { scenario: '工程实践、架构设计',   styleTags: ['居中', '技术', '网格'] },
-  'center-orbit-glow':     { scenario: 'AI 趋势、前沿观察',    styleTags: ['居中', '微光', '未来感'] }
+  'centered-layout':       { scenario: '技术分享、观点文章',   styleTags: ['居中', '16 背景', '通用'] }
 };
 
 export const COVER_TEMPLATES = [
@@ -2005,9 +1985,6 @@ export const COVER_TEMPLATES = [
   techTerminalMap,
   productRoadmap,
   productDecisionBoard,
-  // Centered Layout (4)
-  centerMidnightPrism,
-  centerEditorialSeal,
-  centerCircuitGrid,
-  centerOrbitGlow,
+  // Centered Layout (1 layout, 16 backgrounds)
+  centeredLayout,
 ];

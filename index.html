@@ -215,6 +215,27 @@
               </div>
             </div>
 
+            <!-- Background Variants -->
+            <div class="cover-editor-section" v-if="currentTemplateBackgrounds.length">
+              <div class="cover-typo-section-title">背景 Background</div>
+              <div class="cover-background-grid" role="radiogroup" aria-label="封面背景">
+                <button
+                  v-for="background in currentTemplateBackgrounds"
+                  :key="background.id"
+                  type="button"
+                  class="cover-background-option"
+                  :class="{ active: coverBackgroundId === background.id }"
+                  role="radio"
+                  :aria-checked="coverBackgroundId === background.id"
+                  :title="background.name"
+                  @click="selectCoverBackground(background.id)"
+                >
+                  <span class="cover-background-swatch" :style="{ background: background.preview }" aria-hidden="true"></span>
+                  <span class="cover-background-name">{{ background.name }}</span>
+                </button>
+              </div>
+            </div>
+
             <!-- Typography Controls -->
             <div class="cover-editor-section">
               <div class="cover-typo-section-title">排版 Typography</div>

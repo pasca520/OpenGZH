@@ -21,7 +21,7 @@ import { createPanelManager } from './ui/panel-manager.js';
 import { loadPreferences, savePreferences, debounceSaveContent, getDefaultCodeBlockSettings, getDefaultDisplaySettings } from './storage/preferences.js';
 import { STYLES } from '../styles/themes/index.js';
 import { COVER_TEMPLATES, TEMPLATE_META } from './cover/templates.js';
-import { renderCover, getTemplates, getCategories, DEFAULT_TYPOGRAPHY, DEFAULT_COVER_CONTENT } from './cover/renderer.js';
+import { renderCover, getTemplate, getTemplates, getCategories, DEFAULT_TYPOGRAPHY, DEFAULT_COVER_CONTENT } from './cover/renderer.js';
 import { exportCoverPng as doExportCoverPng } from './cover/export-png.js';
 import { DEFAULT_ILLUSTRATIONS, ILLUSTRATION_CATEGORIES, ILLUSTRATION_MARKETS, getIllustration, getIllustrationsByCategory, getAllIllustrations } from './cover/illustration-registry.js';
 import { loadIllustrationSvg, replaceIllustrationColor, extractPrimaryColor } from './cover/illustration-color.js';
@@ -59,6 +59,7 @@ const showTypoPicker = ref(false);
 
 // ── Cover Editor State ──
 const coverTemplateId = ref('pure-white');
+const coverBackgroundId = ref('midnight-prism');
 const coverContent = reactive({
   tag: '技术分享',
   title: '用 AI 构建公众号封面工具',
@@ -902,6 +903,7 @@ function resetEditor() {
 function resetToDefault() {
   markdownInput.value = loadDefaultExample();
   coverTemplateId.value = 'pure-white';
+  coverBackgroundId.value = 'midnight-prism';
   Object.assign(coverContent, {
     tag: '技术分享',
     title: '用 AI 构建公众号封面工具',
@@ -1311,7 +1313,7 @@ function loadDefaultExample() {
 
 切换到顶部 **「封面图」** 标签页，快速生成公众号封面：
 
-- **44 套精选模板**，涵盖深色、浅色、渐变、几何、插画、抽象艺术等风格
+- **41 套精选模板**，涵盖深色、浅色、渐变、几何、插画、抽象艺术等风格；居中布局另含 16 款可选背景
 - **73 幅精选插画**，支持自定义颜色替换
 - 自由调整标题、副标题、标签的 **字体、字号、行高、字间距**
 - 导出 **2400 × 960** 高清 PNG
@@ -1372,7 +1374,7 @@ def analyze_articles(df):
 |------|------|------|
 | 文章主题 | 27 套风格主题 | 五类场景分类 |
 | 代码主题 | 17 种高亮方案 | 跟随文章主题联动 |
-| 封面模板 | 44 套 + 73 幅插画 | 场景标签辅助选择 |
+| 封面模板 | 41 套 + 居中布局 16 款背景 + 73 幅插画 | 场景标签辅助选择 |
 | 手机预览 | 29 款机型 | 含折叠屏 |
 | 数学公式 | LaTeX 渲染 | 导出自动转 SVG |
 
@@ -1686,6 +1688,7 @@ const coverSvgOutput = computed(() => {
     coverTemplateId.value,
     {
       ...coverContent,
+      backgroundId: coverBackgroundId.value,
       illustrationSvg: coverIllustrationSvg.value,
       illustrationOpacity: coverOpacity.value / 100,
       layerOrder: coverLayerOrder.value
@@ -1695,6 +1698,7 @@ const coverSvgOutput = computed(() => {
 });
 
 const coverCategories = computed(() => getCategories());
+const currentTemplateBackgrounds = computed(() => getTemplate(coverTemplateId.value)?.backgrounds || []);
 
 const coverPreviewStyle = computed(() => {
   return { aspectRatio: '900 / 383' };
@@ -1768,6 +1772,7 @@ async function updateIllustrationColor(color) {
 function getCoverStateSnapshot() {
   return {
     templateId: coverTemplateId.value,
+    backgroundId: coverBackgroundId.value,
     content: { ...coverContent },
     typography: { ...coverTypography },
     fieldOffsets: JSON.parse(JSON.stringify(coverFieldOffsets)),
@@ -1786,6 +1791,10 @@ function restoreCoverState(state) {
   // (e.g. a template was removed in a newer version)
   const savedTpl = COVER_TEMPLATES.find(t => t.id === state.templateId);
   coverTemplateId.value = savedTpl ? state.templateId : 'pure-white';
+  const savedBackgrounds = savedTpl?.backgrounds || [];
+  coverBackgroundId.value = savedBackgrounds.some(item => item.id === state.backgroundId)
+    ? state.backgroundId
+    : (savedBackgrounds[0]?.id || 'midnight-prism');
   Object.assign(coverContent, state.content || DEFAULT_COVER_CONTENT);
   Object.assign(coverTypography, state.typography || DEFAULT_TYPOGRAPHY);
   if (state.fieldOffsets) {
@@ -1822,8 +1831,19 @@ function pushCoverUndo() {
 }
 
 function selectCoverTemplate(id) {
+  const template = getTemplate(id);
+  if (!template) return;
   pushCoverUndo();
   coverTemplateId.value = id;
+  if (template.backgrounds?.length && !template.backgrounds.some(item => item.id === coverBackgroundId.value)) {
+    coverBackgroundId.value = template.backgrounds[0].id;
+  }
+}
+
+function selectCoverBackground(id) {
+  if (id === coverBackgroundId.value || !currentTemplateBackgrounds.value.some(item => item.id === id)) return;
+  pushCoverUndo();
+  coverBackgroundId.value = id;
 }
 
 function updateCoverTypo(field, value) {
@@ -1848,6 +1868,7 @@ function coverRedo() {
 function coverReset() {
   pushCoverUndo();
   coverTemplateId.value = 'pure-white';
+  coverBackgroundId.value = 'midnight-prism';
   Object.assign(coverContent, DEFAULT_COVER_CONTENT);
   Object.assign(coverTypography, DEFAULT_TYPOGRAPHY);
   resetCoverFieldOffsets();
@@ -2029,6 +2050,7 @@ const app = createApp({
 
       // ── Cover Editor ──
       coverTemplateId,
+      coverBackgroundId,
       coverContent,
       coverTypography,
       coverFontOptions,
@@ -2038,8 +2060,10 @@ const app = createApp({
       coverOpacity,
       coverSvgOutput,
       coverCategories,
+      currentTemplateBackgrounds,
       coverPreviewStyle,
       selectCoverTemplate,
+      selectCoverBackground,
       updateCoverTypo: (field, value) => updateCoverTypo(field, value),
       coverUndo,
       coverRedo,
