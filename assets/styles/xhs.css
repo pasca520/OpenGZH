@@ -763,3 +763,16 @@
   font-family: var(--xhs-font-code);
   font-size: 0.86em;
 }
+
+/* ── 测量舞台（离屏，仅用于分页测量，不进捕获） ─────────────── */
+.xhs-measure-stage {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 540px;
+  height: 720px;
+  overflow: hidden;
+  z-index: -1;
+  pointer-events: none;
+  visibility: hidden;
+}

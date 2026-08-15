@@ -9,7 +9,7 @@ import { XHS_THEMES } from './themes.js';
 
 const VARIANT_PRIORITY = ['image', 'table', 'code', 'formula', 'quote', 'list'];
 
-function escapeHtml(value) {
+export function escapeHtml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -215,14 +215,29 @@ export function renderXhsStack(pages, settings, options = {}) {
   return pages.map((page) => renderXhsPage(page, settings, options));
 }
 
+async function waitForImages(root) {
+  const images = Array.from(root.querySelectorAll('img'));
+  await Promise.all(images.map((img) => {
+    if (typeof img.decode === 'function') {
+      return img.decode().catch(() => undefined);
+    }
+    if (img.complete) return Promise.resolve();
+    return new Promise((resolve) => {
+      img.addEventListener('load', resolve, { once: true });
+      img.addEventListener('error', resolve, { once: true });
+    });
+  }));
+}
+
 /**
  * Create a DOM-based measurer that mounts a temporary card into `stage`
  * and reports whether the given blocks fit inside the card body.
  * @param {HTMLElement} stage
  * @param {object} settings
+ * @param {{hydrateMedia?: (root:HTMLElement) => Promise<void>}} [options]
  * @returns {{fits:(blocks:object[]) => Promise<boolean>, destroy:() => void}}
  */
-export function createXhsDomMeasurer(stage, settings) {
+export function createXhsDomMeasurer(stage, settings, options = {}) {
   const card = document.createElement('div');
   card.className = 'xhs-card';
   card.setAttribute('data-theme', settings.themeId);
@@ -248,6 +263,8 @@ export function createXhsDomMeasurer(stage, settings) {
       manualBreakMarkerStart: null
     }, settings);
     body.innerHTML = html;
+    if (options.hydrateMedia) await options.hydrateMedia(body);
+    await waitForImages(body);
     // Read layout after forcing a frame so web fonts / images settle.
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     return body.scrollHeight <= body.clientHeight && body.scrollWidth <= body.clientWidth;

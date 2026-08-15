@@ -20,6 +20,20 @@ import { createToast } from './ui/toast.js';
 import { createPanelManager } from './ui/panel-manager.js';
 import { loadPreferences, savePreferences, debounceSaveContent, getDefaultCodeBlockSettings, getDefaultDisplaySettings } from './storage/preferences.js';
 import { createDefaultXhsSettings, normalizeXhsSettings } from './xhs/constants.js';
+import {
+  XHS_FEATURE_ENABLED,
+  XHS_LOGICAL_WIDTH,
+  XHS_LOGICAL_HEIGHT,
+  XHS_UPLOAD_WARNING_LIMIT,
+  XHS_THEME_IDS,
+  XHS_DENSITIES
+} from './xhs/constants.js';
+import { insertPageMarker, removePageMarker } from './xhs/page-markers.js';
+import { parseXhsDocument } from './xhs/semantic-parser.js';
+import { paginateXhsDocument } from './xhs/paginator.js';
+import { createXhsDomMeasurer, renderXhsPage } from './xhs/renderer.js';
+import { XHS_THEMES } from './xhs/themes.js';
+import { exportXhsPage, exportXhsSet } from './xhs/exporter.js';
 import { STYLES } from '../styles/themes/index.js';
 import { COVER_TEMPLATES, TEMPLATE_META } from './cover/templates.js';
 import { renderCover, getTemplate, getTemplates, getCategories, DEFAULT_TYPOGRAPHY, DEFAULT_COVER_CONTENT } from './cover/renderer.js';
@@ -57,6 +71,23 @@ const showDevicePicker = ref(false);
 const showExportMenu = ref(false);
 const previewDarkMode = ref(false);
 const selectedDevice = ref('iphone-17-pro');
+
+// ── XHS Image Mode (session-only state; contentOutputMode never persists) ──
+const contentOutputMode = ref('text');
+const xhsPages = ref([]);
+const xhsRenderedPages = ref([]);
+const xhsIsPaginating = ref(false);
+const xhsIssues = ref([]);
+const xhsWarning = ref('');
+const xhsSelectedPageId = ref(null);
+const xhsPreviewScale = ref(1);
+const xhsCoverCandidates = ref([]);
+const xhsExportErrorPageIndexes = ref([]);
+let xhsPaginationTimer = null;
+let xhsPaginationRevision = 0;
+let xhsPreviewObserver = null;
+let xhsMeasureStageEl = null;
+const xhsPreviewUrlCache = new Map();
 
 // ── Tab State ──
 const activeTab = ref('editor');
@@ -450,6 +481,7 @@ function syncEditorFromActiveDocument() {
   currentDocumentTitle.value = activeDoc ? (activeDoc.manualTitle || '') : '';
   editorSelection.value = { start: 0, end: 0 };
   updateStats();
+  scheduleXhsPagination(0);
 }
 
 function markCurrentDocumentDirty() {
@@ -510,6 +542,269 @@ function schedulePersistDocumentState() {
     onSuccess: handleSaveSuccess,
     onError: handleSaveError
   });
+}
+
+// ── XHS Image Mode ─────────────────────────────────────────────
+const activeXhsSettings = computed(() => getActiveDocument()?.xhs || createDefaultXhsSettings());
+
+function deepMergeXhsSettings(current, patch) {
+  const base = normalizeXhsSettings(current);
+  const next = patch && typeof patch === 'object' ? patch : {};
+  return {
+    ...base,
+    ...(next.themeId !== undefined ? { themeId: next.themeId } : {}),
+    ...(next.density !== undefined ? { density: next.density } : {}),
+    ...(next.tocEnabled !== undefined ? { tocEnabled: next.tocEnabled } : {}),
+    footer: { ...base.footer, ...(next.footer || {}) },
+    cover: {
+      ...base.cover,
+      ...(next.cover || {}),
+      focalPoint: { ...base.cover.focalPoint, ...(next.cover?.focalPoint || {}) }
+    }
+  };
+}
+
+function updateActiveXhsSettings(patch) {
+  const doc = getActiveDocument();
+  if (!doc) return;
+  doc.xhs = normalizeXhsSettings(deepMergeXhsSettings(doc.xhs, patch));
+  markCurrentDocumentDirty();
+  schedulePersistDocumentState();
+  scheduleXhsPagination(0);
+}
+
+function getXhsMeasureStage() {
+  if (xhsMeasureStageEl) return xhsMeasureStageEl;
+  xhsMeasureStageEl = document.createElement('div');
+  xhsMeasureStageEl.className = 'xhs-measure-stage';
+  xhsMeasureStageEl.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(xhsMeasureStageEl);
+  return xhsMeasureStageEl;
+}
+
+function resolveXhsPreviewUrl(ref) {
+  if (!ref) return Promise.resolve(null);
+  if (ref.startsWith('img://')) {
+    const id = ref.slice('img://'.length);
+    if (xhsPreviewUrlCache.has(ref)) return Promise.resolve(xhsPreviewUrlCache.get(ref));
+    return imageStore.getImageBlob(id)
+      .then((blob) => {
+        if (!blob) return null;
+        const url = URL.createObjectURL(blob);
+        xhsPreviewUrlCache.set(ref, url);
+        return url;
+      })
+      .catch(() => null);
+  }
+  // http(s)/data: load directly in the preview; CORS is only enforced at export
+  return Promise.resolve(ref);
+}
+
+function revokeXhsPreviewUrls() {
+  for (const url of xhsPreviewUrlCache.values()) {
+    try {
+      URL.revokeObjectURL(url);
+    } catch (_error) {
+      // ignore
+    }
+  }
+  xhsPreviewUrlCache.clear();
+}
+
+async function hydrateXhsMediaRoot(root) {
+  const targets = Array.from(root.querySelectorAll('[data-media-ref]'));
+  await Promise.all(targets.map(async (element) => {
+    const ref = element.getAttribute('data-media-ref');
+    const url = await resolveXhsPreviewUrl(ref);
+    if (url) element.setAttribute('src', url);
+  }));
+}
+
+async function buildXhsPages(markdown, settings) {
+  if (!md) return { pages: [], meta: { title: '', summary: '' }, images: [], issues: [{ code: 'pagination-failed', pageIndex: 0, message: '编辑器尚未就绪，请稍后重试。', blockId: null }] };
+  const parsed = parseXhsDocument(markdown, md);
+  const measurer = createXhsDomMeasurer(getXhsMeasureStage(), settings, {
+    hydrateMedia: (root) => hydrateXhsMediaRoot(root)
+  });
+  try {
+    const pages = await paginateXhsDocument(parsed, settings, { fits: (blocks) => measurer.fits(blocks) });
+    return { pages, meta: parsed.meta, images: parsed.images, issues: [] };
+  } catch (error) {
+    return {
+      pages: [],
+      meta: parsed.meta,
+      images: parsed.images,
+      issues: [{
+        code: error.code || 'pagination-failed',
+        pageIndex: 0,
+        message: error.message || '分页失败',
+        blockId: error.blockId || null
+      }]
+    };
+  } finally {
+    measurer.destroy();
+  }
+}
+
+async function refreshXhsCoverCandidates(images) {
+  const hydrated = await Promise.all((images || []).map(async (image) => ({
+    ...image,
+    url: await resolveXhsPreviewUrl(image.src)
+  })));
+  xhsCoverCandidates.value = hydrated;
+}
+
+function restoreSelectedXhsPage() {
+  const previousId = xhsSelectedPageId.value;
+  const previousNumber = xhsPages.value.find((page) => page.id === previousId)?.pageNumber;
+  let target = null;
+  if (previousId) {
+    target = xhsPages.value.find((page) => page.id === previousId) || null;
+  }
+  if (!target && previousNumber != null) {
+    target = xhsPages.value.find((page) => page.pageNumber === previousNumber) || null;
+  }
+  if (!target && xhsPages.value.length) {
+    target = xhsPages.value[0];
+  }
+  if (target) {
+    xhsSelectedPageId.value = target.id;
+    nextTick(() => {
+      const shell = document.querySelector(`.xhs-card-shell[data-page-id="${CSS.escape(target.id)}"]`);
+      shell?.scrollIntoView({ block: 'nearest' });
+    });
+  }
+}
+
+function scheduleXhsPagination(delay = 450) {
+  clearTimeout(xhsPaginationTimer);
+  if (contentOutputMode.value !== 'image') return;
+  xhsIsPaginating.value = true;
+  const revision = ++xhsPaginationRevision;
+  xhsPaginationTimer = setTimeout(async () => {
+    const result = await buildXhsPages(markdownInput.value, activeXhsSettings.value);
+    if (revision !== xhsPaginationRevision) return;
+    xhsPages.value = result.pages;
+    xhsRenderedPages.value = result.pages.map((page) => renderXhsPage(page, activeXhsSettings.value, result.meta));
+    xhsIssues.value = result.issues;
+    xhsWarning.value = result.pages.length > XHS_UPLOAD_WARNING_LIMIT
+      ? `当前共 ${result.pages.length} 张，可能超出当前客户端单篇上传能力，建议拆分为系列内容。`
+      : '';
+    xhsExportErrorPageIndexes.value = [];
+    xhsIsPaginating.value = false;
+    await refreshXhsCoverCandidates(result.images);
+    await nextTick();
+    await hydrateXhsMediaRoot(document.querySelector('.xhs-image-stack'));
+    restoreSelectedXhsPage();
+  }, delay);
+}
+
+function setupXhsPreviewObserver() {
+  teardownXhsPreviewObserver();
+  const container = document.querySelector('.xhs-image-stack');
+  if (!container || typeof ResizeObserver === 'undefined') return;
+  const update = () => {
+    xhsPreviewScale.value = Math.min(1, Math.max(0.35, (container.clientWidth - 32) / XHS_LOGICAL_WIDTH));
+  };
+  xhsPreviewObserver = new ResizeObserver(update);
+  xhsPreviewObserver.observe(container);
+  update();
+}
+
+function teardownXhsPreviewObserver() {
+  if (xhsPreviewObserver) {
+    xhsPreviewObserver.disconnect();
+    xhsPreviewObserver = null;
+  }
+}
+
+function setContentOutputMode(mode) {
+  if (mode !== 'text' && mode !== 'image') return;
+  contentOutputMode.value = mode;
+  if (mode === 'image') {
+    nextTick(() => {
+      setupXhsPreviewObserver();
+      scheduleXhsPagination(0);
+    });
+  } else {
+    teardownXhsPreviewObserver();
+    clearTimeout(xhsPaginationTimer);
+    xhsIsPaginating.value = false;
+    revokeXhsPreviewUrls();
+    xhsCoverCandidates.value = [];
+  }
+}
+
+function insertXhsPageAtCursor() {
+  const result = insertPageMarker(markdownInput.value, editorSelection.value.start);
+  markdownInput.value = result.markdown;
+  nextTick(() => getTextarea()?.focus());
+}
+
+function insertXhsPageBeforeBlock(blockId) {
+  const block = xhsPages.value.flatMap((page) => page.blocks).find((item) => item.id === blockId);
+  if (!block) return;
+  markdownInput.value = insertPageMarker(markdownInput.value, block.sourceStart).markdown;
+}
+
+function removeXhsPageMarker(markerStart) {
+  markdownInput.value = removePageMarker(markdownInput.value, markerStart).markdown;
+}
+
+function selectXhsCoverImage(ref) {
+  updateActiveXhsSettings({ cover: { imageRef: ref } });
+}
+
+function clearXhsCoverImage() {
+  updateActiveXhsSettings({ cover: { imageRef: null } });
+}
+
+function updateXhsFocalPoint(x, y) {
+  updateActiveXhsSettings({ cover: { focalPoint: { x, y } } });
+}
+
+function markXhsExportErrors(issues) {
+  xhsExportErrorPageIndexes.value = issues.map((issue) => issue.pageIndex).filter((index) => index != null);
+  const first = issues[0];
+  if (first) {
+    toast.show(first.message || '导出失败', 'error', 6000);
+  }
+}
+
+async function exportSingleXhsPage(pageId) {
+  const page = xhsPages.value.find((item) => item.id === pageId);
+  if (!page) return;
+  const card = document.querySelector(`.xhs-card[data-page-id="${CSS.escape(pageId)}"]`);
+  if (!card) return;
+  xhsExportErrorPageIndexes.value = [];
+  try {
+    const result = await exportXhsPage(card, page, {});
+    if (!result.ok) {
+      markXhsExportErrors(result.issues);
+      return;
+    }
+    toast.show(`已导出 ${page.pageNumber} 张图片`, 'success');
+  } catch (error) {
+    toast.show(error.message || '单页导出失败', 'error');
+  }
+}
+
+async function exportAllXhsPages() {
+  const cards = Array.from(document.querySelectorAll('.xhs-image-stack .xhs-card'));
+  if (!cards.length) return;
+  xhsExportErrorPageIndexes.value = [];
+  const doc = getActiveDocument();
+  const title = resolveDocumentDisplayTitle(doc);
+  try {
+    const result = await exportXhsSet(cards, { articleTitle: title }, {});
+    if (!result.ok) {
+      markXhsExportErrors(result.issues);
+      return;
+    }
+    toast.show(`已导出 ${cards.length} 张图片${result.warning ? '（' + result.warning + '）' : ''}`, 'success', 6000);
+  } catch (error) {
+    toast.show(error.message || '整组导出失败', 'error');
+  }
 }
 
 function updateStats() {
@@ -601,6 +896,7 @@ function switchDocument(documentId) {
   activeDocumentId.value = documentId;
   syncEditorFromActiveDocument();
   renderMarkdown();
+  scheduleXhsPagination(0);
 }
 
 function createNewDocument(content = '', manualTitle = '') {
@@ -2082,6 +2378,7 @@ const app = createApp({
     watch(markdownInput, (value) => {
       renderMarkdown();
       updateStats();
+      scheduleXhsPagination();
 
       if (suppressEditorSync) {
         suppressEditorSync = false;
@@ -2397,7 +2694,37 @@ const app = createApp({
       confirmDelete,
       getSaveStateLabel,
       getSaveStateClass,
-      togglePanel: (name) => panelManager.toggle(name)
+      togglePanel: (name) => panelManager.toggle(name),
+
+      // ── XHS Image Mode ──
+      XHS_FEATURE_ENABLED,
+      XHS_THEME_IDS,
+      XHS_DENSITIES,
+      XHS_THEMES,
+      XHS_LOGICAL_WIDTH,
+      XHS_LOGICAL_HEIGHT,
+      XHS_UPLOAD_WARNING_LIMIT,
+      contentOutputMode,
+      xhsPages,
+      xhsRenderedPages,
+      xhsIsPaginating,
+      xhsIssues,
+      xhsWarning,
+      xhsSelectedPageId,
+      xhsPreviewScale,
+      xhsCoverCandidates,
+      xhsExportErrorPageIndexes,
+      activeXhsSettings,
+      setContentOutputMode,
+      updateActiveXhsSettings,
+      insertXhsPageAtCursor,
+      insertXhsPageBeforeBlock,
+      removeXhsPageMarker,
+      selectXhsCoverImage,
+      clearXhsCoverImage,
+      updateXhsFocalPoint,
+      exportSingleXhsPage,
+      exportAllXhsPages
     };
   }
 });

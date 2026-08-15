@@ -44,6 +44,7 @@ export function copyComputedStyles(sourceRoot, cloneRoot, getComputedStyleImpl =
   if (!sourceRoot || !cloneRoot) return;
   const sourceQueue = [sourceRoot];
   const cloneQueue = [cloneRoot];
+  let isRoot = true;
   while (sourceQueue.length) {
     const source = sourceQueue.shift();
     const clone = cloneQueue.shift();
@@ -51,10 +52,13 @@ export function copyComputedStyles(sourceRoot, cloneRoot, getComputedStyleImpl =
     if (source.nodeType === 1 && clone.nodeType === 1) {
       const style = getComputedStyleImpl(source);
       for (const property of COPY_PROPERTIES) {
+        // the preview shell scales the root card; never capture that transform
+        if (isRoot && (property === 'transform' || property === 'transform-origin')) continue;
         const value = style.getPropertyValue(property);
         if (value) clone.style.setProperty(property, value);
       }
     }
+    isRoot = false;
     const sourceChildren = source.children ? Array.from(source.children) : [];
     const cloneChildren = clone.children ? Array.from(clone.children) : [];
     const count = Math.min(sourceChildren.length, cloneChildren.length);
