@@ -83,6 +83,9 @@ const xhsSelectedPageId = ref(null);
 const xhsPreviewScale = ref(1);
 const xhsCoverCandidates = ref([]);
 const xhsExportErrorPageIndexes = ref([]);
+const xhsShowCoverPanel = ref(false);
+const xhsExporting = ref(false);
+const XHS_DENSITY_LABELS = { relaxed: '舒展', standard: '标准', compact: '紧凑' };
 let xhsPaginationTimer = null;
 let xhsPaginationRevision = 0;
 let xhsPreviewObserver = null;
@@ -771,21 +774,32 @@ function markXhsExportErrors(issues) {
   }
 }
 
+function firstBlockId(page) {
+  return page.blocks[0]?.id || null;
+}
+
+function coverThumbUrl(ref) {
+  return xhsCoverCandidates.value.find((candidate) => candidate.src === ref)?.url || '';
+}
+
 async function exportSingleXhsPage(pageId) {
   const page = xhsPages.value.find((item) => item.id === pageId);
   if (!page) return;
   const card = document.querySelector(`.xhs-card[data-page-id="${CSS.escape(pageId)}"]`);
   if (!card) return;
   xhsExportErrorPageIndexes.value = [];
+  xhsExporting.value = true;
   try {
     const result = await exportXhsPage(card, page, {});
     if (!result.ok) {
       markXhsExportErrors(result.issues);
       return;
     }
-    toast.show(`已导出 ${page.pageNumber} 张图片`, 'success');
+    toast.show(`已导出第 ${page.pageNumber} 张图片`, 'success');
   } catch (error) {
     toast.show(error.message || '单页导出失败', 'error');
+  } finally {
+    xhsExporting.value = false;
   }
 }
 
@@ -793,6 +807,7 @@ async function exportAllXhsPages() {
   const cards = Array.from(document.querySelectorAll('.xhs-image-stack .xhs-card'));
   if (!cards.length) return;
   xhsExportErrorPageIndexes.value = [];
+  xhsExporting.value = true;
   const doc = getActiveDocument();
   const title = resolveDocumentDisplayTitle(doc);
   try {
@@ -804,6 +819,8 @@ async function exportAllXhsPages() {
     toast.show(`已导出 ${cards.length} 张图片${result.warning ? '（' + result.warning + '）' : ''}`, 'success', 6000);
   } catch (error) {
     toast.show(error.message || '整组导出失败', 'error');
+  } finally {
+    xhsExporting.value = false;
   }
 }
 
@@ -2700,6 +2717,7 @@ const app = createApp({
       XHS_FEATURE_ENABLED,
       XHS_THEME_IDS,
       XHS_DENSITIES,
+      XHS_DENSITY_LABELS,
       XHS_THEMES,
       XHS_LOGICAL_WIDTH,
       XHS_LOGICAL_HEIGHT,
@@ -2714,6 +2732,8 @@ const app = createApp({
       xhsPreviewScale,
       xhsCoverCandidates,
       xhsExportErrorPageIndexes,
+      xhsShowCoverPanel,
+      xhsExporting,
       activeXhsSettings,
       setContentOutputMode,
       updateActiveXhsSettings,
@@ -2724,7 +2744,9 @@ const app = createApp({
       clearXhsCoverImage,
       updateXhsFocalPoint,
       exportSingleXhsPage,
-      exportAllXhsPages
+      exportAllXhsPages,
+      firstBlockId,
+      coverThumbUrl
     };
   }
 });
