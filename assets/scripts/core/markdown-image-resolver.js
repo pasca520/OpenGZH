@@ -1,19 +1,26 @@
 /**
  * Markdown 图片解析器 — 从用户授权的目录精确读取本地图片，存入 IndexedDB，
- * 再把源路径替换为 img:// 协议。
+ * 再把源路径替换为 img:// 协议；远程 CDN 图片同样支持下载本地化。
  * @module markdown-image-resolver
  */
+
+import { fetchRemoteImageBlob } from './remote-image-loader.js';
 
 const INLINE_IMAGE_REGEX = /!\[([^\]]*)\]\(\s*(?:<([^>\n]+)>|((?:\\.|[^()\s])+))(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*\)/g;
 const IMAGE_REFERENCE_REGEX = /!\[([^\]]*)\]\[([^\]]*)\]/g;
 const REFERENCE_DEFINITION_REGEX = /^[ \t]{0,3}\[([^\]\n]+)\]:[ \t]*(?:<([^>\n]+)>|(\S+))(?:[ \t]+(?:"[^"]*"|'[^']*'|\([^)]*\)))?[ \t]*$/gm;
 const HTML_IMAGE_REGEX = /<img\b[^>]*\bsrc\s*=\s*(["'])(.*?)\1[^>]*>/gi;
-const REMOTE_PREFIXES = ['http://', 'https://', 'data:', 'img://', '#'];
+const REMOTE_PREFIXES = ['http://', 'https://', '//', 'data:', 'img://', '#'];
 const IMAGE_EXTENSION_REGEX = /\.(?:avif|bmp|gif|jpe?g|png|svg|webp)$/i;
 
 function isLocalPath(path) {
   const value = String(path || '').trim().toLowerCase();
   return value && !REMOTE_PREFIXES.some((prefix) => value.startsWith(prefix));
+}
+
+function isRemotePath(path) {
+  const value = String(path || '').trim().toLowerCase();
+  return value.startsWith('http://') || value.startsWith('https://') || value.startsWith('//');
 }
 
 function createMatch(markdownText, fullMatch, path, alt, matchIndex, kind) {
@@ -30,11 +37,12 @@ function createMatch(markdownText, fullMatch, path, alt, matchIndex, kind) {
 }
 
 /**
- * 扫描常见 Markdown 与 HTML 图片语法中的本地路径。
+ * 按谓词扫描常见 Markdown 与 HTML 图片语法中的图片路径。
  * @param {string} markdownText
+ * @param {(path: string) => boolean} isMatch
  * @returns {{ fullMatch: string, alt: string, path: string, index: number, pathStart: number, pathEnd: number, kind: string }[]}
  */
-export function scanLocalImagePaths(markdownText) {
+function scanImagePaths(markdownText, isMatch) {
   if (!markdownText) return [];
 
   const matches = [];
@@ -44,7 +52,7 @@ export function scanLocalImagePaths(markdownText) {
   const inlineRegex = new RegExp(INLINE_IMAGE_REGEX.source, INLINE_IMAGE_REGEX.flags);
   while ((match = inlineRegex.exec(markdownText)) !== null) {
     const path = match[2] || match[3];
-    if (isLocalPath(path)) {
+    if (isMatch(path)) {
       matches.push(createMatch(markdownText, match[0], path, match[1], match.index, 'inline'));
     }
   }
@@ -59,7 +67,7 @@ export function scanLocalImagePaths(markdownText) {
   while ((match = definitionRegex.exec(markdownText)) !== null) {
     const reference = match[1].trim().toLowerCase();
     const path = match[2] || match[3];
-    if (imageReferences.has(reference) && isLocalPath(path)) {
+    if (imageReferences.has(reference) && isMatch(path)) {
       matches.push(createMatch(
         markdownText,
         match[0],
@@ -74,13 +82,31 @@ export function scanLocalImagePaths(markdownText) {
   const htmlRegex = new RegExp(HTML_IMAGE_REGEX.source, HTML_IMAGE_REGEX.flags);
   while ((match = htmlRegex.exec(markdownText)) !== null) {
     const path = match[2];
-    if (isLocalPath(path)) {
+    if (isMatch(path)) {
       const altMatch = match[0].match(/\balt\s*=\s*(["'])(.*?)\1/i);
       matches.push(createMatch(markdownText, match[0], path, altMatch?.[2] || '', match.index, 'html'));
     }
   }
 
   return matches.sort((left, right) => left.index - right.index);
+}
+
+/**
+ * 扫描常见 Markdown 与 HTML 图片语法中的本地路径。
+ * @param {string} markdownText
+ * @returns {{ fullMatch: string, alt: string, path: string, index: number, pathStart: number, pathEnd: number, kind: string }[]}
+ */
+export function scanLocalImagePaths(markdownText) {
+  return scanImagePaths(markdownText, isLocalPath);
+}
+
+/**
+ * 扫描 Markdown 与 HTML 图片语法中的远程（CDN）图片地址。
+ * @param {string} markdownText
+ * @returns {{ fullMatch: string, alt: string, path: string, index: number, pathStart: number, pathEnd: number, kind: string }[]}
+ */
+export function scanRemoteImagePaths(markdownText) {
+  return scanImagePaths(markdownText, isRemotePath);
 }
 
 /**
@@ -126,15 +152,16 @@ export function extractFilename(filePath) {
 }
 
 /**
- * 精确替换扫描到的图片 URL，不改动 alt、title 或其他 HTML 属性。
+ * 按扫描结果精确替换图片 URL，不改动 alt、title 或其他 HTML 属性。
  * @param {string} markdownText
  * @param {Record<string, string>} pathMap
+ * @param {{ fullMatch: string, alt: string, path: string, index: number, pathStart: number, pathEnd: number, kind: string }[]} scanned
  * @returns {string}
  */
-export function replaceImagePaths(markdownText, pathMap) {
+function replaceScannedPaths(markdownText, pathMap, scanned) {
   if (!markdownText || !pathMap || Object.keys(pathMap).length === 0) return markdownText;
 
-  const replacements = scanLocalImagePaths(markdownText)
+  const replacements = scanned
     .filter((item) => Object.prototype.hasOwnProperty.call(pathMap, item.path))
     .sort((left, right) => right.pathStart - left.pathStart);
 
@@ -143,6 +170,26 @@ export function replaceImagePaths(markdownText, pathMap) {
     result = `${result.slice(0, item.pathStart)}${pathMap[item.path]}${result.slice(item.pathEnd)}`;
   }
   return result;
+}
+
+/**
+ * 精确替换扫描到的本地图片路径。
+ * @param {string} markdownText
+ * @param {Record<string, string>} pathMap
+ * @returns {string}
+ */
+export function replaceImagePaths(markdownText, pathMap) {
+  return replaceScannedPaths(markdownText, pathMap, scanLocalImagePaths(markdownText));
+}
+
+/**
+ * 精确替换扫描到的远程（CDN）图片地址。
+ * @param {string} markdownText
+ * @param {Record<string, string>} pathMap
+ * @returns {string}
+ */
+export function replaceRemoteImagePaths(markdownText, pathMap) {
+  return replaceScannedPaths(markdownText, pathMap, scanRemoteImagePaths(markdownText));
 }
 
 function isImageFile(file, sourcePath) {
@@ -229,6 +276,7 @@ export async function resolveLocalImages(markdownText, {
   createImageId,
   source = null,
   allowBasenameFallback = false,
+  promptForSource = true,
 }) {
   const scanned = scanLocalImagePaths(markdownText);
   const localImages = Array.from(new Map(scanned.map((item) => [item.path, item])).values());
@@ -239,6 +287,16 @@ export async function resolveLocalImages(markdownText, {
 
   let activeSource = source;
   if (!activeSource) {
+    if (!promptForSource) {
+      return {
+        resolvedMarkdown: markdownText,
+        matched: [],
+        unmatched: localImages.map((item) => ({ path: item.path, reason: 'no-source' })),
+        conflicts: [],
+        total: localImages.length,
+      };
+    }
+
     if (typeof globalThis.showDirectoryPicker !== 'function') {
       return {
         resolvedMarkdown: markdownText,
@@ -329,5 +387,76 @@ export async function resolveLocalImages(markdownText, {
     unmatched,
     conflicts,
     total: localImages.length,
+  };
+}
+
+/**
+ * 解析 Markdown 中的远程（CDN）图片引用：下载、压缩并写入 ImageStore，
+ * 再把原 URL 替换为 img:// 协议，实现图片本地化。下载失败的 URL 保持原样，
+ * 复制到公众号时会再次尝试。
+ * @param {string} markdownText
+ * @param {Object} deps
+ * @returns {Promise<Object>}
+ */
+export async function resolveRemoteImages(markdownText, {
+  imageStore,
+  imageCompressor,
+  createImageId,
+  concurrency = 4,
+  timeoutMs = 8000,
+}) {
+  const scanned = scanRemoteImagePaths(markdownText);
+  const remoteImages = Array.from(new Map(scanned.map((item) => [item.path, item])).values());
+
+  if (remoteImages.length === 0) {
+    return { resolvedMarkdown: markdownText, matched: [], failed: [], total: 0 };
+  }
+
+  const pathMap = {};
+  const matched = [];
+  const failed = [];
+  let nextIndex = 0;
+
+  async function processImage(image) {
+    try {
+      const blob = await fetchRemoteImageBlob(image.path, { timeoutMs });
+      if (!blob || !blob.size || !String(blob.type || '').startsWith('image/')) {
+        throw new Error('非图片响应');
+      }
+
+      const compressedBlob = await imageCompressor.compress(blob);
+      const imageId = createImageId();
+      await imageStore.saveImage(imageId, compressedBlob, {
+        name: image.alt || extractFilename(image.path) || '网络图片',
+        originalName: extractFilename(image.path),
+        originalPath: image.path,
+        originalSize: blob.size,
+        compressedSize: compressedBlob.size,
+        mimeType: compressedBlob.type || blob.type,
+      });
+
+      const newPath = `img://${imageId}`;
+      pathMap[image.path] = newPath;
+      matched.push({ oldPath: image.path, newPath, imageId });
+    } catch (error) {
+      failed.push({ path: image.path, reason: error?.message || '下载失败' });
+    }
+  }
+
+  async function worker() {
+    while (nextIndex < remoteImages.length) {
+      const image = remoteImages[nextIndex];
+      nextIndex += 1;
+      await processImage(image);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, remoteImages.length) }, () => worker()));
+
+  return {
+    resolvedMarkdown: replaceRemoteImagePaths(markdownText, pathMap),
+    matched,
+    failed,
+    total: remoteImages.length,
   };
 }

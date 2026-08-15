@@ -7,6 +7,7 @@ import { convertMathForWechat, stripFormulaExportMetadata } from './math-exporte
 import { applyCodeHighlighting, serializeHighlightedCodeHtml } from '../core/code-highlight.js';
 import { buildEndDividerGif, END_DIVIDER_META } from './end-divider-gif.js';
 import { buildTableImageAlt, renderTableToPng } from './table-image-renderer.js';
+import { fetchRemoteImageBlob } from '../core/remote-image-loader.js';
 
 function extractBackgroundColor(styleString) {
   if (!styleString) return null;
@@ -51,27 +52,6 @@ function blobToDataURL(blob) {
 function ensureBlobType(blob, mimeType) {
   if (!blob || !mimeType || blob.type === mimeType) return blob;
   return new Blob([blob], { type: mimeType });
-}
-
-async function fetchImageBlob(src) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), IMAGE_READ_TIMEOUT_MS);
-
-  try {
-    const response = await fetch(src, {
-      mode: 'cors',
-      cache: 'default',
-      signal: controller.signal
-    });
-
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-    const blob = await response.blob();
-    const contentType = response.headers.get('content-type');
-    return ensureBlobType(blob, contentType);
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 function loadImageFromBlob(blob) {
@@ -187,6 +167,34 @@ function replaceGifWithPlaceholder(imgElement) {
   imgElement.replaceWith(placeholder);
 }
 
+/**
+ * 复制时把无法自动导入的图片替换为可见的占位提示，避免公众号中出现裂图。
+ * @param {Element} imgElement
+ * @param {string} src - 原始图片地址（仅远程地址会展示出来供人工核对）
+ */
+function replaceFailedImageWithPlaceholder(imgElement, src) {
+  const doc = imgElement.ownerDocument;
+  const placeholder = doc.createElement('section');
+
+  placeholder.setAttribute(
+    'style',
+    'margin: 16px 0 !important; padding: 14px 16px !important; border: 1px dashed #d8a100 !important; border-radius: 8px !important; background: #fff8e1 !important; color: #7a5200 !important; font-size: 14px !important; line-height: 1.6 !important; text-align: center !important;'
+  );
+  placeholder.textContent = '图片未能自动导入，请在公众号后台手动上传此图';
+
+  if (src && /^(?:https?:|\/\/)/i.test(src)) {
+    const srcHint = doc.createElement('div');
+    srcHint.setAttribute(
+      'style',
+      'margin-top: 6px !important; font-size: 12px !important; color: #a07a20 !important; word-break: break-all !important;'
+    );
+    srcHint.textContent = src.length > 80 ? `${src.slice(0, 80)}…` : src;
+    placeholder.appendChild(srcHint);
+  }
+
+  imgElement.replaceWith(placeholder);
+}
+
 async function convertImageToBase64(imgElement, imageStore) {
   const src = imgElement.getAttribute('src') || '';
   if (!src) throw new Error('Image src is empty');
@@ -202,7 +210,7 @@ async function convertImageToBase64(imgElement, imageStore) {
   if (!/^(?:https?:|blob:|\/\/)/i.test(src)) {
     throw new Error(`本地图片尚未导入: ${src}`);
   }
-  const blob = await fetchImageBlob(src);
+  const blob = await fetchRemoteImageBlob(src);
   return blobToDataURL(await recompressForClipboard(blob));
 }
 
@@ -230,6 +238,7 @@ export async function materializeClipboardImages(images, {
       failures.push({
         src: image.getAttribute('src') || image.getAttribute('data-image-id') || 'unknown',
         message: error?.message || '图片处理失败',
+        element: image,
       });
     }
   }
@@ -871,16 +880,20 @@ export async function copyToWechat({ renderedHTML, styleConfig, imageStore, show
     normalizeTablesForWechat(doc);
 
     const images = Array.from(doc.querySelectorAll('img'));
+    let imageFailureCount = 0;
     if (images.length > 0) {
       showToast(`正在处理 ${images.length} 张图片...`, 'success');
       const imageResult = await materializeClipboardImages(images, { imageStore });
       if (imageResult.failures.length > 0) {
+        imageFailureCount = imageResult.failures.length;
         const failedSources = imageResult.failures.map((failure) => failure.src).join('、');
         console.warn('Clipboard image conversion failed:', imageResult.failures);
-        showToast(`图片处理失败 ${imageResult.failures.length} 张：${failedSources}`, 'error');
-        return false;
-      }
-      if (imageResult.gifCount > 0) {
+        // 失败的图片替换为可见占位提示，不阻断整体复制
+        imageResult.failures.forEach((failure) => {
+          if (failure.element) replaceFailedImageWithPlaceholder(failure.element, failure.src);
+        });
+        showToast(`有 ${imageResult.failures.length} 张图片无法自动导入：${failedSources}`, 'error');
+      } else if (imageResult.gifCount > 0) {
         showToast(
           `图片处理完成：成功 ${imageResult.successCount} 张，GIF ${imageResult.gifCount} 张`,
           'success'
@@ -920,7 +933,14 @@ export async function copyToWechat({ renderedHTML, styleConfig, imageStore, show
     });
 
     await navigator.clipboard.write([item]);
-    showToast('复制成功', 'success');
+    if (imageFailureCount > 0) {
+      showToast(
+        `复制成功，但有 ${imageFailureCount} 张图片未能自动导入，已替换为占位提示，请在公众号后台手动上传`,
+        'error'
+      );
+    } else {
+      showToast('复制成功', 'success');
+    }
     return true;
   } catch (error) {
     console.error('复制失败:', error);

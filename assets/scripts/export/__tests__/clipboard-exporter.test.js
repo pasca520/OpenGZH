@@ -14,7 +14,7 @@ function makeImage(src) {
 }
 
 describe('materializeClipboardImages', () => {
-  it('reports failed images instead of silently keeping their src', async () => {
+  it('reports failed images with their element instead of silently keeping their src', async () => {
     const image = makeImage('missing.png');
     const result = await materializeClipboardImages([image], {
       isGif: async () => false,
@@ -23,7 +23,9 @@ describe('materializeClipboardImages', () => {
     });
 
     expect(result.successCount).toBe(0);
-    expect(result.failures).toEqual([{ src: 'missing.png', message: 'missing' }]);
+    expect(result.failures).toHaveLength(1);
+    expect(result.failures[0]).toMatchObject({ src: 'missing.png', message: 'missing' });
+    expect(result.failures[0].element).toBe(image);
     expect(image.getAttribute('src')).toBe('missing.png');
   });
 
