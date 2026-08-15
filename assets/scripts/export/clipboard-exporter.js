@@ -502,12 +502,18 @@ function extractStyleValue(styleText, property) {
 
 const FONT_SCALE_BASE_PX = 14;
 
-function extractContainerFontSizePx(style) {
-  const containerStyle = style?.container || '';
-  const match = containerStyle.match(/font-size\s*:\s*([\d.]+)px/i);
+function extractFontSizePx(styleText) {
+  const match = styleText?.match(/font-size\s*:\s*([\d.]+)px/i);
   if (!match) return null;
   const value = parseFloat(match[1]);
   return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/**
+ * 取主题的正文基准字号：优先 p（显式声明了正文字号的模板），否则回退容器字号。
+ */
+function extractBodyFontSizePx(style) {
+  return extractFontSizePx(style?.p) ?? extractFontSizePx(style?.container);
 }
 
 /**
@@ -515,7 +521,7 @@ function extractContainerFontSizePx(style) {
  * 保证复制到公众号的字号与预览完全一致（如 15px 档 → 正文 15px，而不是 16px）。
  */
 function resolveFontScaleMultiplier(fontScale, style) {
-  const basePx = extractContainerFontSizePx(style);
+  const basePx = extractBodyFontSizePx(style);
   if (basePx == null) return fontScale;
   return fontScale * (FONT_SCALE_BASE_PX / basePx);
 }

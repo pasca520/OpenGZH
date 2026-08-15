@@ -175,12 +175,18 @@ function extractBoxSideValue(styleText, property, side) {
 
 const FONT_SCALE_BASE_PX = 14;
 
-function extractContainerFontSizePx(style) {
-  const containerStyle = style?.container || '';
-  const match = containerStyle.match(/font-size\s*:\s*([\d.]+)px/i);
+function extractFontSizePx(styleText) {
+  const match = styleText?.match(/font-size\s*:\s*([\d.]+)px/i);
   if (!match) return null;
   const value = parseFloat(match[1]);
   return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/**
+ * 取主题的正文基准字号：优先 p（显式声明了正文字号的模板），否则回退容器字号。
+ */
+function extractBodyFontSizePx(style) {
+  return extractFontSizePx(style?.p) ?? extractFontSizePx(style?.container);
 }
 
 /**
@@ -189,7 +195,7 @@ function extractContainerFontSizePx(style) {
  * 使「推荐」档正文渲染 14px，其余档位渲染档位标注的 px（如 15px 档 → 15px）。
  */
 function resolveFontScaleMultiplier(fontScale, style) {
-  const basePx = extractContainerFontSizePx(style);
+  const basePx = extractBodyFontSizePx(style);
   if (basePx == null) return fontScale; // 主题未声明正文基准时保持旧行为
   return fontScale * (FONT_SCALE_BASE_PX / basePx);
 }
