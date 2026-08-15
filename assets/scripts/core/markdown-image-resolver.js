@@ -1,10 +1,8 @@
 /**
  * Markdown 图片解析器 — 从用户授权的目录精确读取本地图片，存入 IndexedDB，
- * 再把源路径替换为 img:// 协议；远程 CDN 图片同样支持下载本地化。
+ * 再把源路径替换为 img:// 协议。CDN 图片保持原样，不做处理。
  * @module markdown-image-resolver
  */
-
-import { fetchRemoteImageBlob } from './remote-image-loader.js';
 
 const INLINE_IMAGE_REGEX = /!\[([^\]]*)\]\(\s*(?:<([^>\n]+)>|((?:\\.|[^()\s])+))(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*\)/g;
 const IMAGE_REFERENCE_REGEX = /!\[([^\]]*)\]\[([^\]]*)\]/g;
@@ -16,11 +14,6 @@ const IMAGE_EXTENSION_REGEX = /\.(?:avif|bmp|gif|jpe?g|png|svg|webp)$/i;
 function isLocalPath(path) {
   const value = String(path || '').trim().toLowerCase();
   return value && !REMOTE_PREFIXES.some((prefix) => value.startsWith(prefix));
-}
-
-function isRemotePath(path) {
-  const value = String(path || '').trim().toLowerCase();
-  return value.startsWith('http://') || value.startsWith('https://') || value.startsWith('//');
 }
 
 function createMatch(markdownText, fullMatch, path, alt, matchIndex, kind) {
@@ -101,15 +94,6 @@ export function scanLocalImagePaths(markdownText) {
 }
 
 /**
- * 扫描 Markdown 与 HTML 图片语法中的远程（CDN）图片地址。
- * @param {string} markdownText
- * @returns {{ fullMatch: string, alt: string, path: string, index: number, pathStart: number, pathEnd: number, kind: string }[]}
- */
-export function scanRemoteImagePaths(markdownText) {
-  return scanImagePaths(markdownText, isRemotePath);
-}
-
-/**
  * 将图片路径规范化为授权目录内的相对路径。
  * @param {string} path
  * @returns {string|null}
@@ -180,16 +164,6 @@ function replaceScannedPaths(markdownText, pathMap, scanned) {
  */
 export function replaceImagePaths(markdownText, pathMap) {
   return replaceScannedPaths(markdownText, pathMap, scanLocalImagePaths(markdownText));
-}
-
-/**
- * 精确替换扫描到的远程（CDN）图片地址。
- * @param {string} markdownText
- * @param {Record<string, string>} pathMap
- * @returns {string}
- */
-export function replaceRemoteImagePaths(markdownText, pathMap) {
-  return replaceScannedPaths(markdownText, pathMap, scanRemoteImagePaths(markdownText));
 }
 
 function isImageFile(file, sourcePath) {
@@ -387,76 +361,5 @@ export async function resolveLocalImages(markdownText, {
     unmatched,
     conflicts,
     total: localImages.length,
-  };
-}
-
-/**
- * 解析 Markdown 中的远程（CDN）图片引用：下载、压缩并写入 ImageStore，
- * 再把原 URL 替换为 img:// 协议，实现图片本地化。下载失败的 URL 保持原样，
- * 复制到公众号时会再次尝试。
- * @param {string} markdownText
- * @param {Object} deps
- * @returns {Promise<Object>}
- */
-export async function resolveRemoteImages(markdownText, {
-  imageStore,
-  imageCompressor,
-  createImageId,
-  concurrency = 4,
-  timeoutMs = 8000,
-}) {
-  const scanned = scanRemoteImagePaths(markdownText);
-  const remoteImages = Array.from(new Map(scanned.map((item) => [item.path, item])).values());
-
-  if (remoteImages.length === 0) {
-    return { resolvedMarkdown: markdownText, matched: [], failed: [], total: 0 };
-  }
-
-  const pathMap = {};
-  const matched = [];
-  const failed = [];
-  let nextIndex = 0;
-
-  async function processImage(image) {
-    try {
-      const blob = await fetchRemoteImageBlob(image.path, { timeoutMs });
-      if (!blob || !blob.size || !String(blob.type || '').startsWith('image/')) {
-        throw new Error('非图片响应');
-      }
-
-      const compressedBlob = await imageCompressor.compress(blob);
-      const imageId = createImageId();
-      await imageStore.saveImage(imageId, compressedBlob, {
-        name: image.alt || extractFilename(image.path) || '网络图片',
-        originalName: extractFilename(image.path),
-        originalPath: image.path,
-        originalSize: blob.size,
-        compressedSize: compressedBlob.size,
-        mimeType: compressedBlob.type || blob.type,
-      });
-
-      const newPath = `img://${imageId}`;
-      pathMap[image.path] = newPath;
-      matched.push({ oldPath: image.path, newPath, imageId });
-    } catch (error) {
-      failed.push({ path: image.path, reason: error?.message || '下载失败' });
-    }
-  }
-
-  async function worker() {
-    while (nextIndex < remoteImages.length) {
-      const image = remoteImages[nextIndex];
-      nextIndex += 1;
-      await processImage(image);
-    }
-  }
-
-  await Promise.all(Array.from({ length: Math.min(concurrency, remoteImages.length) }, () => worker()));
-
-  return {
-    resolvedMarkdown: replaceRemoteImagePaths(markdownText, pathMap),
-    matched,
-    failed,
-    total: remoteImages.length,
   };
 }

@@ -42,6 +42,22 @@ describe('materializeClipboardImages', () => {
     expect(result.failures).toEqual([]);
     expect(replaceGif).toHaveBeenCalledWith(image);
   });
+
+  it('keeps CDN images untouched without conversion or GIF placeholder', async () => {
+    const image = makeImage('https://cdn.example.com/banner.png');
+    const convert = vi.fn();
+    const result = await materializeClipboardImages([image], {
+      isGif: vi.fn(),
+      convert,
+      replaceGif: vi.fn(),
+    });
+
+    expect(result.successCount).toBe(1);
+    expect(result.gifCount).toBe(0);
+    expect(result.failures).toEqual([]);
+    expect(convert).not.toHaveBeenCalled();
+    expect(image.getAttribute('src')).toBe('https://cdn.example.com/banner.png');
+  });
 });
 
 describe('materializeMarkdownTables', () => {

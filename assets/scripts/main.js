@@ -29,8 +29,6 @@ import {
   createDirectoryFileSource,
   createFileMapSource,
   resolveLocalImages,
-  resolveRemoteImages,
-  scanRemoteImagePaths,
 } from './core/markdown-image-resolver.js';
 
 const { createApp, ref, reactive, watch, nextTick, onMounted, computed } = window.Vue;
@@ -1030,31 +1028,14 @@ async function importMarkdownCandidate(candidate, supplementalInput) {
       }
     }
 
-    // 下载 Markdown 中的 CDN 图片并本地化，复制到公众号时无需再次请求外网
-    const remotePaths = scanRemoteImagePaths(result.resolvedMarkdown);
-    if (remotePaths.length > 0) {
-      const uniqueCount = new Set(remotePaths.map((item) => item.path)).size;
-      toast.show(`正在下载 ${uniqueCount} 张网络图片...`, 'info', 5000);
-    }
-    const remoteResult = await resolveRemoteImages(result.resolvedMarkdown, {
-      imageStore,
-      imageCompressor,
-      createImageId: () => createDocumentId('img'),
-    });
-    const remoteMatched = remoteResult.matched.length;
-    const remoteFailed = remoteResult.failed.length;
-
-    createNewDocument(remoteResult.resolvedMarkdown, fileTitle);
+    // CDN 图片保持原样不处理，只有本地路径图片需要解析导入
+    createNewDocument(result.resolvedMarkdown, fileTitle);
     const remainingCount = result.unmatched.length + result.conflicts.length;
     if (remainingCount > 0) {
       const paths = [...result.unmatched, ...result.conflicts].map((item) => item.path).join('、');
       toast.show(`文章已导入，仍有 ${remainingCount} 张图片未找到：${paths}`, 'error');
-    } else if (matchedCount + remoteMatched > 0) {
-      const remoteText = remoteMatched > 0 ? `，本地化 ${remoteMatched} 张网络图片` : '';
-      const remoteWarn = remoteFailed > 0 ? `（${remoteFailed} 张下载失败，复制时将重试）` : '';
-      toast.show(`文章已导入，自动导入 ${matchedCount} 张图片${remoteText}${remoteWarn}`, 'success');
-    } else if (remoteFailed > 0) {
-      toast.show(`文章已导入，但 ${remoteFailed} 张网络图片下载失败，复制时将重试`, 'error');
+    } else if (matchedCount > 0) {
+      toast.show(`文章已导入，自动导入 ${matchedCount} 张图片`, 'success');
     } else {
       toast.show('文章已导入', 'success');
     }

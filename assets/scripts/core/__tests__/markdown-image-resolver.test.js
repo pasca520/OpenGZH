@@ -1,15 +1,12 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   scanLocalImagePaths,
-  scanRemoteImagePaths,
   extractFilename,
   replaceImagePaths,
-  replaceRemoteImagePaths,
   normalizeLocalImagePath,
   createDirectoryFileSource,
   createFileMapSource,
   resolveLocalImages,
-  resolveRemoteImages,
 } from '../markdown-image-resolver.js';
 
 // ── Test helpers ──
@@ -507,171 +504,5 @@ describe('scanLocalImagePaths', () => {
     expect(result).toHaveLength(2);
     expect(result[0].index).toBe(7);
     expect(result[1].index).toBeGreaterThan(result[0].index);
-  });
-});
-
-// ── Remote (CDN) image scanning / resolution ──
-
-function makeRemoteImageStore() {
-  const store = {};
-  return {
-    store,
-    saveImage: async (id, blob, meta) => {
-      store[id] = { blob, meta };
-      return id;
-    },
-  };
-}
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
-
-describe('scanRemoteImagePaths', () => {
-  it('returns empty array for text with no remote images', () => {
-    expect(scanRemoteImagePaths('# Hello\n\n![a](one.png)')).toEqual([]);
-  });
-
-  it('detects inline https/http and protocol-relative URLs', () => {
-    const md = '![a](https://cdn.example.com/a.png)\n![b](http://cdn.example.com/b.jpg)\n![c](//cdn.example.com/c.webp)';
-    const result = scanRemoteImagePaths(md);
-    expect(result.map((item) => item.path)).toEqual([
-      'https://cdn.example.com/a.png',
-      'http://cdn.example.com/b.jpg',
-      '//cdn.example.com/c.webp',
-    ]);
-  });
-
-  it('captures alt text and full match for replacement', () => {
-    const md = '![封面](https://cdn.example.com/cover.png "标题")';
-    const result = scanRemoteImagePaths(md);
-    expect(result).toHaveLength(1);
-    expect(result[0].alt).toBe('封面');
-    expect(result[0].fullMatch).toBe('![封面](https://cdn.example.com/cover.png "标题")');
-  });
-
-  it('detects reference definitions and HTML img tags', () => {
-    const md = '![Diagram][flow]\n\n[flow]: https://cdn.example.com/flow.png "Flow"\n\n<img src="https://cdn.example.com/hero.png" alt="Hero">';
-    const result = scanRemoteImagePaths(md);
-    expect(result.map((item) => item.path)).toEqual([
-      'https://cdn.example.com/flow.png',
-      'https://cdn.example.com/hero.png',
-    ]);
-  });
-
-  it('skips local paths, data URIs and stored img:// references', () => {
-    const md = '![a](./local.png) ![b](https://cdn.example.com/b.png) ![c](img://stored-1) ![d](data:image/png;base64,abc)';
-    const result = scanRemoteImagePaths(md);
-    expect(result.map((item) => item.path)).toEqual(['https://cdn.example.com/b.png']);
-  });
-});
-
-describe('replaceRemoteImagePaths', () => {
-  it('replaces remote URLs while leaving other content untouched', () => {
-    const md = '![a](https://cdn.example.com/a.png) ![b](one.png)';
-    const result = replaceRemoteImagePaths(md, { 'https://cdn.example.com/a.png': 'img://remote-1' });
-    expect(result).toBe('![a](img://remote-1) ![b](one.png)');
-  });
-
-  it('leaves remote URLs not in the map as-is', () => {
-    const md = '![a](https://cdn.example.com/a.png) ![b](https://cdn.example.com/b.png)';
-    const result = replaceRemoteImagePaths(md, { 'https://cdn.example.com/a.png': 'img://remote-1' });
-    expect(result).toBe('![a](img://remote-1) ![b](https://cdn.example.com/b.png)');
-  });
-
-  it('replaces a reference definition URL', () => {
-    const md = '![Diagram][flow]\n\n[flow]: https://cdn.example.com/flow.png "Flow"';
-    expect(replaceRemoteImagePaths(md, { 'https://cdn.example.com/flow.png': 'img://flow-1' }))
-      .toBe('![Diagram][flow]\n\n[flow]: img://flow-1 "Flow"');
-  });
-});
-
-describe('resolveRemoteImages', () => {
-  it('returns original text immediately when there are no remote images', async () => {
-    const md = '![photo](./images/photo.png)';
-    const result = await resolveRemoteImages(md, {
-      imageStore: makeRemoteImageStore(),
-      imageCompressor: makeMockImageCompressor(),
-      createImageId,
-    });
-    expect(result.resolvedMarkdown).toBe(md);
-    expect(result.total).toBe(0);
-    expect(result.matched).toEqual([]);
-    expect(result.failed).toEqual([]);
-  });
-
-  it('downloads CDN images into the store and replaces URLs with img://', async () => {
-    const md = '![a](https://cdn.example.com/a.png)\n![b](https://cdn.example.com/b.png)';
-    const imageStore = makeRemoteImageStore();
-    const blob = new Blob(['fake-image'], { type: 'image/png' });
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, blob: async () => blob })));
-
-    nextId = 1;
-    const result = await resolveRemoteImages(md, {
-      imageStore,
-      imageCompressor: makeMockImageCompressor(),
-      createImageId,
-    });
-
-    expect(result.total).toBe(2);
-    expect(result.matched).toHaveLength(2);
-    expect(result.failed).toEqual([]);
-    expect(result.resolvedMarkdown).toBe('![a](img://img-test-1)\n![b](img://img-test-2)');
-    expect(imageStore.store['img-test-1']).toBeDefined();
-    expect(imageStore.store['img-test-1'].meta.mimeType).toBe('image/png');
-  });
-
-  it('deduplicates repeated references to the same CDN URL', async () => {
-    const md = '![a](https://cdn.example.com/a.png)\n\n![b](https://cdn.example.com/a.png)';
-    const imageStore = makeRemoteImageStore();
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      blob: async () => new Blob(['fake-image'], { type: 'image/png' }),
-    })));
-
-    nextId = 1;
-    const result = await resolveRemoteImages(md, {
-      imageStore,
-      imageCompressor: makeMockImageCompressor(),
-      createImageId,
-    });
-
-    expect(result.total).toBe(1);
-    expect(result.matched).toHaveLength(1);
-    expect(result.resolvedMarkdown).toBe('![a](img://img-test-1)\n\n![b](img://img-test-1)');
-  });
-
-  it('keeps the original URL and reports it when download fails', async () => {
-    const md = '![a](https://cdn.example.com/dead.png)';
-    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
-
-    const result = await resolveRemoteImages(md, {
-      imageStore: makeRemoteImageStore(),
-      imageCompressor: makeMockImageCompressor(),
-      createImageId,
-    });
-
-    expect(result.matched).toEqual([]);
-    expect(result.failed).toHaveLength(1);
-    expect(result.failed[0].path).toBe('https://cdn.example.com/dead.png');
-    expect(result.resolvedMarkdown).toBe(md);
-  });
-
-  it('does not create an img reference when storage fails', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      blob: async () => new Blob(['fake-image'], { type: 'image/png' }),
-    })));
-
-    const result = await resolveRemoteImages('![a](https://cdn.example.com/a.png)', {
-      imageStore: { saveImage: async () => { throw new Error('quota'); } },
-      imageCompressor: makeMockImageCompressor(),
-      createImageId,
-    });
-
-    expect(result.resolvedMarkdown).toBe('![a](https://cdn.example.com/a.png)');
-    expect(result.failed).toHaveLength(1);
   });
 });

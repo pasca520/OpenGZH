@@ -7,7 +7,6 @@ import { convertMathForWechat, stripFormulaExportMetadata } from './math-exporte
 import { applyCodeHighlighting, serializeHighlightedCodeHtml } from '../core/code-highlight.js';
 import { buildEndDividerGif, END_DIVIDER_META } from './end-divider-gif.js';
 import { buildTableImageAlt, renderTableToPng } from './table-image-renderer.js';
-import { fetchRemoteImageBlob } from '../core/remote-image-loader.js';
 
 function extractBackgroundColor(styleString) {
   if (!styleString) return null;
@@ -195,6 +194,19 @@ function replaceFailedImageWithPlaceholder(imgElement, src) {
   imgElement.replaceWith(placeholder);
 }
 
+async function fetchBlobUrl(src) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), IMAGE_READ_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(src, { signal: controller.signal });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.blob();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function convertImageToBase64(imgElement, imageStore) {
   const src = imgElement.getAttribute('src') || '';
   if (!src) throw new Error('Image src is empty');
@@ -207,11 +219,13 @@ async function convertImageToBase64(imgElement, imageStore) {
     return blobToDataURL(await recompressForClipboard(storedBlob));
   }
 
-  if (!/^(?:https?:|blob:|\/\/)/i.test(src)) {
-    throw new Error(`本地图片尚未导入: ${src}`);
+  // blob: 是会话内的本地图片，必须转 Base64 才能跨会话使用
+  if (src.startsWith('blob:')) {
+    const blob = await fetchBlobUrl(src);
+    return blobToDataURL(await recompressForClipboard(blob));
   }
-  const blob = await fetchRemoteImageBlob(src);
-  return blobToDataURL(await recompressForClipboard(blob));
+
+  throw new Error(`本地图片尚未导入: ${src}`);
 }
 
 export async function materializeClipboardImages(images, {
@@ -225,6 +239,13 @@ export async function materializeClipboardImages(images, {
   const failures = [];
 
   for (const image of images) {
+    const src = image.getAttribute('src') || '';
+    // CDN / 外链图片（http/https/协议相对）无需处理，原样保留，由公众号直接加载
+    if (/^(?:https?:|\/\/)/i.test(src)) {
+      successCount += 1;
+      continue;
+    }
+
     try {
       if (await isGif(image)) {
         replaceGif(image);
