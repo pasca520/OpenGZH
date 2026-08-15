@@ -20,7 +20,7 @@ export const theme = {
     "ul": "margin: 20px 0; padding-left: 16px; list-style-type: disc;",
     "ol": "margin: 20px 0; padding-left: 16px; list-style-type: decimal;",
     "li": "margin: 10px 0; line-height: 1.6 !important; color: #6e6e73 !important; padding-left:0px; position: relative; font-weight: 300;",
-    "blockquote": "margin: 32px auto; padding: 0; background-color: transparent !important; border-left: none; color: #1d1d1f !important; font-size: 18px; line-height: 1.4 !important; font-weight: 300; text-align: center; max-width: 520px; font-style: normal;",
+    "blockquote": "margin: 32px auto; padding: 0; background-color: transparent !important; border-left: none; color: #1d1d1f !important; font-size: 18px; line-height: 1.5 !important; font-weight: 300; text-align: center; max-width: 520px; font-style: normal;",
     "code": "font-family: \"SF Mono\", Monaco, Menlo, monospace; font-size: 14px; padding: 2px 6px; background-color: #f5f5f7 !important; color: #6e6e73 !important; border-radius: 6px; font-weight: 400;",
     "pre": "margin: 28px 0; padding: 20px; background-color: #f5f5f7 !important; border-radius: 10px; overflow-x: auto; line-height: 1.5 !important;",
     "hr": "margin: 56px auto; border: none; height: 1px; background-color: #d2d2d7 !important; max-width: 48px;",
