@@ -500,11 +500,33 @@ function extractStyleValue(styleText, property) {
   return match ? match[1].trim() : null;
 }
 
+const FONT_SCALE_BASE_PX = 14;
+
+function extractContainerFontSizePx(style) {
+  const containerStyle = style?.container || '';
+  const match = containerStyle.match(/font-size\s*:\s*([\d.]+)px/i);
+  if (!match) return null;
+  const value = parseFloat(match[1]);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/**
+ * 把字号档位倍数（1.0x = 14px）换算为作用于主题的实际倍数，与 render-pipeline 保持一致，
+ * 保证复制到公众号的字号与预览完全一致（如 15px 档 → 正文 15px，而不是 16px）。
+ */
+function resolveFontScaleMultiplier(fontScale, style) {
+  const basePx = extractContainerFontSizePx(style);
+  if (basePx == null) return fontScale;
+  return fontScale * (FONT_SCALE_BASE_PX / basePx);
+}
+
 function scaleStyleConfigFontSizes(styleConfig, scale) {
-  if (!styleConfig?.styles || !Number.isFinite(scale) || scale === 1) return styleConfig;
+  if (!styleConfig?.styles) return styleConfig;
+  const multiplier = resolveFontScaleMultiplier(scale, styleConfig.styles);
+  if (!Number.isFinite(multiplier) || multiplier === 1) return styleConfig;
   const nextStyles = {};
   Object.keys(styleConfig.styles).forEach((selector) => {
-    nextStyles[selector] = scaleFontSizeInDeclaration(styleConfig.styles[selector], scale);
+    nextStyles[selector] = scaleFontSizeInDeclaration(styleConfig.styles[selector], multiplier);
   });
   return { ...styleConfig, styles: nextStyles };
 }
@@ -803,9 +825,18 @@ function wrapSectionIfNeeded(doc, styleConfig) {
   const paddingMatch = containerStyle.match(/padding:\s*([^;]+)/);
   const maxWidthMatch = containerStyle.match(/max-width:\s*([^;]+)/);
 
+  // 显式带上正文排版（字号/行高/颜色/字体），避免微信编辑器以默认 16px 兜底
+  const typographyDeclarations = ['font-size', 'line-height', 'color', 'font-family']
+    .map((property) => {
+      const value = extractStyleValue(containerStyle, property);
+      return value ? `${property}: ${value} !important;` : '';
+    })
+    .filter(Boolean)
+    .join(' ');
+
   section.setAttribute(
     'style',
-    `background-color: ${containerBg}; padding: ${paddingMatch ? paddingMatch[1].trim() : '40px 20px'}; max-width: ${maxWidthMatch ? maxWidthMatch[1].trim() : '100%'}; margin: 0 auto; box-sizing: border-box; word-wrap: break-word;`
+    `${typographyDeclarations} background-color: ${containerBg}; padding: ${paddingMatch ? paddingMatch[1].trim() : '40px 20px'}; max-width: ${maxWidthMatch ? maxWidthMatch[1].trim() : '100%'}; margin: 0 auto; box-sizing: border-box; word-wrap: break-word;`
   );
 
   while (doc.body.firstChild) {
@@ -888,7 +919,8 @@ export async function copyToWechat({ renderedHTML, styleConfig, imageStore, show
   }
 
   const fontScale = Number(displaySettings?.fontScale) || 1;
-  const effectiveStyleConfig = fontScale !== 1 ? scaleStyleConfigFontSizes(styleConfig, fontScale) : styleConfig;
+  // 始终走缩放（内部会按 14px 基准归一化），保证复制结果与预览字号一致
+  const effectiveStyleConfig = scaleStyleConfigFontSizes(styleConfig, fontScale);
 
   try {
     const parser = new DOMParser();

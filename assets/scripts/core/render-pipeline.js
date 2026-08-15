@@ -49,7 +49,10 @@ async function processImageProtocol(html, imageStore) {
 function applyInlineStyles(html, styleConfig, codeTheme, displaySettings) {
   const style = styleConfig.styles;
   const fontScale = Number(displaySettings?.fontScale) || 1;
-  const scaledStyle = fontScale !== 1 ? scaleStyleFontSizes(style, fontScale) : style;
+  // 字号档位以 14px 为 1.0x 基准：实际倍数 = 档位倍数 × 14 ÷ 主题正文基准，
+  // 保证「推荐 14px」正文渲染 14px、其余档位渲染档位标注的 px，预览与复制一致
+  const multiplier = resolveFontScaleMultiplier(fontScale, style);
+  const scaledStyle = multiplier !== 1 ? scaleStyleFontSizes(style, multiplier) : style;
   const fontStyle = buildFontFamilyOverride(displaySettings?.fontFamily);
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
@@ -168,6 +171,27 @@ function extractBoxSideValue(styleText, property, side) {
   if (parts.length === 2) return side === 'top' || side === 'bottom' ? parts[0] : parts[1];
   if (parts.length === 3) return side === 'bottom' ? parts[2] : parts[0];
   return side === 'top' ? parts[0] : side === 'right' ? parts[1] : side === 'bottom' ? parts[2] : parts[3];
+}
+
+const FONT_SCALE_BASE_PX = 14;
+
+function extractContainerFontSizePx(style) {
+  const containerStyle = style?.container || '';
+  const match = containerStyle.match(/font-size\s*:\s*([\d.]+)px/i);
+  if (!match) return null;
+  const value = parseFloat(match[1]);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/**
+ * 把字号档位倍数（1.0x = 14px）换算为作用于主题的实际倍数。
+ * 主题正文基准为 basePx 时：实际倍数 = fontScale × 14 / basePx，
+ * 使「推荐」档正文渲染 14px，其余档位渲染档位标注的 px（如 15px 档 → 15px）。
+ */
+function resolveFontScaleMultiplier(fontScale, style) {
+  const basePx = extractContainerFontSizePx(style);
+  if (basePx == null) return fontScale; // 主题未声明正文基准时保持旧行为
+  return fontScale * (FONT_SCALE_BASE_PX / basePx);
 }
 
 function scaleStyleFontSizes(style, scale) {
