@@ -386,13 +386,27 @@ describe('card picker editor integration', () => {
     expect(preview).toContain('STYLES[currentStyle.value]');
   });
 
+  it('keeps future trigger clicks inside the shared card picker boundary', () => {
+    const outsideClick = sliceBetween(
+      source,
+      "document.addEventListener('click'",
+      '\n\n      imageStore ='
+    );
+    expect(source).toMatch(
+      /const\s+CARD_PICKER_BOUNDARY_SELECTOR\s*=\s*['"]\.card-picker-anchor['"]/
+    );
+    expect(outsideClick).toContain(
+      'event.target.closest(CARD_PICKER_BOUNDARY_SELECTOR)'
+    );
+    expect(outsideClick).not.toContain("closest('.card-picker')");
+  });
+
   it('closes only the card picker on outside click and Escape without overwriting selection', () => {
     const outsideClick = sliceBetween(
       source,
       "document.addEventListener('click'",
       '\n\n      imageStore ='
     );
-    expect(outsideClick).toContain("closest('.card-picker')");
     expect(outsideClick).toContain('showCardPicker.value = false');
     expect(outsideClick).toMatch(/addEventListener\(['"]keydown['"]/);
     expect(outsideClick).toMatch(/event\.key\s*===\s*['"]Escape['"]/);

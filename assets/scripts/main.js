@@ -124,6 +124,7 @@ const activeTab = ref('editor');
 const showTemplatePicker = ref(false);
 const showTypoPicker = ref(false);
 const showXhsSettings = ref(false);
+const CARD_PICKER_BOUNDARY_SELECTOR = '.card-picker-anchor';
 const showCardPicker = ref(false);
 const cardTargetState = ref({ ok: true, existing: false, reason: '' });
 
@@ -2762,7 +2763,7 @@ const app = createApp({
           showTypoPicker.value = false;
           showXhsSettings.value = false;
         }
-        if (!event.target.closest('.card-picker')) {
+        if (!event.target.closest(CARD_PICKER_BOUNDARY_SELECTOR)) {
           showCardPicker.value = false;
         }
       });
