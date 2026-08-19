@@ -76,14 +76,7 @@ function normalizeColor(value) {
     return `#${Array.from(shortHex[1], (digit) => digit + digit).join('')}`;
   }
   if (/^#[0-9a-f]{6}$/.test(color)) return color;
-  if (color === 'black') return '#000000';
-  if (color === 'white') return '#ffffff';
-
-  const rgb = /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})(?:\s*,\s*(1(?:\.0*)?))?\s*\)$/.exec(color);
-  if (!rgb) return null;
-  const channels = rgb.slice(1, 4).map(Number);
-  if (channels.some((channel) => channel > 255)) return null;
-  return `#${channels.map((channel) => channel.toString(16).padStart(2, '0')).join('')}`;
+  return null;
 }
 
 function cssDeclarations(styleText) {
@@ -98,12 +91,14 @@ function cssDeclarations(styleText) {
   });
 }
 
-function colorFromDeclaration(value, allowBorderSyntax) {
-  const direct = normalizeColor(value);
-  if (direct || !allowBorderSyntax) return direct;
+function colorFromDeclaration(value, property) {
+  const isBorderShorthand = property.startsWith('border') && !property.endsWith('-color');
+  if (!isBorderShorthand) {
+    return normalizeColor(value);
+  }
 
-  const colorToken = value.match(/#[0-9a-f]{3}(?![0-9a-f])|#[0-9a-f]{6}(?![0-9a-f])|rgba?\([^)]*\)|\b(?:black|white)\b/i);
-  return colorToken ? normalizeColor(colorToken[0]) : null;
+  const border = /^(?:0|(?:\d+(?:\.\d+)?|\.\d+)(?:px|em|rem|pt))\s+(?:none|hidden|dotted|dashed|solid|double|groove|ridge|inset|outset)\s+(#[0-9a-f]{3}|#[0-9a-f]{6})$/i.exec(value);
+  return border ? normalizeColor(border[1]) : null;
 }
 
 function colorFromStyle(styleText, properties) {
@@ -111,10 +106,7 @@ function colorFromStyle(styleText, properties) {
   for (const property of properties) {
     const declaration = declarations.findLast(([name]) => name === property);
     if (!declaration) continue;
-    const color = colorFromDeclaration(
-      declaration[1],
-      property.startsWith('border')
-    );
+    const color = colorFromDeclaration(declaration[1], property);
     if (color) return color;
   }
   return null;
@@ -217,7 +209,7 @@ function presentationResult({
   containerStyle,
   titleStyle = '',
   bodyStyle,
-  decoration = null,
+  decoration = 'none',
   solidBackground = null,
   solidText = null,
   contrastPairs
@@ -255,7 +247,7 @@ export function buildCardPresentation(styleId, tokenInput) {
       });
     case 'minimal-outline':
       return presentationResult({
-        containerStyle: `${common} border: 1px solid ${tokens.line}; background-color: ${tokens.surface}; border-radius: 6px; color: ${bodyOnSurface} !important;`,
+        containerStyle: `${common} border: 1px solid ${tokens.line}; background-color: transparent; border-radius: 6px; color: ${bodyOnSurface} !important;`,
         bodyStyle: bodyStyle(bodyOnSurface),
         contrastPairs: [bodyPair(bodyOnSurface, tokens.surface)]
       });
@@ -360,7 +352,12 @@ export function renderCardPreviewHtml(styleId, styleConfig) {
   } else if (presentation.decoration === 'number') {
     const titlePair = presentation.contrastPairs.find(({ role }) => role === 'title');
     const headingStyle = escapeHtml(`display: inline-block; margin: 0 0 12px; color: ${titlePair.foreground} !important; font-size: 16px; line-height: 1.5;`);
-    content = `<span data-ogzh-card-decoration="number" aria-hidden="true" style="${escapeHtml(presentation.titleStyle)}">01</span><h4 style="${headingStyle}">${escapeHtml(card.defaultTitle)}</h4><p style="${bodyStyle}">${escapeHtml(card.preview)}</p>`;
+    const title = card.defaultTitle.trim();
+    const titleParts = /^(\d{1,2})\s+(.+)$/.exec(title);
+    const badge = titleParts?.[1] || '';
+    const visibleTitle = titleParts?.[2] || title;
+    const preview = card.preview === card.defaultTitle ? BODY_PLACEHOLDER : card.preview;
+    content = `<span data-ogzh-card-decoration="number" aria-hidden="true" style="${escapeHtml(presentation.titleStyle)}">${escapeHtml(badge)}</span><h4 aria-label="${escapeHtml(title)}" style="${headingStyle}">${escapeHtml(visibleTitle)}</h4><p style="${bodyStyle}">${escapeHtml(preview)}</p>`;
   } else if (card.slots === 'title-body') {
     content = `<h4 style="${escapeHtml(presentation.titleStyle)}">${escapeHtml(card.defaultTitle)}</h4><p style="${bodyStyle}">${escapeHtml(card.preview)}</p>`;
   } else {

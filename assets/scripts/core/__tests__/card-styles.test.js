@@ -883,6 +883,40 @@ describe('theme-aware card tokens', () => {
     expect(Object.values(tokens).every((value) => SAFE_COLOR.test(value))).toBe(true);
     expect(JSON.stringify(tokens)).not.toMatch(/position|javascript|expression|url|style/i);
   });
+
+  it('accepts only complete hex tokens and safe border shorthand values', () => {
+    expect(resolveCardTokens({
+      gzh: {
+        accent: 'rgb(18, 52, 86)',
+        body: 'black',
+        muted: 'rgba(1, 2, 3, 1)'
+      },
+      styles: {
+        h2: 'border: linear-gradient(#abc, #def);',
+        p: 'color: white;',
+        blockquote: 'background: rgba(238, 244, 251, 1);',
+        td: 'border-bottom: 1px solid #ccd6dd trailing-junk;'
+      }
+    })).toEqual({
+      accent: '#576b95',
+      body: '#262626',
+      muted: '#666666',
+      line: '#d9d9d9',
+      soft: '#f6f7f9',
+      surface: '#ffffff'
+    });
+
+    expect(resolveCardTokens({
+      styles: {
+        h2: 'border-left: 4px solid #ABC;',
+        td: 'border-bottom: 1px dashed #C0FFEE;'
+      }
+    })).toMatchObject({ accent: '#aabbcc', line: '#c0ffee' });
+
+    expect(resolveCardTokens({
+      styles: { h2: 'border: #abc;' }
+    }).accent).toBe('#576b95');
+  });
 });
 
 describe('card presentation recipes', () => {
@@ -917,7 +951,7 @@ describe('card presentation recipes', () => {
       Array.isArray(item.contrastPairs)
     ))).toBe(true);
     expect(presentations.map((item) => item.decoration)).toEqual([
-      null, null, null, 'quote', null, null, null, null, null, 'number'
+      'none', 'none', 'none', 'quote', 'none', 'none', 'none', 'none', 'none', 'number'
     ]);
     expect(serialized).not.toMatch(/display\s*:\s*(?:flex|grid)|position\s*:|::(?:before|after)|<table/i);
   });
@@ -931,7 +965,7 @@ describe('card presentation recipes', () => {
 
     expect(Object.values(presentation).every((item) => common.test(item.containerStyle))).toBe(true);
     expect(presentation['accent-bar'].containerStyle).toMatch(/border-left:\s*4px solid #1a73e8.*background-color:\s*#eef4fb.*border-radius:\s*6px/);
-    expect(presentation['minimal-outline'].containerStyle).toMatch(/border:\s*1px solid #ccd6dd.*background-color:\s*#ffffff.*border-radius:\s*6px/);
+    expect(presentation['minimal-outline'].containerStyle).toMatch(/border:\s*1px solid #ccd6dd.*background-color:\s*transparent.*border-radius:\s*6px/);
     expect(presentation['soft-fill'].containerStyle).toMatch(/border:\s*none.*background-color:\s*#eef4fb.*border-radius:\s*14px/);
     expect(presentation['quote-frame'].containerStyle).toMatch(/border:\s*1px solid #ccd6dd.*border-radius:\s*10px/);
     expect(presentation['top-rule'].containerStyle).toMatch(/border-top:\s*4px solid #1a73e8.*background-color:\s*#eef4fb.*border-radius:\s*0 0 8px 8px/);
@@ -941,6 +975,22 @@ describe('card presentation recipes', () => {
     expect(presentation['label-title'].titleStyle).toMatch(/display:\s*block.*background-color:\s*#1a73e8/);
     expect(presentation['numbered-conclusion'].titleStyle).toMatch(/display:\s*inline-block/);
     expect(presentation['numbered-conclusion'].containerStyle).not.toMatch(/table/i);
+  });
+
+  it('keeps transparent minimal-outline text contrasted against the parent surface', () => {
+    const tokens = resolveCardTokens(STYLES['gzh-yehang']);
+    const presentation = buildCardPresentation('minimal-outline', tokens);
+
+    expect(presentation.containerStyle).toContain('background-color: transparent;');
+    expect(presentation.contrastPairs).toEqual([
+      {
+        role: 'body',
+        foreground: '#d7d5d3',
+        background: '#191414',
+        minimum: 4.5
+      }
+    ]);
+    expect(contrastRatio('#d7d5d3', '#191414')).toBeGreaterThanOrEqual(4.5);
   });
 
   it('returns a safe null result for an unknown card id', () => {
@@ -1005,6 +1055,27 @@ describe('card preview HTML', () => {
     expect(renderCardPreviewHtml('numbered-conclusion', theme)).toMatch(
       /<span[^>]+data-ogzh-card-decoration="number"[^>]*>/
     );
+  });
+
+  it('renders the numbered preview with one badge, a de-numbered title, and placeholder body', () => {
+    const presentation = buildCardPresentation(
+      'numbered-conclusion',
+      resolveCardTokens(theme)
+    );
+    const titlePair = presentation.contrastPairs.find(({ role }) => role === 'title');
+    const headingStyle = `display: inline-block; margin: 0 0 12px; color: ${titlePair.foreground} !important; font-size: 16px; line-height: 1.5;`;
+    const html = renderCardPreviewHtml('numbered-conclusion', theme);
+
+    expect(html).toBe(
+      `<section data-ogzh-card-preview="numbered-conclusion" style="${presentation.containerStyle}">` +
+      `<span data-ogzh-card-decoration="number" aria-hidden="true" style="${presentation.titleStyle}">01</span>` +
+      `<h4 aria-label="01 阶段结论" style="${headingStyle}">阶段结论</h4>` +
+      `<p style="${presentation.bodyStyle}">在这里输入卡片内容</p></section>`
+    );
+    expect(html.match(/01 阶段结论/g)).toHaveLength(1);
+    expect(html.match(/>01<\/span>/g)).toHaveLength(1);
+    expect(html.match(/>阶段结论<\/h4>/g)).toHaveLength(1);
+    expect(html).not.toContain('>01 阶段结论</');
   });
 
   it('returns empty HTML for unknown ids and cannot copy malicious theme CSS', () => {
