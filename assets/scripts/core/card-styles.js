@@ -46,6 +46,7 @@ export const CARD_STYLES = Object.freeze([
 ].map((item) => Object.freeze(item)));
 
 const CARD_STYLE_BY_ID = new Map(CARD_STYLES.map((item) => [item.id, item]));
+const NATIVE_DARK_CARD_TOKENS = new WeakSet();
 
 const DEFAULT_CARD_TOKENS = Object.freeze({
   accent: '#576b95',
@@ -125,10 +126,13 @@ export function resolveCardTokens(styleConfig) {
   const styles = styleConfig?.styles || {};
   const accentFromStyles = colorFromSelectors(styles, [
     ['h2', BORDER_COLOR_PROPERTIES],
-    ['h2', ['color']],
     ['h1', BORDER_COLOR_PROPERTIES],
-    ['h1', ['color']],
     ['blockquote', BORDER_COLOR_PROPERTIES],
+    ['h2', BACKGROUND_COLOR_PROPERTIES],
+    ['h1', BACKGROUND_COLOR_PROPERTIES],
+    ['blockquote', BACKGROUND_COLOR_PROPERTIES],
+    ['h2', ['color']],
+    ['h1', ['color']],
     ['blockquote', ['color']]
   ]);
   const bodyFromStyles = colorFromSelectors(styles, [
@@ -156,7 +160,7 @@ export function resolveCardTokens(styleConfig) {
     ['container', BACKGROUND_COLOR_PROPERTIES]
   ]);
 
-  return {
+  const tokens = {
     accent: normalizeColor(gzh.accent) || accentFromStyles || DEFAULT_CARD_TOKENS.accent,
     body: normalizeColor(gzh.body) || bodyFromStyles || DEFAULT_CARD_TOKENS.body,
     muted: normalizeColor(gzh.muted) || mutedFromStyles || DEFAULT_CARD_TOKENS.muted,
@@ -164,13 +168,18 @@ export function resolveCardTokens(styleConfig) {
     soft: normalizeColor(gzh.soft) || softFromStyles || DEFAULT_CARD_TOKENS.soft,
     surface: normalizeColor(gzh.bg) || surfaceFromStyles || DEFAULT_CARD_TOKENS.surface
   };
+  if (normalizeColor(gzh.bg)) NATIVE_DARK_CARD_TOKENS.add(tokens);
+  return tokens;
 }
 
 function normalizedTokenSet(tokens) {
-  return Object.fromEntries(Object.entries(DEFAULT_CARD_TOKENS).map(([role, fallback]) => [
+  const nativeDark = Boolean(tokens && NATIVE_DARK_CARD_TOKENS.has(tokens));
+  const normalized = Object.fromEntries(Object.entries(DEFAULT_CARD_TOKENS).map(([role, fallback]) => [
     role,
     normalizeColor(tokens?.[role]) || fallback
   ]));
+  if (nativeDark) NATIVE_DARK_CARD_TOKENS.add(normalized);
+  return normalized;
 }
 
 function relativeLuminance(color) {
@@ -194,11 +203,111 @@ export function contrastRatio(colorA, colorB) {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-function readableForeground(foreground, background) {
-  if (contrastRatio(foreground, background) >= 4.5) return foreground;
-  return contrastRatio('#000000', background) >= contrastRatio('#ffffff', background)
-    ? '#000000'
-    : '#ffffff';
+function rgbChannels(color) {
+  const normalized = normalizeColor(color);
+  if (!normalized) return null;
+  return [1, 3, 5].map((offset) =>
+    Number.parseInt(normalized.slice(offset, offset + 2), 16)
+  );
+}
+
+function previewChannels(color) {
+  const source = rgbChannels(color);
+  if (!source) return null;
+  const clamp = (value) => Math.min(255, Math.max(0, value));
+  const [r, g, b] = source.map((channel) => 255 - channel);
+  return [
+    clamp(-0.574 * r + 1.43 * g + 0.144 * b),
+    clamp(0.426 * r + 0.43 * g + 0.144 * b),
+    clamp(0.426 * r + 1.43 * g - 0.856 * b)
+  ];
+}
+
+function channelLuminance(channels) {
+  const linear = channels.map((channel) => {
+    const normalized = channel / 255;
+    return normalized <= 0.03928
+      ? normalized / 12.92
+      : ((normalized + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+}
+
+function channelContrast(channelsA, channelsB) {
+  const luminanceA = channelLuminance(channelsA);
+  const luminanceB = channelLuminance(channelsB);
+  return (Math.max(luminanceA, luminanceB) + 0.05) /
+    (Math.min(luminanceA, luminanceB) + 0.05);
+}
+
+function previewContrastRatio(foreground, background) {
+  const transformedForeground = previewChannels(foreground);
+  const transformedBackground = previewChannels(background);
+  if (!transformedForeground || !transformedBackground) return 0;
+  return channelContrast(transformedForeground, transformedBackground);
+}
+
+function minimumPairContrast(foreground, background, includePreview) {
+  const light = contrastRatio(foreground, background);
+  return includePreview
+    ? Math.min(light, previewContrastRatio(foreground, background))
+    : light;
+}
+
+function readableForeground(foreground, background, includePreview) {
+  if (minimumPairContrast(foreground, background, includePreview) >= 4.5) {
+    return foreground;
+  }
+  const fallbacks = ['#000000', '#ffffff']
+    .map((color) => ({
+      color,
+      contrast: minimumPairContrast(color, background, includePreview)
+    }))
+    .sort((left, right) => right.contrast - left.contrast);
+  return fallbacks[0].color;
+}
+
+function channelsToHex(channels) {
+  return `#${channels.map((channel) =>
+    Math.round(channel).toString(16).padStart(2, '0')
+  ).join('')}`;
+}
+
+function adjustedSolidPair(foreground, background, includePreview) {
+  const foregroundCandidates = [foreground, '#000000', '#ffffff'];
+  for (const candidate of foregroundCandidates) {
+    if (minimumPairContrast(candidate, background, includePreview) >= 4.5) {
+      return { foreground: candidate, background };
+    }
+  }
+
+  const source = rgbChannels(background);
+  const adjustments = [
+    { target: [0, 0, 0], foreground: '#ffffff' },
+    { target: [255, 255, 255], foreground: '#000000' }
+  ].flatMap(({ target, foreground: adjustedForeground }) => {
+    for (let step = 1; step <= 255; step += 1) {
+      const ratio = step / 255;
+      const adjustedBackground = channelsToHex(source.map((channel, index) =>
+        channel + (target[index] - channel) * ratio
+      ));
+      if (minimumPairContrast(adjustedForeground, adjustedBackground, includePreview) < 4.5) {
+        continue;
+      }
+      const adjustedChannels = rgbChannels(adjustedBackground);
+      const distance = Math.hypot(...source.map((channel, index) =>
+        channel - adjustedChannels[index]
+      ));
+      return [{
+        foreground: adjustedForeground,
+        background: adjustedBackground,
+        distance
+      }];
+    }
+    return [];
+  });
+  adjustments.sort((left, right) => left.distance - right.distance);
+  return adjustments[0];
 }
 
 function contrastPair(role, foreground, background) {
@@ -229,12 +338,15 @@ export function buildCardPresentation(styleId, tokenInput) {
   if (!getCardStyle(styleId)) return null;
 
   const tokens = normalizedTokenSet(tokenInput);
+  const includePreview = !NATIVE_DARK_CARD_TOKENS.has(tokens);
   const common = 'margin: 20px 0; padding: 18px 20px; box-sizing: border-box; max-width: 100%; overflow-wrap: break-word;';
-  const bodyOnSoft = readableForeground(tokens.body, tokens.soft);
-  const bodyOnSurface = readableForeground(tokens.body, tokens.surface);
-  const solidText = readableForeground(tokens.surface, tokens.accent);
+  const bodyOnSoft = readableForeground(tokens.body, tokens.soft, includePreview);
+  const bodyOnSurface = readableForeground(tokens.body, tokens.surface, includePreview);
+  const solid = adjustedSolidPair(tokens.surface, tokens.accent, includePreview);
+  const solidBackground = solid.background;
+  const solidText = solid.foreground;
   const bodyStyle = (foreground) =>
-    `margin: 0; color: ${foreground} !important; line-height: 1.75; text-align: left; overflow-wrap: break-word;`;
+    `margin: 0 !important; color: ${foreground} !important; line-height: 1.75 !important; text-align: left; overflow-wrap: break-word;`;
   const bodyPair = (foreground, background) =>
     contrastPair('body', foreground, background);
 
@@ -258,7 +370,11 @@ export function buildCardPresentation(styleId, tokenInput) {
         contrastPairs: [bodyPair(bodyOnSoft, tokens.soft)]
       });
     case 'quote-frame': {
-      const quoteText = readableForeground(tokens.accent, tokens.surface);
+      const quoteText = readableForeground(
+        tokens.accent,
+        tokens.surface,
+        includePreview
+      );
       return presentationResult({
         containerStyle: `${common} border: 1px solid ${tokens.line}; background-color: ${tokens.surface}; border-radius: 10px; color: ${bodyOnSurface} !important;`,
         bodyStyle: bodyStyle(bodyOnSurface),
@@ -283,43 +399,53 @@ export function buildCardPresentation(styleId, tokenInput) {
       });
     case 'solid-contrast':
       return presentationResult({
-        containerStyle: `${common} border: none; background-color: ${tokens.accent}; border-radius: 10px; color: ${solidText} !important;`,
+        containerStyle: `${common} border: none; background-color: ${solidBackground}; border-radius: 10px; color: ${solidText} !important;`,
         bodyStyle: bodyStyle(solidText),
-        solidBackground: tokens.accent,
+        solidBackground,
         solidText,
-        contrastPairs: [contrastPair('solid-fill', solidText, tokens.accent)]
+        contrastPairs: [contrastPair('solid-fill', solidText, solidBackground)]
       });
     case 'capsule-title':
       return presentationResult({
         containerStyle: `${common} border: 1px solid ${tokens.line}; background-color: ${tokens.surface}; border-radius: 12px; color: ${bodyOnSurface} !important; text-align: center;`,
-        titleStyle: `display: inline-block; margin: 0 auto 12px; padding: 5px 14px; background-color: ${tokens.accent}; color: ${solidText} !important; border-radius: 999px; font-size: 15px; line-height: 1.5;`,
+        titleStyle: `display: inline-block; margin: 0 auto 12px !important; padding: 5px 14px; background-color: ${solidBackground} !important; color: ${solidText} !important; border-radius: 999px; font-size: 15px; line-height: 1.5 !important;`,
         bodyStyle: bodyStyle(bodyOnSurface),
+        solidBackground,
+        solidText,
         contrastPairs: [
           bodyPair(bodyOnSurface, tokens.surface),
-          contrastPair('capsule-title', solidText, tokens.accent)
+          contrastPair('capsule-title', solidText, solidBackground)
         ]
       });
     case 'label-title':
       return presentationResult({
         containerStyle: `${common} border: none; background-color: ${tokens.soft}; border-radius: 8px; color: ${bodyOnSoft} !important;`,
-        titleStyle: `display: block; margin: -18px -20px 14px; padding: 10px 20px; background-color: ${tokens.accent}; color: ${solidText} !important; border-radius: 8px 8px 0 0; font-size: 16px; line-height: 1.5;`,
+        titleStyle: `display: block; margin: -18px -20px 14px !important; padding: 10px 20px; background-color: ${solidBackground} !important; color: ${solidText} !important; border-radius: 8px 8px 0 0; font-size: 16px; line-height: 1.5 !important;`,
         bodyStyle: bodyStyle(bodyOnSoft),
+        solidBackground,
+        solidText,
         contrastPairs: [
           bodyPair(bodyOnSoft, tokens.soft),
-          contrastPair('title-strip', solidText, tokens.accent)
+          contrastPair('title-strip', solidText, solidBackground)
         ]
       });
     case 'numbered-conclusion': {
-      const titleText = readableForeground(tokens.body, tokens.surface);
+      const titleText = readableForeground(
+        tokens.body,
+        tokens.surface,
+        includePreview
+      );
       return presentationResult({
         containerStyle: `${common} border: 1px solid ${tokens.line}; background-color: ${tokens.surface}; border-radius: 8px; color: ${bodyOnSurface} !important;`,
-        titleStyle: `display: inline-block; margin: 0 10px 12px 0; padding: 4px 9px; background-color: ${tokens.accent}; color: ${solidText} !important; border-radius: 6px; font-weight: 700; line-height: 1.4;`,
+        titleStyle: `display: inline-block; margin: 0 10px 12px 0 !important; padding: 4px 9px; background-color: ${solidBackground} !important; color: ${solidText} !important; border-radius: 6px; font-weight: 700; line-height: 1.4 !important;`,
         bodyStyle: bodyStyle(bodyOnSurface),
         decoration: 'number',
+        solidBackground,
+        solidText,
         contrastPairs: [
           bodyPair(bodyOnSurface, tokens.surface),
           contrastPair('title', titleText, tokens.surface),
-          contrastPair('number-badge', solidText, tokens.accent)
+          contrastPair('number-badge', solidText, solidBackground)
         ]
       });
     }
@@ -351,7 +477,7 @@ export function renderCardPreviewHtml(styleId, styleConfig) {
     content = `<span data-ogzh-card-decoration="quote" aria-hidden="true" style="${quoteStyle}">“</span><p style="${bodyStyle}">${escapeHtml(card.preview)}</p>`;
   } else if (presentation.decoration === 'number') {
     const titlePair = presentation.contrastPairs.find(({ role }) => role === 'title');
-    const headingStyle = escapeHtml(`display: inline-block; margin: 0 0 12px; color: ${titlePair.foreground} !important; font-size: 16px; line-height: 1.5;`);
+    const headingStyle = escapeHtml(`display: inline-block; margin: 0 0 12px !important; color: ${titlePair.foreground} !important; font-size: 16px; line-height: 1.5 !important;`);
     const title = card.defaultTitle.trim();
     const titleParts = /^(\d{1,2})\s+(.+)$/.exec(title);
     const badge = titleParts?.[1] || '';

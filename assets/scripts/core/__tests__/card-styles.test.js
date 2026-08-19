@@ -917,7 +917,42 @@ describe('theme-aware card tokens', () => {
       styles: { h2: 'border: #abc;' }
     }).accent).toBe('#576b95');
   });
+
+  it('prefers a safe heading background over heading text when no border accent exists', () => {
+    expect(resolveCardTokens(STYLES['latepost-depth']).accent).toBe('#b44d4d');
+  });
 });
+
+function cardPreviewColor(color) {
+  const raw = color.slice(1);
+  const expanded = raw.length === 3
+    ? raw.split('').map((digit) => digit + digit).join('')
+    : raw;
+  const source = [0, 2, 4].map((offset) => Number.parseInt(expanded.slice(offset, offset + 2), 16));
+  const clamp = (value) => Math.min(255, Math.max(0, value));
+  const [r, g, b] = source.map((channel) => 255 - channel);
+  return [
+    clamp(-0.574 * r + 1.43 * g + 0.144 * b),
+    clamp(0.426 * r + 0.43 * g + 0.144 * b),
+    clamp(0.426 * r + 1.43 * g - 0.856 * b)
+  ];
+}
+
+function cardPreviewContrast(colorA, colorB) {
+  const luminance = (color) => {
+    const linear = color.map((channel) => {
+      const normalized = channel / 255;
+      return normalized <= 0.03928
+        ? normalized / 12.92
+        : ((normalized + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+  };
+  const luminanceA = luminance(cardPreviewColor(colorA));
+  const luminanceB = luminance(cardPreviewColor(colorB));
+  return (Math.max(luminanceA, luminanceB) + 0.05) /
+    (Math.min(luminanceA, luminanceB) + 0.05);
+}
 
 describe('card presentation recipes', () => {
   const tokens = {
@@ -993,6 +1028,36 @@ describe('card presentation recipes', () => {
     expect(contrastRatio('#d7d5d3', '#191414')).toBeGreaterThanOrEqual(4.5);
   });
 
+  it('marks only theme-conflicting body and title declarations important', () => {
+    expect(STYLES['latepost-depth'].styles.p).toMatch(/margin:[^;]+!important/);
+    expect(STYLES['latepost-depth'].styles.p).toMatch(/line-height:[^;]+!important/);
+    expect(STYLES['latepost-depth'].styles.h4).toMatch(/background-color:[^;]+!important/);
+
+    const presentations = CARD_STYLES.map(({ id }) =>
+      buildCardPresentation(id, resolveCardTokens(STYLES['latepost-depth']))
+    );
+    for (const presentation of presentations) {
+      expect(presentation.bodyStyle).toMatch(/color:[^;]+!important/);
+      expect(presentation.bodyStyle).toMatch(/margin:\s*0\s*!important/);
+      expect(presentation.bodyStyle).toMatch(/line-height:\s*1\.75\s*!important/);
+      expect(presentation.bodyStyle).not.toMatch(/text-align:[^;]+!important/);
+      expect(presentation.bodyStyle).not.toMatch(/overflow-wrap:[^;]+!important/);
+    }
+
+    for (const styleId of ['capsule-title', 'label-title', 'numbered-conclusion']) {
+      const titleStyle = buildCardPresentation(
+        styleId,
+        resolveCardTokens(STYLES['latepost-depth'])
+      ).titleStyle;
+      expect(titleStyle).toMatch(/color:[^;]+!important/);
+      expect(titleStyle).toMatch(/margin:[^;]+!important/);
+      expect(titleStyle).toMatch(/line-height:[^;]+!important/);
+      expect(titleStyle).toMatch(/background-color:[^;]+!important/);
+      expect(titleStyle).not.toMatch(/padding:[^;]+!important/);
+      expect(titleStyle).not.toMatch(/font-size:[^;]+!important/);
+    }
+  });
+
   it('returns a safe null result for an unknown card id', () => {
     expect(buildCardPresentation('future-card', tokens)).toBeNull();
   });
@@ -1009,6 +1074,32 @@ describe('card presentation recipes', () => {
       presentation.solidBackground
     )).toBeGreaterThanOrEqual(4.5);
     expect(['#000000', '#ffffff']).toContain(presentation.solidText);
+  });
+
+  it('uses one adjusted accent value in every solid style, field, and contrast pair', () => {
+    const tokens = resolveCardTokens(STYLES['wechat-default']);
+    const roles = {
+      'solid-contrast': 'solid-fill',
+      'capsule-title': 'capsule-title',
+      'label-title': 'title-strip',
+      'numbered-conclusion': 'number-badge'
+    };
+
+    for (const [styleId, role] of Object.entries(roles)) {
+      const presentation = buildCardPresentation(styleId, tokens);
+      const pair = presentation.contrastPairs.find((item) => item.role === role);
+      const solidStyle = styleId === 'solid-contrast'
+        ? presentation.containerStyle
+        : presentation.titleStyle;
+
+      expect(presentation.solidBackground, styleId).not.toBe(tokens.accent);
+      expect(pair.background, styleId).toBe(presentation.solidBackground);
+      expect(pair.foreground, styleId).toBe(presentation.solidText);
+      expect(solidStyle, styleId).toContain(
+        `background-color: ${presentation.solidBackground}`
+      );
+      expect(solidStyle, styleId).toContain(`color: ${presentation.solidText}`);
+    }
   });
 
   it('keeps every real theme and card text surface at WCAG AA contrast', () => {
@@ -1029,6 +1120,30 @@ describe('card presentation recipes', () => {
 
     expect(failures, failures.join('\n')).toEqual([]);
     expect(resolveCardTokens(STYLES['gzh-yehang']).surface).toBe('#191414');
+  });
+
+  it('keeps every ordinary theme pair readable after the exact dark preview transform', () => {
+    const failures = [];
+
+    for (const [themeId, theme] of Object.entries(STYLES)) {
+      const resolved = resolveCardTokens(theme);
+      for (const card of CARD_STYLES) {
+        const presentation = buildCardPresentation(card.id, resolved);
+        for (const pair of presentation.contrastPairs) {
+          const lightRatio = contrastRatio(pair.foreground, pair.background);
+          const darkRatio = theme.gzh?.bg
+            ? lightRatio
+            : cardPreviewContrast(pair.foreground, pair.background);
+          if (lightRatio < pair.minimum || darkRatio < pair.minimum) {
+            failures.push(
+              `${themeId}/${card.id}/${pair.role}: light=${lightRatio.toFixed(2)}, dark=${darkRatio.toFixed(2)}`
+            );
+          }
+        }
+      }
+    }
+
+    expect(failures, failures.join('\n')).toEqual([]);
   });
 });
 
@@ -1063,7 +1178,7 @@ describe('card preview HTML', () => {
       resolveCardTokens(theme)
     );
     const titlePair = presentation.contrastPairs.find(({ role }) => role === 'title');
-    const headingStyle = `display: inline-block; margin: 0 0 12px; color: ${titlePair.foreground} !important; font-size: 16px; line-height: 1.5;`;
+    const headingStyle = `display: inline-block; margin: 0 0 12px !important; color: ${titlePair.foreground} !important; font-size: 16px; line-height: 1.5 !important;`;
     const html = renderCardPreviewHtml('numbered-conclusion', theme);
 
     expect(html).toBe(
