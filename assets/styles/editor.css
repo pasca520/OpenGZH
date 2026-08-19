@@ -936,6 +936,17 @@
   .editor-header { padding: var(--space-sm) var(--space-sm) 0; }
   .editor-toolbar { gap: 6px; padding-bottom: var(--space-sm); }
   .editor-tool-btn { font-size: 11px; padding: 5px 8px; }
+  .card-picker {
+    position: fixed;
+    top: calc(var(--header-height) + var(--space-3));
+    right: var(--space-3);
+    bottom: calc(var(--status-bar-height) + var(--space-3));
+    left: var(--space-3);
+    width: auto;
+    max-width: none;
+    max-height: none;
+    overflow-y: auto;
+  }
   .markdown-input-container { padding: var(--space-sm); }
   .markdown-input { font-size: 13px; padding: var(--space-sm); }
   .preview-container { padding: 16px; }
@@ -957,8 +968,6 @@
 
 @media (max-width: 640px) {
   .card-picker {
-    width: 100%;
-    max-width: 100%;
     padding: var(--space-4);
   }
 

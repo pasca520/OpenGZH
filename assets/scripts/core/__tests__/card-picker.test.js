@@ -485,16 +485,21 @@ describe('card picker UI', () => {
 
   it('renders the registry-driven actions and communicates invalid targets', () => {
     const html = read('index.html');
+    const itemButton = html.match(/<button\s+v-for="card in cardStyles"[\s\S]*?>/)?.[0];
+    const removeButton = html.match(/<button\s+type="button"\s+class="card-picker-remove"[\s\S]*?>/)?.[0];
 
     expect(html).toContain('v-if="!cardTargetState.ok" class="card-picker-reason" role="status"');
     expect(html).toContain('{{ cardTargetState.reason }}');
-    expect(html).toContain('v-for="card in cardStyles"');
-    expect(html).toContain(':disabled="!cardTargetState.ok"');
-    expect(html).toContain('@click="applySelectedCard(card.id)"');
+    expect(itemButton).toContain('v-for="card in cardStyles"');
+    expect(itemButton).toContain(':key="card.id"');
+    expect(itemButton).toContain('type="button"');
+    expect(itemButton).toContain(':disabled="!cardTargetState.ok"');
+    expect(itemButton).toContain('@click="applySelectedCard(card.id)"');
     expect(html).toContain('v-html="getCardPreviewHtml(card.id)"');
     expect(html).toContain('{{ card.name }}');
-    expect(html).toContain(':disabled="!cardTargetState.existing"');
-    expect(html).toContain('@click="removeSelectedCard"');
+    expect(removeButton).toContain('type="button"');
+    expect(removeButton).toContain(':disabled="!cardTargetState.existing"');
+    expect(removeButton).toContain('@click="removeSelectedCard"');
   });
 
   it('has two desktop columns, one mobile column, visible focus, and constrained overflow', () => {
@@ -505,6 +510,24 @@ describe('card picker UI', () => {
     expect(css).toMatch(/\.card-picker-item:focus-visible/);
     expect(css).toMatch(/\.card-picker-item:disabled\s*\{[^}]*(?:cursor:\s*not-allowed|opacity:)/s);
     expect(css).toMatch(/@media\s*\(max-width:\s*640px\)[\s\S]*\.card-picker-grid\s*\{[^}]*grid-template-columns:\s*1fr/s);
-    expect(css).toMatch(/@media\s*\(max-width:\s*640px\)[\s\S]*\.card-picker\s*\{[^}]*width:\s*100%[^}]*max-width:\s*100%/s);
+  });
+
+  it('escapes the clipped editor panel as a viewport-bound mobile scroller', () => {
+    const css = read('assets/styles/editor.css');
+    const mobile = sliceBetween(
+      css,
+      '@media (max-width: 768px) {',
+      '@media (max-width: 640px) {'
+    );
+    const mobileCard = mobile.match(/\.card-picker\s*\{([^}]*)\}/s)?.[1];
+
+    expect(mobileCard).toMatch(/position:\s*fixed/);
+    for (const edge of ['top', 'right', 'bottom', 'left']) {
+      expect(mobileCard).toMatch(new RegExp(`(?:^|\\s)${edge}:\\s*[^;]+;`));
+    }
+    expect(mobileCard).toMatch(/(?:^|\s)width:\s*auto/);
+    expect(mobileCard).toMatch(/max-width:\s*none/);
+    expect(mobileCard).toMatch(/max-height:\s*none/);
+    expect(mobileCard).toMatch(/overflow-y:\s*auto/);
   });
 });
