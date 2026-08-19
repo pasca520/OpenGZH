@@ -83,6 +83,60 @@ describe('new card target validation', () => {
     expect(source.slice(target.start, target.end)).toBe('- A\n- B');
   });
 
+  it.each([
+    ['unordered LF', '- A\n\n- B', 'bullet_list_open', '- A'],
+    ['ordered LF', '1. A\n\n2. B', 'ordered_list_open', '1. A'],
+    ['unordered CRLF', '- A\r\n\r\n- B', 'bullet_list_open', '- A'],
+    ['ordered CRLF', '1. A\r\n\r\n2. B', 'ordered_list_open', '1. A']
+  ])('excludes trailing separator lines from a loose %s item map', (_, looseSource, listType, expected) => {
+    const secondItemLine = 2;
+    const looseTokens = [
+      { type: listType, level: 0, map: [0, 3] },
+      { type: 'list_item_open', level: 1, map: [0, 2] },
+      { type: 'paragraph_open', level: 2, map: [0, 1] },
+      { type: 'inline', level: 3, map: [0, 1], children: [{ type: 'text' }] },
+      { type: 'paragraph_close', level: 2 },
+      { type: 'list_item_close', level: 1 },
+      { type: 'list_item_open', level: 1, map: [secondItemLine, 3] },
+      { type: 'list_item_close', level: 1 },
+      { type: listType.replace('_open', '_close'), level: 0 }
+    ];
+    const selectionStart = looseSource.indexOf('A');
+    const target = inspectCardTarget(
+      looseSource,
+      selectionStart,
+      selectionStart + 1,
+      looseTokens
+    );
+
+    expect(target).toMatchObject({ ok: true });
+    expect(looseSource.slice(target.start, target.end)).toBe(expected);
+  });
+
+  it.each([
+    ['LF', '- A\n\n- B'],
+    ['CRLF', '- A\r\n\r\n- B']
+  ])('rejects a selection containing only the %s loose-list separator', (_, looseSource) => {
+    const firstSeparatorStart = looseSource.indexOf('\n') - (looseSource.includes('\r\n') ? 1 : 0);
+    const secondItemStart = looseSource.lastIndexOf('- B');
+    const result = inspectCardTarget(
+      looseSource,
+      firstSeparatorStart,
+      secondItemStart,
+      [
+        { type: 'bullet_list_open', level: 0, map: [0, 3] },
+        { type: 'list_item_open', level: 1, map: [0, 2] },
+        { type: 'list_item_close', level: 1 },
+        { type: 'list_item_open', level: 1, map: [2, 3] },
+        { type: 'list_item_close', level: 1 },
+        { type: 'bullet_list_close', level: 0 }
+      ]
+    );
+
+    expect(result).toMatchObject({ ok: false });
+    expect(result.reason).toContain('段落或列表项');
+  });
+
   it('maps CRLF token lines to exact character offsets without taking separator lines', () => {
     const crlfSource = '前文\r\n\r\n第二段 **重点**\r\n\r\n后文';
     const crlfTokens = [
@@ -264,18 +318,50 @@ describe('unified card edits', () => {
     );
   });
 
-  it('keeps both sides byte-for-byte when inserting in a line and separates all blocks', () => {
+  it('keeps both sides byte-for-byte and adds only required LF boundaries in a line', () => {
     const source = '左侧文字右侧文字';
     const cursor = source.indexOf('右侧');
     const result = applyCardEdit(source, cursor, cursor, 'soft-fill', []);
 
     expect(result.markdown).toBe(
-      '左侧文字\n\n:::ogzh-card soft-fill\n在这里输入卡片内容\n:::\n\n右侧文字'
+      '左侧文字\n:::ogzh-card soft-fill\n在这里输入卡片内容\n:::\n右侧文字'
     );
     expect(result.markdown.startsWith(source.slice(0, cursor))).toBe(true);
     expect(result.markdown.endsWith(source.slice(cursor))).toBe(true);
     expect(result.markdown.slice(result.selectionStart, result.selectionEnd)).toBe(
       '在这里输入卡片内容'
+    );
+  });
+
+  it('adds only required CRLF boundaries and keeps the inserted focus exact', () => {
+    const source = '左侧右侧\r\n后文';
+    const cursor = source.indexOf('右侧');
+    const result = applyCardEdit(source, cursor, cursor, 'accent-bar', []);
+
+    expect(result.markdown).toBe(
+      '左侧\r\n:::ogzh-card accent-bar\r\n在这里输入卡片内容\r\n:::\r\n右侧\r\n后文'
+    );
+    expect(result.markdown.slice(result.selectionStart, result.selectionEnd)).toBe(
+      '在这里输入卡片内容'
+    );
+  });
+
+  it('does not add line endings at document edges that are already line boundaries', () => {
+    const atStart = applyCardEdit('\n后文', 0, 0, 'accent-bar', []);
+    const atEndSource = '前文\n';
+    const atEnd = applyCardEdit(
+      atEndSource,
+      atEndSource.length,
+      atEndSource.length,
+      'accent-bar',
+      []
+    );
+
+    expect(atStart.markdown).toBe(
+      ':::ogzh-card accent-bar\n在这里输入卡片内容\n:::\n后文'
+    );
+    expect(atEnd.markdown).toBe(
+      '前文\n:::ogzh-card accent-bar\n在这里输入卡片内容\n:::'
     );
   });
 

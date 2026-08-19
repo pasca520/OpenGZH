@@ -239,15 +239,27 @@ function sourceLineBounds(source) {
 
   for (let index = 0; index < source.length; index += 1) {
     if (source[index] === '\r' && source[index + 1] === '\n') {
-      lines.push({ start: lineStart, textEnd: index });
+      lines.push({
+        start: lineStart,
+        textEnd: index,
+        isBlank: source.slice(lineStart, index).trim() === ''
+      });
       lineStart = index + 2;
       index += 1;
     } else if (source[index] === '\n') {
-      lines.push({ start: lineStart, textEnd: index });
+      lines.push({
+        start: lineStart,
+        textEnd: index,
+        isBlank: source.slice(lineStart, index).trim() === ''
+      });
       lineStart = index + 1;
     }
   }
-  lines.push({ start: lineStart, textEnd: source.length });
+  lines.push({
+    start: lineStart,
+    textEnd: source.length,
+    isBlank: source.slice(lineStart).trim() === ''
+  });
   return lines;
 }
 
@@ -264,9 +276,15 @@ function tokenSourceRange(token, lines) {
   ) {
     return null;
   }
+  let lastContentLine = endLine - 1;
+  while (lastContentLine >= startLine && lines[lastContentLine].isBlank) {
+    lastContentLine -= 1;
+  }
+  if (lastContentLine < startLine) return null;
+
   return {
     start: lines[startLine].start,
-    end: lines[endLine - 1].textEnd
+    end: lines[lastContentLine].textEnd
   };
 }
 
@@ -312,13 +330,8 @@ function insertCardEdit(source, cursor, card) {
   const leftIsLineBoundary = cursor === 0 || source[cursor - 1] === '\n';
   const rightIsLineBoundary =
     cursor === source.length || source[cursor] === '\r' || source[cursor] === '\n';
-  const isInsideTextLine = !leftIsLineBoundary && !rightIsLineBoundary;
-  const prefix = leftIsLineBoundary
-    ? ''
-    : lineEnding.repeat(isInsideTextLine ? 2 : 1);
-  const suffix = rightIsLineBoundary
-    ? ''
-    : lineEnding.repeat(isInsideTextLine ? 2 : 1);
+  const prefix = leftIsLineBoundary ? '' : lineEnding;
+  const suffix = rightIsLineBoundary ? '' : lineEnding;
   const snippetStart = cursor + prefix.length;
 
   return {
