@@ -46,7 +46,6 @@ export const CARD_STYLES = Object.freeze([
 ].map((item) => Object.freeze(item)));
 
 const CARD_STYLE_BY_ID = new Map(CARD_STYLES.map((item) => [item.id, item]));
-const NATIVE_DARK_CARD_TOKENS = new WeakSet();
 
 const DEFAULT_CARD_TOKENS = Object.freeze({
   accent: '#576b95',
@@ -160,7 +159,7 @@ export function resolveCardTokens(styleConfig) {
     ['container', BACKGROUND_COLOR_PROPERTIES]
   ]);
 
-  const tokens = {
+  return {
     accent: normalizeColor(gzh.accent) || accentFromStyles || DEFAULT_CARD_TOKENS.accent,
     body: normalizeColor(gzh.body) || bodyFromStyles || DEFAULT_CARD_TOKENS.body,
     muted: normalizeColor(gzh.muted) || mutedFromStyles || DEFAULT_CARD_TOKENS.muted,
@@ -168,18 +167,13 @@ export function resolveCardTokens(styleConfig) {
     soft: normalizeColor(gzh.soft) || softFromStyles || DEFAULT_CARD_TOKENS.soft,
     surface: normalizeColor(gzh.bg) || surfaceFromStyles || DEFAULT_CARD_TOKENS.surface
   };
-  if (normalizeColor(gzh.bg)) NATIVE_DARK_CARD_TOKENS.add(tokens);
-  return tokens;
 }
 
 function normalizedTokenSet(tokens) {
-  const nativeDark = Boolean(tokens && NATIVE_DARK_CARD_TOKENS.has(tokens));
-  const normalized = Object.fromEntries(Object.entries(DEFAULT_CARD_TOKENS).map(([role, fallback]) => [
+  return Object.fromEntries(Object.entries(DEFAULT_CARD_TOKENS).map(([role, fallback]) => [
     role,
     normalizeColor(tokens?.[role]) || fallback
   ]));
-  if (nativeDark) NATIVE_DARK_CARD_TOKENS.add(normalized);
-  return normalized;
 }
 
 function relativeLuminance(color) {
@@ -317,6 +311,7 @@ function contrastPair(role, foreground, background) {
 function presentationResult({
   containerStyle,
   titleStyle = '',
+  headingStyle = '',
   bodyStyle,
   decoration = 'none',
   solidBackground = null,
@@ -326,6 +321,7 @@ function presentationResult({
   return {
     containerStyle,
     titleStyle,
+    headingStyle,
     bodyStyle,
     decoration,
     solidBackground,
@@ -334,11 +330,11 @@ function presentationResult({
   };
 }
 
-export function buildCardPresentation(styleId, tokenInput) {
+export function buildCardPresentation(styleId, tokenInput, options = {}) {
   if (!getCardStyle(styleId)) return null;
 
   const tokens = normalizedTokenSet(tokenInput);
-  const includePreview = !NATIVE_DARK_CARD_TOKENS.has(tokens);
+  const includePreview = options?.nativeDark !== true;
   const common = 'margin: 20px 0; padding: 18px 20px; box-sizing: border-box; max-width: 100%; overflow-wrap: break-word;';
   const bodyOnSoft = readableForeground(tokens.body, tokens.soft, includePreview);
   const bodyOnSurface = readableForeground(tokens.body, tokens.surface, includePreview);
@@ -405,10 +401,12 @@ export function buildCardPresentation(styleId, tokenInput) {
         solidText,
         contrastPairs: [contrastPair('solid-fill', solidText, solidBackground)]
       });
-    case 'capsule-title':
+    case 'capsule-title': {
+      const headingStyle = `display: inline-block; margin: 0 auto 12px !important; padding: 5px 14px !important; background: ${solidBackground} !important; background-color: ${solidBackground} !important; color: ${solidText} !important; border: none !important; border-top: none !important; border-right: none !important; border-bottom: none !important; border-left: none !important; border-radius: 999px !important; font-size: 15px; line-height: 1.5 !important;`;
       return presentationResult({
         containerStyle: `${common} border: 1px solid ${tokens.line}; background-color: ${tokens.surface}; border-radius: 12px; color: ${bodyOnSurface} !important; text-align: center;`,
-        titleStyle: `display: inline-block; margin: 0 auto 12px !important; padding: 5px 14px; background-color: ${solidBackground} !important; color: ${solidText} !important; border-radius: 999px; font-size: 15px; line-height: 1.5 !important;`,
+        titleStyle: headingStyle,
+        headingStyle,
         bodyStyle: bodyStyle(bodyOnSurface),
         solidBackground,
         solidText,
@@ -417,10 +415,13 @@ export function buildCardPresentation(styleId, tokenInput) {
           contrastPair('capsule-title', solidText, solidBackground)
         ]
       });
-    case 'label-title':
+    }
+    case 'label-title': {
+      const headingStyle = `display: block; margin: -18px -20px 14px !important; padding: 10px 20px !important; background: ${solidBackground} !important; background-color: ${solidBackground} !important; color: ${solidText} !important; border: none !important; border-top: none !important; border-right: none !important; border-bottom: none !important; border-left: none !important; border-radius: 8px 8px 0 0 !important; font-size: 16px; line-height: 1.5 !important;`;
       return presentationResult({
         containerStyle: `${common} border: none; background-color: ${tokens.soft}; border-radius: 8px; color: ${bodyOnSoft} !important;`,
-        titleStyle: `display: block; margin: -18px -20px 14px !important; padding: 10px 20px; background-color: ${solidBackground} !important; color: ${solidText} !important; border-radius: 8px 8px 0 0; font-size: 16px; line-height: 1.5 !important;`,
+        titleStyle: headingStyle,
+        headingStyle,
         bodyStyle: bodyStyle(bodyOnSoft),
         solidBackground,
         solidText,
@@ -429,15 +430,18 @@ export function buildCardPresentation(styleId, tokenInput) {
           contrastPair('title-strip', solidText, solidBackground)
         ]
       });
+    }
     case 'numbered-conclusion': {
       const titleText = readableForeground(
         tokens.body,
         tokens.surface,
         includePreview
       );
+      const headingStyle = `display: inline-block; margin: 0 0 12px !important; padding: 0 !important; background: transparent !important; background-color: transparent !important; color: ${titleText} !important; border: none !important; border-top: none !important; border-right: none !important; border-bottom: none !important; border-left: none !important; border-radius: 0 !important; font-size: 16px; line-height: 1.5 !important;`;
       return presentationResult({
         containerStyle: `${common} border: 1px solid ${tokens.line}; background-color: ${tokens.surface}; border-radius: 8px; color: ${bodyOnSurface} !important;`,
         titleStyle: `display: inline-block; margin: 0 10px 12px 0 !important; padding: 4px 9px; background-color: ${solidBackground} !important; color: ${solidText} !important; border-radius: 6px; font-weight: 700; line-height: 1.4 !important;`,
+        headingStyle,
         bodyStyle: bodyStyle(bodyOnSurface),
         decoration: 'number',
         solidBackground,
@@ -466,9 +470,14 @@ function escapeHtml(value) {
 export function renderCardPreviewHtml(styleId, styleConfig) {
   const card = getCardStyle(styleId);
   if (!card) return '';
-  const presentation = buildCardPresentation(styleId, resolveCardTokens(styleConfig));
+  const presentation = buildCardPresentation(
+    styleId,
+    resolveCardTokens(styleConfig),
+    { nativeDark: Boolean(normalizeColor(styleConfig?.gzh?.bg)) }
+  );
   const containerStyle = escapeHtml(presentation.containerStyle);
   const bodyStyle = escapeHtml(presentation.bodyStyle);
+  const headingStyle = escapeHtml(presentation.headingStyle);
   let content;
 
   if (presentation.decoration === 'quote') {
@@ -476,8 +485,6 @@ export function renderCardPreviewHtml(styleId, styleConfig) {
     const quoteStyle = escapeHtml(`display: inline-block; margin: 0 8px 4px 0; color: ${quotePair.foreground} !important; font-size: 30px; line-height: 1;`);
     content = `<span data-ogzh-card-decoration="quote" aria-hidden="true" style="${quoteStyle}">“</span><p style="${bodyStyle}">${escapeHtml(card.preview)}</p>`;
   } else if (presentation.decoration === 'number') {
-    const titlePair = presentation.contrastPairs.find(({ role }) => role === 'title');
-    const headingStyle = escapeHtml(`display: inline-block; margin: 0 0 12px !important; color: ${titlePair.foreground} !important; font-size: 16px; line-height: 1.5 !important;`);
     const title = card.defaultTitle.trim();
     const titleParts = /^(\d{1,2})\s+(.+)$/.exec(title);
     const badge = titleParts?.[1] || '';
@@ -485,7 +492,7 @@ export function renderCardPreviewHtml(styleId, styleConfig) {
     const preview = card.preview === card.defaultTitle ? BODY_PLACEHOLDER : card.preview;
     content = `<span data-ogzh-card-decoration="number" aria-hidden="true" style="${escapeHtml(presentation.titleStyle)}">${escapeHtml(badge)}</span><h4 aria-label="${escapeHtml(title)}" style="${headingStyle}">${escapeHtml(visibleTitle)}</h4><p style="${bodyStyle}">${escapeHtml(preview)}</p>`;
   } else if (card.slots === 'title-body') {
-    content = `<h4 style="${escapeHtml(presentation.titleStyle)}">${escapeHtml(card.defaultTitle)}</h4><p style="${bodyStyle}">${escapeHtml(card.preview)}</p>`;
+    content = `<h4 style="${headingStyle}">${escapeHtml(card.defaultTitle)}</h4><p style="${bodyStyle}">${escapeHtml(card.preview)}</p>`;
   } else {
     content = `<p style="${bodyStyle}">${escapeHtml(card.preview)}</p>`;
   }

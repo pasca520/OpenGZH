@@ -954,6 +954,50 @@ function cardPreviewContrast(colorA, colorB) {
     (Math.min(luminanceA, luminanceB) + 0.05);
 }
 
+function mergeHeadingStyles(...styleTexts) {
+  const properties = new Map();
+  const apply = (property, value, important) => {
+    const current = properties.get(property);
+    if (current?.important && !important) return;
+    properties.set(property, { value, important });
+  };
+  const expandPadding = (value) => {
+    const parts = value.trim().split(/\s+/);
+    const [top, right = top, bottom = top, left = right] = parts.length === 3
+      ? [parts[0], parts[1], parts[2], parts[1]]
+      : parts;
+    return { top, right, bottom, left };
+  };
+
+  for (const styleText of styleTexts) {
+    for (const rawDeclaration of styleText.split(';')) {
+      const colon = rawDeclaration.indexOf(':');
+      if (colon < 1) continue;
+      const property = rawDeclaration.slice(0, colon).trim().toLowerCase();
+      const rawValue = rawDeclaration.slice(colon + 1).trim();
+      const important = /\s*!important\s*$/i.test(rawValue);
+      const value = rawValue.replace(/\s*!important\s*$/i, '').trim();
+
+      apply(property, value, important);
+      if (property === 'border') {
+        for (const side of ['top', 'right', 'bottom', 'left']) {
+          apply(`border-${side}`, value, important);
+        }
+      } else if (property === 'padding') {
+        for (const [side, sideValue] of Object.entries(expandPadding(value))) {
+          apply(`padding-${side}`, sideValue, important);
+        }
+      } else if (property === 'background' && /^#[0-9a-f]{3,6}$|^transparent$/i.test(value)) {
+        apply('background-color', value, important);
+      }
+    }
+  }
+  return Object.fromEntries(Array.from(properties, ([property, entry]) => [
+    property,
+    entry.value
+  ]));
+}
+
 describe('card presentation recipes', () => {
   const tokens = {
     accent: '#1a73e8',
@@ -982,6 +1026,7 @@ describe('card presentation recipes', () => {
     expect(presentations.every((item) => (
       typeof item.containerStyle === 'string' &&
       typeof item.titleStyle === 'string' &&
+      typeof item.headingStyle === 'string' &&
       typeof item.bodyStyle === 'string' &&
       Array.isArray(item.contrastPairs)
     ))).toBe(true);
@@ -1014,7 +1059,11 @@ describe('card presentation recipes', () => {
 
   it('keeps transparent minimal-outline text contrasted against the parent surface', () => {
     const tokens = resolveCardTokens(STYLES['gzh-yehang']);
-    const presentation = buildCardPresentation('minimal-outline', tokens);
+    const presentation = buildCardPresentation(
+      'minimal-outline',
+      tokens,
+      { nativeDark: true }
+    );
 
     expect(presentation.containerStyle).toContain('background-color: transparent;');
     expect(presentation.contrastPairs).toEqual([
@@ -1053,9 +1102,108 @@ describe('card presentation recipes', () => {
       expect(titleStyle).toMatch(/margin:[^;]+!important/);
       expect(titleStyle).toMatch(/line-height:[^;]+!important/);
       expect(titleStyle).toMatch(/background-color:[^;]+!important/);
-      expect(titleStyle).not.toMatch(/padding:[^;]+!important/);
+      if (styleId !== 'numbered-conclusion') {
+        expect(titleStyle).toMatch(/padding:[^;]+!important/);
+      }
       expect(titleStyle).not.toMatch(/font-size:[^;]+!important/);
     }
+  });
+
+  it('exposes heading styles that clear inherited h4 box styles after cascade', () => {
+    const tokens = resolveCardTokens(STYLES['latepost-depth']);
+    const presentations = Object.fromEntries(CARD_STYLES.map(({ id }) => [
+      id,
+      buildCardPresentation(id, tokens)
+    ]));
+
+    expect(Object.values(presentations).every((item) =>
+      typeof item.headingStyle === 'string'
+    )).toBe(true);
+    expect(presentations['capsule-title'].headingStyle).toBe(
+      presentations['capsule-title'].titleStyle
+    );
+    expect(presentations['label-title'].headingStyle).toBe(
+      presentations['label-title'].titleStyle
+    );
+    expect(presentations['numbered-conclusion'].headingStyle).not.toBe(
+      presentations['numbered-conclusion'].titleStyle
+    );
+
+    const expected = {
+      'capsule-title': {
+        background: 'solid',
+        padding: { top: '5px', right: '14px', bottom: '5px', left: '14px' }
+      },
+      'label-title': {
+        background: 'solid',
+        padding: { top: '10px', right: '20px', bottom: '10px', left: '20px' }
+      },
+      'numbered-conclusion': {
+        background: 'transparent',
+        padding: { top: '0', right: '0', bottom: '0', left: '0' }
+      }
+    };
+
+    for (const themeId of ['latepost-depth', 'guardian']) {
+      for (const [styleId, contract] of Object.entries(expected)) {
+        const presentation = buildCardPresentation(
+          styleId,
+          resolveCardTokens(STYLES[themeId])
+        );
+        const merged = mergeHeadingStyles(
+          STYLES[themeId].styles.h4,
+          presentation.headingStyle
+        );
+        const expectedBackground = contract.background === 'solid'
+          ? presentation.solidBackground
+          : contract.background;
+
+        expect(merged.background, `${themeId}/${styleId}/background`).toBe(
+          expectedBackground
+        );
+        expect(merged['background-color'], `${themeId}/${styleId}/background-color`).toBe(
+          expectedBackground
+        );
+        for (const side of ['top', 'right', 'bottom', 'left']) {
+          expect(merged[`border-${side}`], `${themeId}/${styleId}/border-${side}`).toBe('none');
+          expect(merged[`padding-${side}`], `${themeId}/${styleId}/padding-${side}`).toBe(
+            contract.padding[side]
+          );
+        }
+      }
+    }
+
+    expect(presentations['numbered-conclusion'].headingStyle).toMatch(/display:\s*inline-block/);
+    expect(presentations['numbered-conclusion'].headingStyle).not.toMatch(/font-size:[^;]+!important/);
+  });
+
+  it('uses explicit nativeDark options without token identity semantics', () => {
+    const nativeTokens = resolveCardTokens(STYLES['gzh-yehang']);
+    const clonedNativeTokens = { ...nativeTokens };
+    const ordinaryTokens = resolveCardTokens(STYLES['wechat-default']);
+
+    expect(Object.keys(nativeTokens)).toEqual([
+      'accent', 'body', 'muted', 'line', 'soft', 'surface'
+    ]);
+    expect(buildCardPresentation('solid-contrast', ordinaryTokens)).toEqual(
+      buildCardPresentation('solid-contrast', { ...ordinaryTokens }, { nativeDark: false })
+    );
+    expect(buildCardPresentation('solid-contrast', nativeTokens, { nativeDark: true })).toEqual(
+      buildCardPresentation('solid-contrast', clonedNativeTokens, { nativeDark: true })
+    );
+
+    const nativePresentation = buildCardPresentation(
+      'solid-contrast',
+      clonedNativeTokens,
+      { nativeDark: true }
+    );
+    expect(nativePresentation.solidBackground).toBe(nativeTokens.accent);
+    expect(nativePresentation.contrastPairs).toContainEqual({
+      role: 'solid-fill',
+      foreground: nativeTokens.surface,
+      background: nativeTokens.accent,
+      minimum: 4.5
+    });
   });
 
   it('returns a safe null result for an unknown card id', () => {
@@ -1108,7 +1256,9 @@ describe('card presentation recipes', () => {
     for (const [themeId, theme] of Object.entries(STYLES)) {
       const resolved = resolveCardTokens(theme);
       for (const card of CARD_STYLES) {
-        const presentation = buildCardPresentation(card.id, resolved);
+        const presentation = buildCardPresentation(card.id, resolved, {
+          nativeDark: Boolean(theme.gzh?.bg)
+        });
         for (const pair of presentation.contrastPairs) {
           const ratio = contrastRatio(pair.foreground, pair.background);
           if (ratio < pair.minimum) {
@@ -1128,7 +1278,9 @@ describe('card presentation recipes', () => {
     for (const [themeId, theme] of Object.entries(STYLES)) {
       const resolved = resolveCardTokens(theme);
       for (const card of CARD_STYLES) {
-        const presentation = buildCardPresentation(card.id, resolved);
+        const presentation = buildCardPresentation(card.id, resolved, {
+          nativeDark: Boolean(theme.gzh?.bg)
+        });
         for (const pair of presentation.contrastPairs) {
           const lightRatio = contrastRatio(pair.foreground, pair.background);
           const darkRatio = theme.gzh?.bg
@@ -1175,16 +1327,15 @@ describe('card preview HTML', () => {
   it('renders the numbered preview with one badge, a de-numbered title, and placeholder body', () => {
     const presentation = buildCardPresentation(
       'numbered-conclusion',
-      resolveCardTokens(theme)
+      resolveCardTokens(theme),
+      { nativeDark: true }
     );
-    const titlePair = presentation.contrastPairs.find(({ role }) => role === 'title');
-    const headingStyle = `display: inline-block; margin: 0 0 12px !important; color: ${titlePair.foreground} !important; font-size: 16px; line-height: 1.5 !important;`;
     const html = renderCardPreviewHtml('numbered-conclusion', theme);
 
     expect(html).toBe(
       `<section data-ogzh-card-preview="numbered-conclusion" style="${presentation.containerStyle}">` +
       `<span data-ogzh-card-decoration="number" aria-hidden="true" style="${presentation.titleStyle}">01</span>` +
-      `<h4 aria-label="01 阶段结论" style="${headingStyle}">阶段结论</h4>` +
+      `<h4 aria-label="01 阶段结论" style="${presentation.headingStyle}">阶段结论</h4>` +
       `<p style="${presentation.bodyStyle}">在这里输入卡片内容</p></section>`
     );
     expect(html.match(/01 阶段结论/g)).toHaveLength(1);
