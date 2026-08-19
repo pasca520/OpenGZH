@@ -46,12 +46,26 @@ describe('card directive parsing', () => {
   it('refuses non-openers, unclosed directives, and nested directives', () => {
     expect(parseCardFence('前文\n:::ogzh-card accent-bar\n正文\n:::', 0)).toBeNull();
     expect(parseCardFence(':::ogzh-card accent-bar\n正文', 0)).toBeNull();
-    expect(
-      parseCardFence(
-        ':::ogzh-card accent-bar\n:::ogzh-card soft-fill\n正文\n:::\n:::',
-        0
-      )
-    ).toBeNull();
+    const nested =
+      ':::ogzh-card accent-bar\n:::ogzh-card soft-fill\n正文\n:::\n:::';
+    expect(parseCardFence(nested, 0)).toBeNull();
+    expect(parseCardFence(nested, 1)).toBeNull();
+  });
+
+  it('keeps adjacent non-nested directives valid', () => {
+    const adjacent =
+      ':::ogzh-card accent-bar\n卡片一\n:::\n:::ogzh-card soft-fill\n卡片二\n:::';
+
+    expect(parseCardFence(adjacent, 0)).toMatchObject({
+      styleId: 'accent-bar',
+      content: '卡片一',
+      closingLine: 2
+    });
+    expect(parseCardFence(adjacent, 3)).toMatchObject({
+      styleId: 'soft-fill',
+      content: '卡片二',
+      closingLine: 5
+    });
   });
 });
 

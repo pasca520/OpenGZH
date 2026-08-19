@@ -51,9 +51,7 @@ export function getCardStyle(styleId) {
   return CARD_STYLE_BY_ID.get(styleId) || null;
 }
 
-export function parseCardFence(source, startLine) {
-  if (!Number.isInteger(startLine) || startLine < 0) return null;
-
+function buildCardDirectiveIndex(source) {
   const lines = [];
   const linePattern = /([^\r\n]*)(\r\n|\n|$)/g;
   while (linePattern.lastIndex <= source.length) {
@@ -62,38 +60,103 @@ export function parseCardFence(source, startLine) {
     lines.push({
       text: match[1],
       start: match.index,
+      textEnd: match.index + match[1].length,
       end: match.index + match[0].length
     });
   }
 
-  const opener = lines[startLine];
-  const openerMatch = opener && CARD_OPENER_PATTERN.exec(opener.text);
-  if (!openerMatch) return null;
-
-  for (let line = startLine + 1; line < lines.length; line += 1) {
-    if (CARD_OPENER_PATTERN.test(lines[line].text)) return null;
-    if (!CARD_CLOSER_PATTERN.test(lines[line].text)) continue;
-
-    let contentEnd = lines[line].start;
-    if (contentEnd > opener.end) {
-      contentEnd -= source.slice(contentEnd - 2, contentEnd) === '\r\n' ? 2 : 1;
+  const records = [];
+  const stack = [];
+  for (let line = 0; line < lines.length; line += 1) {
+    const openerMatch = CARD_OPENER_PATTERN.exec(lines[line].text);
+    if (openerMatch) {
+      const cluster = stack.length > 0 ? stack[0].cluster : { invalid: false };
+      if (stack.length > 0) cluster.invalid = true;
+      const record = {
+        styleId: openerMatch[1],
+        startLine: line,
+        opener: lines[line],
+        closingLine: null,
+        closer: null,
+        cluster
+      };
+      records.push(record);
+      stack.push(record);
+      continue;
     }
-    const styleId = openerMatch[1];
-    return {
-      styleId,
-      known: Boolean(getCardStyle(styleId)),
-      content: source.slice(opener.end, contentEnd),
-      startLine,
-      closingLine: line
-    };
+
+    if (!CARD_CLOSER_PATTERN.test(lines[line].text) || stack.length === 0) continue;
+    const record = stack.pop();
+    record.closingLine = line;
+    record.closer = lines[line];
   }
 
-  return null;
+  for (const record of stack) record.cluster.invalid = true;
+
+  const index = new Map();
+  for (const record of records) {
+    if (record.cluster.invalid || !record.closer) continue;
+    let contentEnd = record.closer.start;
+    if (contentEnd > record.opener.end) {
+      contentEnd -= source.slice(contentEnd - 2, contentEnd) === '\r\n' ? 2 : 1;
+    }
+    index.set(record.startLine, {
+      styleId: record.styleId,
+      known: Boolean(getCardStyle(record.styleId)),
+      content: source.slice(record.opener.end, contentEnd),
+      startLine: record.startLine,
+      closingLine: record.closingLine,
+      start: record.opener.start,
+      end: record.closer.textEnd,
+      openerStart: record.opener.start,
+      openerEnd: record.opener.textEnd,
+      contentStart: record.opener.end,
+      contentEnd,
+      closerStart: record.closer.start,
+      closerEnd: record.closer.textEnd
+    });
+  }
+  return index;
+}
+
+export function parseCardFence(source, startLine) {
+  if (!Number.isInteger(startLine) || startLine < 0) return null;
+  const card = buildCardDirectiveIndex(source).get(startLine);
+  if (!card) return null;
+  return {
+    styleId: card.styleId,
+    known: card.known,
+    content: card.content,
+    startLine: card.startLine,
+    closingLine: card.closingLine
+  };
 }
 
 export function registerCardDirective(md) {
+  const directiveIndexes = new WeakMap();
+
   function cardDirectiveRule(state, startLine, endLine, silent) {
-    const card = parseCardFence(state.src, startLine);
+    const lineStart = state.bMarks?.[startLine];
+    const lineEnd = state.eMarks?.[startLine];
+    const shift = state.tShift?.[startLine];
+    if (
+      !Number.isInteger(lineStart) ||
+      !Number.isInteger(lineEnd) ||
+      shift !== 0
+    ) {
+      return false;
+    }
+    const line = state.src.slice(lineStart, lineEnd);
+    if (!line.startsWith(':::ogzh-card') || !CARD_OPENER_PATTERN.test(line)) {
+      return false;
+    }
+
+    let index = directiveIndexes.get(state);
+    if (!index) {
+      index = buildCardDirectiveIndex(state.src);
+      directiveIndexes.set(state, index);
+    }
+    const card = index.get(startLine);
     if (!card || card.closingLine >= endLine) return false;
     if (silent) return true;
 
@@ -149,62 +212,17 @@ export function buildCardSnippet(styleId, selectedBody = '') {
 }
 
 export function scanCardRanges(source) {
-  const ranges = [];
-  const linePattern = /([^\r\n]*)(\r\n|\n|$)/g;
-  let activeCard = null;
-
-  while (linePattern.lastIndex <= source.length) {
-    const match = linePattern.exec(source);
-    if (!match || match[0] === '') break;
-
-    const line = {
-      start: match.index,
-      textEnd: match.index + match[1].length,
-      end: match.index + match[0].length
-    };
-    const openerMatch = CARD_OPENER_PATTERN.exec(match[1]);
-
-    if (openerMatch) {
-      if (activeCard) {
-        activeCard.depth += 1;
-        activeCard.invalid = true;
-      } else {
-        activeCard = {
-          styleId: openerMatch[1],
-          opener: line,
-          depth: 1,
-          invalid: false
-        };
-      }
-      continue;
-    }
-
-    if (!CARD_CLOSER_PATTERN.test(match[1]) || !activeCard) continue;
-
-    activeCard.depth -= 1;
-    if (activeCard.depth > 0) continue;
-
-    if (!activeCard.invalid) {
-      let contentEnd = line.start;
-      if (contentEnd > activeCard.opener.end) {
-        contentEnd -= source.slice(contentEnd - 2, contentEnd) === '\r\n' ? 2 : 1;
-      }
-      ranges.push({
-        styleId: activeCard.styleId,
-        start: activeCard.opener.start,
-        end: line.textEnd,
-        openerStart: activeCard.opener.start,
-        openerEnd: activeCard.opener.textEnd,
-        contentStart: activeCard.opener.end,
-        contentEnd,
-        closerStart: line.start,
-        closerEnd: line.textEnd
-      });
-    }
-    activeCard = null;
-  }
-
-  return ranges;
+  return Array.from(buildCardDirectiveIndex(source).values(), (card) => ({
+    styleId: card.styleId,
+    start: card.start,
+    end: card.end,
+    openerStart: card.openerStart,
+    openerEnd: card.openerEnd,
+    contentStart: card.contentStart,
+    contentEnd: card.contentEnd,
+    closerStart: card.closerStart,
+    closerEnd: card.closerEnd
+  }));
 }
 
 export function findCardAtSelection(source, selectionStart, selectionEnd) {

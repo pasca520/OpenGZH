@@ -27,11 +27,26 @@ function registeredRule(tokenize = vi.fn()) {
 }
 
 function createState(src, tokenize) {
+  const bMarks = [];
+  const eMarks = [];
+  let lineStart = 0;
+  for (let index = 0; index < src.length; index += 1) {
+    if (src[index] !== '\n') continue;
+    bMarks.push(lineStart);
+    eMarks.push(index > lineStart && src[index - 1] === '\r' ? index - 1 : index);
+    lineStart = index + 1;
+  }
+  bMarks.push(lineStart);
+  eMarks.push(src.length);
+
   const state = {
     src,
+    bMarks,
+    eMarks,
+    tShift: bMarks.map(() => 0),
     md: { block: { tokenize } },
     parentType: 'root',
-    lineMax: src.split(/\r?\n/).length,
+    lineMax: bMarks.length,
     line: 0,
     tokens: [],
     push(type, tag, nesting) {
@@ -50,6 +65,25 @@ function createState(src, tokenize) {
     }
   };
   return state;
+}
+
+function countWholeDocumentLineScans(source, run, shortCircuit = false) {
+  const originalExec = RegExp.prototype.exec;
+  let count = 0;
+  const spy = vi.spyOn(RegExp.prototype, 'exec').mockImplementation(function exec(input) {
+    if (this.source === '([^\\r\\n]*)(\\r\\n|\\n|$)' && input === source) {
+      count += 1;
+      if (shortCircuit) return null;
+    }
+    return originalExec.call(this, input);
+  });
+
+  try {
+    run();
+  } finally {
+    spy.mockRestore();
+  }
+  return count;
 }
 
 describe('card directive block rule', () => {
@@ -140,6 +174,61 @@ describe('card directive block rule', () => {
     expect(tokenize).not.toHaveBeenCalled();
     expect(state.parentType).toBe('root');
     expect(state.line).toBe(0);
+  });
+
+  it('rejects every opener in one nested cluster on the same state', () => {
+    const source =
+      ':::ogzh-card accent-bar\n:::ogzh-card soft-fill\n正文\n:::\n:::';
+    const tokenize = vi.fn();
+    const { rule } = registeredRule(tokenize);
+    const state = createState(source, tokenize);
+
+    expect(rule(state, 0, state.lineMax, false)).toBe(false);
+    expect(rule(state, 1, state.lineMax, false)).toBe(false);
+    expect(state.tokens).toEqual([]);
+    expect(tokenize).not.toHaveBeenCalled();
+  });
+
+  it('fast-rejects 4000 ordinary lines without scanning the whole document', () => {
+    const source = Array.from({ length: 4000 }, (_, index) => `普通行 ${index}`).join('\n');
+    const tokenize = vi.fn();
+    const { rule } = registeredRule(tokenize);
+    const state = createState(source, tokenize);
+    const startedAt = performance.now();
+
+    const wholeDocumentScans = countWholeDocumentLineScans(
+      source,
+      () => {
+        for (let line = 0; line < state.lineMax; line += 1) {
+          expect(rule(state, line, state.lineMax, false)).toBe(false);
+        }
+      },
+      true
+    );
+
+    expect(wholeDocumentScans).toBe(0);
+    expect(performance.now() - startedAt).toBeLessThan(1000);
+    expect(state.tokens).toEqual([]);
+    expect(tokenize).not.toHaveBeenCalled();
+  }, 15000);
+
+  it('builds one document index for multiple adjacent openers on the same state', () => {
+    const source =
+      ':::ogzh-card accent-bar\n卡片一\n:::\n:::ogzh-card soft-fill\n卡片二\n:::';
+    const tokenize = vi.fn();
+    const { rule } = registeredRule(tokenize);
+    const state = createState(source, tokenize);
+
+    const wholeDocumentScans = countWholeDocumentLineScans(source, () => {
+      expect(rule(state, 0, state.lineMax, false)).toBe(true);
+      expect(rule(state, 3, state.lineMax, false)).toBe(true);
+    });
+
+    expect(wholeDocumentScans).toBeLessThanOrEqual(state.lineMax + 1);
+    expect(tokenize).toHaveBeenNthCalledWith(1, state, 1, 2);
+    expect(tokenize).toHaveBeenNthCalledWith(2, state, 4, 5);
+    expect(state.tokens.filter((token) => token.type === 'ogzh_card_open')).toHaveLength(2);
+    expect(state.line).toBe(6);
   });
 });
 
