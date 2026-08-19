@@ -292,6 +292,25 @@ function rangesOverlap(start, end, range) {
   return start < range.end && end > range.start;
 }
 
+function selectionValidationReason(source, selectionStart, selectionEnd) {
+  if (
+    !Number.isInteger(selectionStart) ||
+    !Number.isInteger(selectionEnd) ||
+    selectionStart < 0 ||
+    selectionStart > selectionEnd ||
+    selectionEnd > source.length
+  ) {
+    return '选区偏移无效：起止位置必须是文档范围内的整数，且起点不能晚于终点。';
+  }
+
+  const splitsCrlf = (offset) =>
+    offset > 0 && source[offset - 1] === '\r' && source[offset] === '\n';
+  if (splitsCrlf(selectionStart) || splitsCrlf(selectionEnd)) {
+    return '选区端点不能位于 CRLF 换行符中间。';
+  }
+  return null;
+}
+
 function forbiddenReasonInRange(tokens, lines, start, end) {
   for (const token of tokens) {
     const range = tokenSourceRange(token, lines);
@@ -363,11 +382,15 @@ function wrapCardEdit(source, targetStart, targetEnd, card) {
 }
 
 export function inspectCardTarget(source, selectionStart, selectionEnd, tokens) {
-  if (
-    selectionStart < 0 ||
-    selectionEnd > source.length ||
-    selectionStart >= selectionEnd
-  ) {
+  const invalidSelectionReason = selectionValidationReason(
+    source,
+    selectionStart,
+    selectionEnd
+  );
+  if (invalidSelectionReason) {
+    return { ok: false, reason: invalidSelectionReason };
+  }
+  if (selectionStart === selectionEnd) {
     return { ok: false, reason: '请选择普通段落或列表项。' };
   }
 
@@ -423,6 +446,15 @@ export function inspectCardTarget(source, selectionStart, selectionEnd, tokens) 
 }
 
 export function applyCardEdit(source, selectionStart, selectionEnd, styleId, tokens) {
+  const invalidSelectionReason = selectionValidationReason(
+    source,
+    selectionStart,
+    selectionEnd
+  );
+  if (invalidSelectionReason) {
+    return unchangedEdit(source, selectionStart, selectionEnd, invalidSelectionReason);
+  }
+
   const card = getCardStyle(styleId);
   if (!card) {
     return unchangedEdit(source, selectionStart, selectionEnd, 'unknown-style');

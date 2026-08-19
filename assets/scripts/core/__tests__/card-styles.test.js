@@ -260,6 +260,46 @@ describe('unified card edits', () => {
     ];
   }
 
+  it.each([
+    ['negative start', 'abc', -1, -1, '选区偏移无效'],
+    ['negative end', 'abc', 0, -1, '选区偏移无效'],
+    ['start beyond source', 'abc', 4, 4, '选区偏移无效'],
+    ['end beyond source', 'abc', 0, 4, '选区偏移无效'],
+    ['non-integer start', 'abc', 1.5, 2, '选区偏移无效'],
+    ['non-integer end', 'abc', 0, 1.5, '选区偏移无效'],
+    ['reversed range', 'abc', 2, 1, '选区偏移无效'],
+    ['CRLF midpoint', 'a\r\nb', 2, 2, 'CRLF']
+  ])('rejects %s selection offsets without editing', (_, source, selectionStart, selectionEnd, reasonPart) => {
+    const result = applyCardEdit(
+      source,
+      selectionStart,
+      selectionEnd,
+      'accent-bar',
+      []
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      markdown: source,
+      selectionStart,
+      selectionEnd,
+      kind: 'unchanged',
+      reason: expect.stringContaining(reasonPart)
+    });
+  });
+
+  it.each([
+    ['out-of-range offsets', 'abc', -1, 2, '选区偏移无效'],
+    ['a CRLF midpoint endpoint', 'a\r\nb', 0, 2, 'CRLF']
+  ])('keeps inspectCardTarget consistent for %s', (_, source, selectionStart, selectionEnd, reasonPart) => {
+    const result = inspectCardTarget(source, selectionStart, selectionEnd, []);
+
+    expect(result).toMatchObject({
+      ok: false,
+      reason: expect.stringContaining(reasonPart)
+    });
+  });
+
   it('validates the style whitelist before inspecting or editing any target', () => {
     const source = ':::ogzh-card accent-bar\n#### 卡内标题\n\n正文\n:::';
     const cursor = source.indexOf('正文');
