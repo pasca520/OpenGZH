@@ -505,8 +505,9 @@ export function getCardStyle(styleId) {
   return CARD_STYLE_BY_ID.get(styleId) || null;
 }
 
-const BODY_HEADING_RESET_STYLE = 'display: block !important; background: transparent !important; background-color: transparent !important; padding: 0 !important; border: none !important; border-top: none !important; border-right: none !important; border-bottom: none !important; border-left: none !important; border-radius: 0 !important; font-size: inherit !important; font-weight: inherit !important; font-style: normal !important; font-family: inherit !important; font-variant: inherit !important; letter-spacing: inherit !important; text-transform: none !important; text-align: left !important; text-decoration: none !important; text-indent: 0 !important;';
-const OWNED_DECORATIONS = new Set(['quote-open', 'quote-close', 'number']);
+const BODY_HEADING_RESET_STYLE = 'display: block !important; background: transparent !important; background-color: transparent !important; padding: 0 !important; border: none !important; border-top: none !important; border-right: none !important; border-bottom: none !important; border-left: none !important; border-radius: 0 !important; font-size: inherit !important; font-weight: inherit !important; font-style: normal !important; font-family: inherit !important; font-variant: inherit !important; letter-spacing: inherit !important; text-transform: none !important; text-align: left !important; text-decoration: none !important; text-indent: 0 !important; word-break: normal !important;';
+const OWNED_DECORATIONS = new WeakSet();
+const NUMBERED_HEADING_STATES = new WeakMap();
 
 function applyTrustedStyle(element, styleText) {
   String(styleText || '').split(';').forEach((declaration) => {
@@ -532,11 +533,7 @@ function directHeading(section) {
 
 function removeCardDecorations(section) {
   Array.from(section.children)
-    .filter((child) => (
-      child.tagName === 'SPAN' &&
-      child.getAttribute('aria-hidden') === 'true' &&
-      OWNED_DECORATIONS.has(child.getAttribute('data-ogzh-card-decoration'))
-    ))
+    .filter((child) => OWNED_DECORATIONS.has(child))
     .forEach((child) => child.remove());
 }
 
@@ -546,6 +543,7 @@ function createCardDecoration(doc, kind, text, styleText) {
   decoration.setAttribute('aria-hidden', 'true');
   decoration.textContent = text;
   applyTrustedStyle(decoration, styleText);
+  OWNED_DECORATIONS.add(decoration);
   return decoration;
 }
 
@@ -561,7 +559,9 @@ function applyBodyStyles(section, bodyStyle) {
 function applyListItemStyles(element, bodyStyle) {
   Array.from(element.children).forEach((child) => {
     if (child.tagName === 'SECTION' && child.hasAttribute('data-ogzh-card')) return;
-    if (child.tagName === 'LI') applyTrustedStyle(child, bodyStyle);
+    if (child.tagName === 'LI' || child.tagName === 'P') {
+      applyTrustedStyle(child, bodyStyle);
+    }
     applyListItemStyles(child, bodyStyle);
   });
 }
@@ -591,27 +591,33 @@ function applyQuoteDecoration(doc, section, presentation) {
 function applyNumberDecoration(doc, section, heading, presentation) {
   if (!heading) return;
 
-  const labelledTitle = heading.getAttribute('aria-label');
-  const fullTitle = String(labelledTitle !== null ? labelledTitle : heading.textContent).trim();
+  const fullTitle = String(heading.textContent || '').trim();
   const titleParts = /^(\d{1,2})\s+(.+)$/.exec(fullTitle);
   if (!titleParts) return;
 
+  const state = {
+    hadAriaLabel: heading.hasAttribute('aria-label'),
+    ariaLabel: heading.getAttribute('aria-label'),
+    textNodes: removeVisibleNumberPrefix(heading, titleParts[1])
+  };
+  NUMBERED_HEADING_STATES.set(heading, state);
   const badge = createCardDecoration(doc, 'number', titleParts[1], presentation.titleStyle);
   heading.setAttribute('aria-label', fullTitle);
-  removeVisibleNumberPrefix(heading, titleParts[1]);
   section.insertBefore(badge, heading);
 }
 
 function removeVisibleNumberPrefix(heading, badge) {
   const visiblePrefix = /^(\d{1,2}\s+)/.exec(String(heading.textContent || ''));
-  if (!visiblePrefix || visiblePrefix[1].trim() !== badge) return;
+  if (!visiblePrefix || visiblePrefix[1].trim() !== badge) return [];
 
   let remaining = visiblePrefix[1].length;
+  const textNodes = [];
   const visit = (node) => {
     for (const child of Array.from(node.childNodes || [])) {
       if (remaining === 0) return;
       if (child.nodeType === 3) {
         const removed = Math.min(remaining, child.nodeValue.length);
+        if (removed > 0) textNodes.push({ node: child, value: child.nodeValue });
         child.nodeValue = child.nodeValue.slice(removed);
         remaining -= removed;
       } else {
@@ -620,6 +626,22 @@ function removeVisibleNumberPrefix(heading, badge) {
     }
   };
   visit(heading);
+  return textNodes;
+}
+
+function restoreNumberedHeading(heading) {
+  const state = heading && NUMBERED_HEADING_STATES.get(heading);
+  if (!state) return;
+
+  state.textNodes.forEach(({ node, value }) => {
+    node.nodeValue = value;
+  });
+  if (state.hadAriaLabel) {
+    heading.setAttribute('aria-label', state.ariaLabel);
+  } else {
+    heading.removeAttribute('aria-label');
+  }
+  NUMBERED_HEADING_STATES.delete(heading);
 }
 
 export function applyCardStyles(doc, styleConfig) {
@@ -627,15 +649,17 @@ export function applyCardStyles(doc, styleConfig) {
   const nativeDark = Boolean(normalizeColor(styleConfig?.gzh?.bg));
 
   doc.querySelectorAll('section[data-ogzh-card]').forEach((section) => {
+    const heading = directHeading(section);
+    restoreNumberedHeading(heading);
+    removeCardDecorations(section);
+
     const styleId = section.getAttribute('data-ogzh-card');
     const card = getCardStyle(styleId);
     if (!card) return;
 
     const presentation = buildCardPresentation(styleId, tokens, { nativeDark });
     applyTrustedStyle(section, presentation.containerStyle);
-    removeCardDecorations(section);
 
-    const heading = directHeading(section);
     if (card.slots === 'title-body') {
       if (heading) applyTrustedStyle(heading, presentation.headingStyle);
     } else if (heading) {
