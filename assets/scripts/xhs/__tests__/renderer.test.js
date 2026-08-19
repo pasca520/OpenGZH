@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { renderXhsPage, selectPageVariant, rewriteImageSources } from '../renderer.js';
+import { createXhsDomMeasurer, renderXhsPage, renderXhsStack, selectPageVariant, rewriteImageSources } from '../renderer.js';
 
 const settings = {
   themeId: 'minimal-white', density: 'standard', tocEnabled: false,
@@ -20,12 +20,32 @@ describe('xhs renderer', () => {
     expect(html).toContain('零度');
   });
 
+  it('renders the derived layout hint without changing page content', () => {
+    const html = renderXhsPage({
+      id: 'short', kind: 'content', variant: 'text', layoutHint: 'short',
+      blocks: [{ id: 'p', type: 'paragraph', html: '<p>短页</p>' }],
+      pageNumber: 2, totalPages: 2, sourceStart: 0, sourceEnd: 2,
+      manualBreakBefore: false, manualBreakMarkerStart: null
+    }, settings);
+    expect(html).toContain('data-layout-hint="short"');
+    expect(html).toContain('短页');
+  });
+
   it('does not render a page number on the cover', () => {
     const html = renderXhsPage({
       id: 'cover', kind: 'cover', variant: 'cover', blocks: [], pageNumber: 1, totalPages: 4,
       sourceStart: null, sourceEnd: null, manualBreakBefore: false, manualBreakMarkerStart: null
     }, settings);
     expect(html).not.toContain('01 / 04');
+  });
+
+  it('renders article metadata on the cover through the stack contract', () => {
+    const [html] = renderXhsStack([{
+      id: 'cover', kind: 'cover', variant: 'cover', blocks: [], pageNumber: 1, totalPages: 1,
+      sourceStart: null, sourceEnd: null, manualBreakBefore: false, manualBreakMarkerStart: null
+    }], settings, { meta: { title: '真实封面标题', summary: '真实封面摘要' } });
+    expect(html).toContain('真实封面标题');
+    expect(html).toContain('真实封面摘要');
   });
 
   it('marks manual breaks with marker position', () => {
@@ -90,5 +110,76 @@ describe('xhs renderer', () => {
     }, withImage);
     expect(html).toContain('data-media-ref="img://abc"');
     expect(html).toContain('object-position:20% 80%');
+  });
+
+  it('loads fonts once and measures without animation-frame delays', async () => {
+    const originalDocument = globalThis.document;
+    const originalRaf = globalThis.requestAnimationFrame;
+    let fontLoadCount = 0;
+
+    class FakeElement {
+      constructor() {
+        this.children = [];
+        this.parent = null;
+        this.style = {};
+        this.innerHTML = '';
+        this.scrollHeight = 600;
+        this.clientHeight = 608;
+        this.scrollWidth = 440;
+        this.clientWidth = 452;
+      }
+
+      appendChild(child) {
+        child.parent = this;
+        this.children.push(child);
+      }
+
+      setAttribute() {}
+
+      querySelectorAll() {
+        return [];
+      }
+
+      remove() {
+        if (!this.parent) return;
+        this.parent.children = this.parent.children.filter((child) => child !== this);
+      }
+    }
+
+    globalThis.document = {
+      createElement: () => new FakeElement(),
+      fonts: {
+        load: () => {
+          fontLoadCount += 1;
+          return Promise.resolve();
+        }
+      }
+    };
+    globalThis.requestAnimationFrame = () => {
+      throw new Error('measuring stable DOM must not wait for animation frames');
+    };
+
+    try {
+      const stage = new FakeElement();
+      const measurer = createXhsDomMeasurer(stage, settings);
+      const body = stage.children[0].children[0];
+      body.children = [{ offsetTop: 0, offsetHeight: 304 }];
+      expect(await measurer.measure([])).toEqual({
+        fits: true,
+        usedHeight: 304,
+        availableHeight: 608,
+        fillRatio: 0.5
+      });
+      expect(await measurer.fits([])).toBe(true);
+      expect(await measurer.fits([])).toBe(true);
+      expect(fontLoadCount).toBe(4);
+      measurer.destroy();
+      expect(stage.children).toHaveLength(0);
+    } finally {
+      if (originalDocument === undefined) delete globalThis.document;
+      else globalThis.document = originalDocument;
+      if (originalRaf === undefined) delete globalThis.requestAnimationFrame;
+      else globalThis.requestAnimationFrame = originalRaf;
+    }
   });
 });

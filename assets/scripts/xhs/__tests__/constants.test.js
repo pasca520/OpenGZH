@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createDefaultXhsSettings, normalizeXhsSettings } from '../constants.js';
+import {
+  createDefaultXhsSettings,
+  normalizeXhsSettings,
+  XHS_DENSITY_PRESETS,
+  XHS_SERIES_SUGGESTION_LIMIT
+} from '../constants.js';
 
 describe('xhs settings', () => {
   it('creates isolated defaults', () => {
@@ -22,5 +27,14 @@ describe('xhs settings', () => {
       footer: { authorEnabled: false },
       cover: { titleOverride: '', focalPoint: { x: 0, y: 100 } }
     });
+  });
+
+  it('uses reading-first density presets and a separate series suggestion limit', () => {
+    expect(XHS_DENSITY_PRESETS).toEqual({
+      relaxed: { bodySize: 22, lineHeight: 1.65, blockGap: 18 },
+      standard: { bodySize: 20, lineHeight: 1.55, blockGap: 14 },
+      compact: { bodySize: 18, lineHeight: 1.48, blockGap: 10 }
+    });
+    expect(XHS_SERIES_SUGGESTION_LIMIT).toBe(12);
   });
 });

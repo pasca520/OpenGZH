@@ -245,7 +245,11 @@ describe('xhs integration contract', () => {
     const pages = await paginateXhsDocument(parsed, settings, { fits: fakeFits });
     const chunks = pages.flatMap((page) => page.blocks).filter((block) => block.type === 'code');
     expect(chunks.reduce((sum, chunk) => sum + chunk.data.lines.length, 0)).toBe(25);
-    expect(chunks.map((chunk) => chunk.data.startLineNumber)).toEqual([1, 11, 21]);
+    let expectedStart = 1;
+    for (const chunk of chunks) {
+      expect(chunk.data.startLineNumber).toBe(expectedStart);
+      expectedStart += chunk.data.lines.length;
+    }
     expect(chunks.every((chunk) => chunk.data.language === 'python')).toBe(true);
   });
 

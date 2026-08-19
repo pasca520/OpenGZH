@@ -10,7 +10,7 @@
 
   <link rel="icon" type="image/svg+xml" href="assets/images/logo.svg?v=1">
   <link rel="stylesheet" href="assets/styles/base.css?v=1">
-  <link rel="stylesheet" href="assets/styles/editor.css?v=5">
+  <link rel="stylesheet" href="assets/styles/editor.css?v=10">
   <link rel="stylesheet" href="assets/styles/panel.css?v=1">
   <link rel="stylesheet" href="assets/styles/cover.css?v=1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.25/dist/katex.min.css">
@@ -32,7 +32,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;500;600;700&family=LXGW+WenKai:wght@400;700&family=ZCOOL+XiaoWei&family=ZCOOL+KuaiLe&family=ZCOOL+QingKe+HuangYou&family=Ma+Shan+Zheng&family=Liu+Jian+Mao+Cao&family=Long+Cang&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/styles/xhs.css?v=1">
+  <link rel="stylesheet" href="assets/styles/xhs.css?v=4">
 </head>
 <body>
   <div id="app">
@@ -51,9 +51,13 @@
             <svg class="lucide lucide-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
             封面图
           </button>
-          <button class="header-tab" :class="{ active: activeTab === 'editor' }" @click="activeTab = 'editor'">
+          <button class="header-tab" :class="{ active: activeTab === 'editor' && contentOutputMode === 'text' }" @click="activeTab = 'editor'; setContentOutputMode('text')">
             <svg class="lucide lucide-file-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
-            编辑器
+            文本
+          </button>
+          <button v-if="XHS_FEATURE_ENABLED" class="header-tab" :class="{ active: activeTab === 'editor' && contentOutputMode === 'image' }" @click="activeTab = 'editor'; setContentOutputMode('image')">
+            <svg class="lucide lucide-images" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 22H4a2 2 0 0 1-2-2V6"/><path d="m22 13-1.296-1.296a2.41 2.41 0 0 0-3.408 0L11 18"/><circle cx="12" cy="8" r="2"/><rect width="16" height="16" x="6" y="2" rx="2"/></svg>
+            图片
           </button>
         </div>
       </div>
@@ -540,32 +544,77 @@
         <div class="preview-composer">
             <div class="preview-toolbar">
               <div class="preview-toolbar-left">
-                <!-- 输出模式分段开关 -->
-                <div class="content-output-toggle" role="group" aria-label="预览输出模式">
-                  <button :class="{ active: contentOutputMode === 'text' }" @click="setContentOutputMode('text')">文本</button>
-                  <button v-if="XHS_FEATURE_ENABLED" :class="{ active: contentOutputMode === 'image' }" @click="setContentOutputMode('image')">图片</button>
-                </div>
-
-                <!-- 图片模式工具栏 -->
-                <div class="xhs-toolbar" v-if="contentOutputMode === 'image'">
-                  <div class="xhs-tool-group">
-                    <label class="xhs-tool-label" for="xhs-theme-select">主题</label>
-                    <select id="xhs-theme-select" class="xhs-select" :value="activeXhsSettings.themeId" @change="updateActiveXhsSettings({ themeId: $event.target.value })">
-                      <option v-for="themeId in XHS_THEME_IDS" :key="themeId" :value="themeId">{{ XHS_THEMES[themeId].name }}</option>
-                    </select>
+                <!-- 图片模式工具栏（设置触发器移出滚动容器，避免 overflow 裁切下拉层） -->
+                <div class="preview-picker-trigger xhs-settings-trigger" v-if="contentOutputMode === 'image'">
+                  <button class="preview-picker-btn xhs-settings-btn" :class="{ active: showXhsSettings }" @click.stop="showXhsSettings = !showXhsSettings" aria-haspopup="true" :aria-expanded="showXhsSettings ? 'true' : 'false'">
+                      <svg class="lucide lucide-sliders-horizontal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg>
+                      设置
+                      <svg class="lucide lucide-chevron-down chevron-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+                    </button>
+                    <div class="preview-picker-dropdown xhs-settings-dropdown" v-if="showXhsSettings" @click.stop>
+                      <div class="xhs-settings-section">
+                        <span class="xhs-settings-label">
+                          <svg class="lucide lucide-palette" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="15.5" r=".5" fill="currentColor"/></svg>
+                          主题
+                        </span>
+                        <select id="xhs-theme-select" class="xhs-select xhs-settings-select" :value="activeXhsSettings.themeId" @change="updateActiveXhsSettings({ themeId: $event.target.value })">
+                          <option v-for="themeId in XHS_THEME_IDS" :key="themeId" :value="themeId">{{ XHS_THEMES[themeId].name }}</option>
+                        </select>
+                      </div>
+                      <div class="xhs-settings-section">
+                        <span class="xhs-settings-label">
+                          <svg class="lucide lucide-align-justify" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18"/><path d="M3 18h18"/><path d="M3 6h18"/></svg>
+                          排版密度
+                        </span>
+                        <div class="xhs-settings-seg" role="group" aria-label="排版密度">
+                          <button
+                            v-for="density in XHS_DENSITIES"
+                            :key="density"
+                            class="xhs-seg-btn"
+                            :class="{ active: activeXhsSettings.density === density }"
+                            @click="updateActiveXhsSettings({ density })"
+                          >{{ XHS_DENSITY_LABELS[density] }}</button>
+                        </div>
+                      </div>
+                      <div class="xhs-settings-row">
+                        <button class="xhs-settings-row-btn" :class="{ active: activeXhsSettings.tocEnabled }" @click="updateActiveXhsSettings({ tocEnabled: !activeXhsSettings.tocEnabled })">
+                          <span class="xhs-settings-row-label">
+                            <svg class="lucide lucide-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
+                            目录
+                          </span>
+                          <span class="toggle-switch" :class="{ active: activeXhsSettings.tocEnabled }" role="presentation"></span>
+                        </button>
+                      </div>
+                      <div class="xhs-settings-row">
+                        <button class="xhs-settings-row-btn" :class="{ active: xhsShowCoverPanel }" @click="xhsShowCoverPanel = !xhsShowCoverPanel; showXhsSettings = false">
+                          <span class="xhs-settings-row-label">
+                            <svg class="lucide lucide-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                            封面设置
+                          </span>
+                          <span class="toggle-switch" :class="{ active: xhsShowCoverPanel }" role="presentation"></span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <div class="xhs-tool-group" role="group" aria-label="排版密度">
+                  <div class="xhs-toolbar" v-if="contentOutputMode === 'image'">
+                  <div class="xhs-view-switch" role="group" aria-label="预览方式">
                     <button
-                      v-for="density in XHS_DENSITIES"
-                      :key="density"
-                      class="xhs-seg-btn"
-                      :class="{ active: activeXhsSettings.density === density }"
-                      @click="updateActiveXhsSettings({ density })"
-                    >{{ XHS_DENSITY_LABELS[density] }}</button>
+                      class="xhs-view-switch-btn"
+                      :class="{ active: xhsPreviewMode === 'horizontal' }"
+                      :aria-pressed="xhsPreviewMode === 'horizontal'"
+                      @click="setXhsPreviewMode('horizontal')"
+                    >横滑</button>
+                    <button
+                      class="xhs-view-switch-btn"
+                      :class="{ active: xhsPreviewMode === 'vertical' }"
+                      :aria-pressed="xhsPreviewMode === 'vertical'"
+                      @click="setXhsPreviewMode('vertical')"
+                    >纵览</button>
                   </div>
-                  <button class="xhs-tool-btn" :class="{ active: activeXhsSettings.tocEnabled }" @click="updateActiveXhsSettings({ tocEnabled: !activeXhsSettings.tocEnabled })">目录</button>
-                  <button class="xhs-tool-btn" :class="{ active: xhsShowCoverPanel }" @click="xhsShowCoverPanel = !xhsShowCoverPanel">封面设置</button>
-                  <span class="xhs-page-count" aria-live="polite">{{ xhsIsPaginating ? '正在重新编排…' : (xhsPages.length ? `共 ${xhsPages.length} 张` : '') }}</span>
+                  <span v-if="xhsIsPaginating" class="xhs-page-count" aria-live="polite">正在重新编排…</span>
+                  <span v-if="!xhsIsPaginating && xhsPages.length" class="xhs-page-count" aria-live="polite">
+                    {{ xhsPageSummary.label }}
+                  </span>
                   <button class="xhs-download-btn" :disabled="xhsIsPaginating || !xhsPages.length || xhsExporting" @click="exportAllXhsPages">
                     {{ xhsExporting ? '正在导出…' : '下载全部 ZIP' }}
                   </button>
@@ -859,8 +908,8 @@
                 <div class="preview-container" :class="{ 'mobile-mode': previewMode === 'mobile', 'dark-preview': previewDarkMode, 'native-dark-theme': Boolean(STYLES[currentStyle]?.gzh?.bg) }" :style="previewMode === 'mobile' ? { maxWidth: mobilePreviewWidth + 'px' } : {}" v-html="renderedContent"></div>
               </template>
 
-              <!-- 图片模式：纵向卡片堆叠 -->
-              <div v-else class="xhs-image-stack">
+              <!-- 图片模式：横滑审稿与纵向总览共用同一批卡片 DOM -->
+              <div v-else class="xhs-image-workspace">
                 <div class="xhs-stack-status" aria-live="polite">
                   <span v-if="xhsIsPaginating" class="xhs-repaginating">正在重新编排…</span>
                 </div>
@@ -869,27 +918,66 @@
                 </div>
                 <div v-if="!xhsPages.length && !xhsIsPaginating && !xhsIssues.length" class="xhs-stack-empty">暂无卡片，请输入内容后自动分页。</div>
 
-                <template v-for="(page, index) in xhsPages" :key="page.id">
-                  <div v-if="index > 0" class="xhs-break-zone">
-                    <button v-if="!page.manualBreakBefore" class="xhs-break-btn" @click="insertXhsPageBeforeBlock(firstBlockId(page))">＋ 在此分页</button>
-                    <button v-else class="xhs-break-btn xhs-break-remove" @click="removeXhsPageMarker(page.manualBreakMarkerStart)">手动分页 · 删除</button>
-                  </div>
-                  <div
-                    class="xhs-card-shell"
-                    :data-page-id="page.id"
-                    :class="{ 'has-export-error': xhsExportErrorPageIndexes.includes(index) }"
-                    :style="{ width: (XHS_LOGICAL_WIDTH * xhsPreviewScale) + 'px', height: (XHS_LOGICAL_HEIGHT * xhsPreviewScale) + 'px' }"
-                  >
-                    <div class="xhs-card-shell-label">
-                      <button class="xhs-shell-select" :class="{ active: xhsSelectedPageId === page.id }" :aria-label="'定位到第 ' + page.pageNumber + ' 页'" @click="xhsSelectedPageId = page.id">{{ page.kind === 'cover' ? '封面' : String(page.pageNumber).padStart(2, '0') }}</button>
-                      <button class="xhs-shell-download" :disabled="xhsExporting" :aria-label="'下载第 ' + page.pageNumber + ' 页 PNG'" @click="exportSingleXhsPage(page.id)">下载</button>
+                <div
+                  v-if="xhsPages.length"
+                  class="xhs-image-stack"
+                  :class="xhsPreviewMode === 'horizontal' ? 'is-horizontal' : 'is-vertical'"
+                  :style="{
+                    '--xhs-card-width': (XHS_LOGICAL_WIDTH * xhsPreviewScale) + 'px',
+                    '--xhs-card-height': (XHS_LOGICAL_HEIGHT * xhsPreviewScale) + 'px'
+                  }"
+                  tabindex="0"
+                  role="region"
+                  aria-label="小红书卡片预览"
+                  @keydown="handleXhsPreviewKeydown"
+                  @scroll.passive="handleXhsRailScroll"
+                >
+                  <template v-for="(page, index) in xhsPages" :key="page.id">
+                    <div v-if="index > 0" class="xhs-break-zone xhs-vertical-only">
+                      <button v-if="!page.manualBreakBefore" class="xhs-break-btn" @click="insertXhsPageBeforeBlock(firstBlockId(page))">＋ 在此分页</button>
+                      <button v-else class="xhs-break-btn xhs-break-remove" @click="removeXhsPageMarker(page.manualBreakMarkerStart)">手动分页 · 删除</button>
                     </div>
-                    <div class="xhs-card-scale" :style="{ '--xhs-scale': xhsPreviewScale }">
-                      <div v-html="xhsRenderedPages[index]"></div>
+                    <div
+                      class="xhs-card-shell"
+                      :data-page-id="page.id"
+                      :class="{
+                        active: xhsSelectedPageId === page.id,
+                        'has-export-error': xhsExportErrorPageIndexes.includes(index)
+                      }"
+                      :style="{ width: (XHS_LOGICAL_WIDTH * xhsPreviewScale) + 'px', height: (XHS_LOGICAL_HEIGHT * xhsPreviewScale) + 'px' }"
+                      role="group"
+                      aria-roledescription="卡片"
+                      :aria-label="'第 ' + (index + 1) + ' 张，共 ' + xhsPages.length + ' 张'"
+                    >
+                      <div class="xhs-card-shell-label">
+                        <div class="xhs-shell-primary">
+                          <button class="xhs-shell-select" :class="{ active: xhsSelectedPageId === page.id }" :aria-label="'定位到第 ' + page.pageNumber + ' 页'" @click="selectXhsPage(page.id)">{{ page.kind === 'cover' ? '封面' : String(page.pageNumber).padStart(2, '0') }}</button>
+                          <button
+                            v-if="xhsPreviewMode === 'horizontal' && index > 0 && xhsSelectedPageId === page.id && !page.manualBreakBefore"
+                            class="xhs-shell-break"
+                            @click="insertXhsPageBeforeBlock(firstBlockId(page))"
+                          >页前分页</button>
+                          <button
+                            v-else-if="xhsPreviewMode === 'horizontal' && index > 0 && xhsSelectedPageId === page.id"
+                            class="xhs-shell-break xhs-break-remove"
+                            @click="removeXhsPageMarker(page.manualBreakMarkerStart)"
+                          >删除手动分页</button>
+                        </div>
+                        <button class="xhs-shell-download" :disabled="xhsExporting" :aria-label="'下载第 ' + page.pageNumber + ' 页 PNG'" @click="exportSingleXhsPage(page.id)">下载</button>
+                      </div>
+                      <div class="xhs-card-scale" :style="{ '--xhs-scale': xhsPreviewScale }">
+                        <div v-html="xhsRenderedPages[index]"></div>
+                      </div>
+                      <span v-if="xhsExportErrorPageIndexes.includes(index)" class="xhs-export-error-badge" role="alert">导出失败</span>
                     </div>
-                    <span v-if="xhsExportErrorPageIndexes.includes(index)" class="xhs-export-error-badge" role="alert">导出失败</span>
-                  </div>
-                </template>
+                  </template>
+                </div>
+
+                <div v-if="xhsPreviewMode === 'horizontal' && xhsPages.length" class="xhs-carousel-nav" aria-label="卡片导航">
+                  <button class="xhs-carousel-nav-btn" :disabled="!xhsHasPreviousPage" aria-label="上一张" @click="moveXhsSelectedPage(-1)">←</button>
+                  <span class="xhs-carousel-position" aria-live="polite">{{ xhsSelectedPageIndex + 1 }} / {{ xhsPages.length }}</span>
+                  <button class="xhs-carousel-nav-btn" :disabled="!xhsHasNextPage" aria-label="下一张" @click="moveXhsSelectedPage(1)">→</button>
+                </div>
               </div>
             </div>
         </div>
@@ -952,6 +1040,6 @@
     </template>
   </div>
 
-  <script type="module" src="assets/scripts/main.js?v=7"></script>
+  <script type="module" src="assets/scripts/main.js?v=10"></script>
 </body>
 </html>

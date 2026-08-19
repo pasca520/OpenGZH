@@ -21,6 +21,12 @@ import { createPanelManager } from './ui/panel-manager.js';
 import { loadPreferences, savePreferences, debounceSaveContent, getDefaultCodeBlockSettings, getDefaultDisplaySettings } from './storage/preferences.js';
 import { createDefaultXhsSettings, normalizeXhsSettings } from './xhs/constants.js';
 import {
+  calculateXhsPreviewScale,
+  normalizeXhsPreviewMode,
+  resolveXhsPageSelection,
+  stepXhsPageSelection
+} from './xhs/preview-navigation.js';
+import {
   XHS_FEATURE_ENABLED,
   XHS_LOGICAL_WIDTH,
   XHS_LOGICAL_HEIGHT,
@@ -31,7 +37,8 @@ import {
 import { insertPageMarker, removePageMarker } from './xhs/page-markers.js';
 import { parseXhsDocument } from './xhs/semantic-parser.js';
 import { paginateXhsDocument } from './xhs/paginator.js';
-import { createXhsDomMeasurer, renderXhsPage } from './xhs/renderer.js';
+import { createXhsDomMeasurer, renderXhsStack } from './xhs/renderer.js';
+import { summarizeXhsPages } from './xhs/page-summary.js';
 import { XHS_THEMES } from './xhs/themes.js';
 import { exportXhsPage, exportXhsSet } from './xhs/exporter.js';
 import { STYLES } from '../styles/themes/index.js';
@@ -75,11 +82,13 @@ const selectedDevice = ref('iphone-17-pro');
 // ── XHS Image Mode (session-only state; contentOutputMode never persists) ──
 const contentOutputMode = ref('text');
 const xhsPages = ref([]);
+const xhsPageSummary = computed(() => summarizeXhsPages(xhsPages.value));
 const xhsRenderedPages = ref([]);
 const xhsIsPaginating = ref(false);
 const xhsIssues = ref([]);
 const xhsWarning = ref('');
 const xhsSelectedPageId = ref(null);
+const xhsPreviewMode = ref('horizontal');
 const xhsPreviewScale = ref(1);
 const xhsCoverCandidates = ref([]);
 const xhsExportErrorPageIndexes = ref([]);
@@ -88,10 +97,17 @@ const xhsExporting = ref(false);
 const XHS_DENSITY_LABELS = { relaxed: '舒展', standard: '标准', compact: '紧凑' };
 let xhsPaginationTimer = null;
 let xhsPaginationRevision = 0;
-let xhsFontsReadyHandled = false;
+let xhsScrollSelectionTimer = null;
 let xhsPreviewObserver = null;
 let xhsMeasureStageEl = null;
 const xhsPreviewUrlCache = new Map();
+const xhsSelectedPageIndex = computed(() => (
+  resolveXhsPageSelection(xhsPages.value, xhsSelectedPageId.value, 0).index
+));
+const xhsHasPreviousPage = computed(() => xhsSelectedPageIndex.value > 0);
+const xhsHasNextPage = computed(() => (
+  xhsSelectedPageIndex.value >= 0 && xhsSelectedPageIndex.value < xhsPages.value.length - 1
+));
 
 // ── Tab State ──
 const activeTab = ref('editor');
@@ -99,6 +115,7 @@ const activeTab = ref('editor');
 // ── Editor Toolbar Pickers ──
 const showTemplatePicker = ref(false);
 const showTypoPicker = ref(false);
+const showXhsSettings = ref(false);
 
 // ── Cover Editor State ──
 const coverTemplateId = ref('pure-white');
@@ -616,6 +633,7 @@ function revokeXhsPreviewUrls() {
 }
 
 async function hydrateXhsMediaRoot(root) {
+  if (!root) return;
   const targets = Array.from(root.querySelectorAll('[data-media-ref]'));
   await Promise.all(targets.map(async (element) => {
     const ref = element.getAttribute('data-media-ref');
@@ -631,7 +649,10 @@ async function buildXhsPages(markdown, settings) {
     hydrateMedia: (root) => hydrateXhsMediaRoot(root)
   });
   try {
-    const pages = await paginateXhsDocument(parsed, settings, { fits: (blocks) => measurer.fits(blocks) });
+    const pages = await paginateXhsDocument(parsed, settings, {
+      fits: (blocks) => measurer.fits(blocks),
+      measure: (blocks) => measurer.measure(blocks)
+    });
     return { pages, meta: parsed.meta, images: parsed.images, issues: [] };
   } catch (error) {
     return {
@@ -658,25 +679,90 @@ async function refreshXhsCoverCandidates(images) {
   xhsCoverCandidates.value = hydrated;
 }
 
-function restoreSelectedXhsPage() {
-  const previousId = xhsSelectedPageId.value;
-  const previousNumber = xhsPages.value.find((page) => page.id === previousId)?.pageNumber;
-  let target = null;
-  if (previousId) {
-    target = xhsPages.value.find((page) => page.id === previousId) || null;
-  }
-  if (!target && previousNumber != null) {
-    target = xhsPages.value.find((page) => page.pageNumber === previousNumber) || null;
-  }
-  if (!target && xhsPages.value.length) {
-    target = xhsPages.value[0];
-  }
-  if (target) {
-    xhsSelectedPageId.value = target.id;
-    nextTick(() => {
-      const shell = document.querySelector(`.xhs-card-shell[data-page-id="${CSS.escape(target.id)}"]`);
-      shell?.scrollIntoView({ block: 'nearest' });
+function setXhsPreviewMode(mode) {
+  xhsPreviewMode.value = normalizeXhsPreviewMode(mode);
+  nextTick(() => {
+    setupXhsPreviewObserver();
+    selectXhsPage(xhsSelectedPageId.value, { behavior: 'auto' });
+  });
+}
+
+function selectXhsPage(pageId, { scroll = true, behavior = 'smooth' } = {}) {
+  const selection = resolveXhsPageSelection(
+    xhsPages.value,
+    pageId,
+    xhsSelectedPageIndex.value
+  );
+  xhsSelectedPageId.value = selection.page?.id || null;
+  if (!scroll || !selection.page) return;
+
+  nextTick(() => {
+    const shell = document.querySelector(`.xhs-card-shell[data-page-id="${CSS.escape(selection.page.id)}"]`);
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    shell?.scrollIntoView({
+      behavior: reducedMotion && behavior === 'smooth' ? 'auto' : behavior,
+      block: 'nearest',
+      inline: xhsPreviewMode.value === 'horizontal' ? 'center' : 'nearest'
     });
+  });
+}
+
+function moveXhsSelectedPage(delta) {
+  const selection = stepXhsPageSelection(
+    xhsPages.value,
+    xhsSelectedPageId.value,
+    delta
+  );
+  if (selection.page) selectXhsPage(selection.page.id);
+}
+
+function handleXhsPreviewKeydown(event) {
+  if (xhsPreviewMode.value !== 'horizontal') return;
+  if (event.target !== event.currentTarget && event.target?.closest?.('button, a, input, select, textarea')) return;
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+  event.preventDefault();
+  moveXhsSelectedPage(event.key === 'ArrowLeft' ? -1 : 1);
+}
+
+function syncXhsSelectedPageFromRail(rail) {
+  if (!rail || xhsPreviewMode.value !== 'horizontal') return;
+  const railRect = rail.getBoundingClientRect();
+  const railCenter = railRect.left + railRect.width / 2;
+  let closestShell = null;
+  let closestDistance = Infinity;
+
+  for (const shell of rail.querySelectorAll('.xhs-card-shell')) {
+    const rect = shell.getBoundingClientRect();
+    const distance = Math.abs(rect.left + rect.width / 2 - railCenter);
+    if (distance < closestDistance) {
+      closestDistance = distance;
+      closestShell = shell;
+    }
+  }
+
+  if (closestShell?.dataset.pageId) {
+    xhsSelectedPageId.value = closestShell.dataset.pageId;
+  }
+}
+
+function handleXhsRailScroll(event) {
+  if (xhsPreviewMode.value !== 'horizontal') return;
+  const rail = event.currentTarget;
+  clearTimeout(xhsScrollSelectionTimer);
+  xhsScrollSelectionTimer = setTimeout(() => {
+    syncXhsSelectedPageFromRail(rail);
+  }, 100);
+}
+
+function restoreSelectedXhsPage(fallbackIndex = 0) {
+  const selection = resolveXhsPageSelection(
+    xhsPages.value,
+    xhsSelectedPageId.value,
+    fallbackIndex
+  );
+  xhsSelectedPageId.value = selection.page?.id || null;
+  if (selection.page) {
+    selectXhsPage(selection.page.id, { behavior: 'auto' });
   }
 }
 
@@ -686,32 +772,25 @@ function scheduleXhsPagination(delay = 450) {
   xhsIsPaginating.value = true;
   const revision = ++xhsPaginationRevision;
   xhsPaginationTimer = setTimeout(async () => {
+    const previousSelectedIndex = xhsSelectedPageIndex.value;
     const result = await buildXhsPages(markdownInput.value, activeXhsSettings.value);
     if (revision !== xhsPaginationRevision) return;
     xhsPages.value = result.pages;
-    xhsRenderedPages.value = result.pages.map((page) => renderXhsPage(page, activeXhsSettings.value, result.meta));
+    xhsRenderedPages.value = renderXhsStack(result.pages, activeXhsSettings.value, { meta: result.meta });
     xhsIssues.value = result.issues;
+    const summary = summarizeXhsPages(result.pages);
     xhsWarning.value = result.pages.length > XHS_UPLOAD_WARNING_LIMIT
-      ? `当前共 ${result.pages.length} 张，可能超出当前客户端单篇上传能力，建议拆分为系列内容。`
-      : '';
+      ? `当前共 ${result.pages.length} 张，可能超出当前客户端单篇上传能力，建议拆分为系列内容。仍可完整导出。`
+      : summary.needsSeriesSuggestion
+        ? `当前共 ${result.pages.length} 张，为了更好的滑动阅读体验，建议按章节拆成系列内容。仍可完整导出。`
+        : '';
     xhsExportErrorPageIndexes.value = [];
     xhsIsPaginating.value = false;
     await refreshXhsCoverCandidates(result.images);
     await nextTick();
+    setupXhsPreviewObserver();
     await hydrateXhsMediaRoot(document.querySelector('.xhs-image-stack'));
-    restoreSelectedXhsPage();
-    // font swaps can change metrics; re-paginate once when the fonts settle
-    if (!xhsFontsReadyHandled && typeof document !== 'undefined' && document.fonts) {
-      xhsFontsReadyHandled = true;
-      Promise.race([
-        document.fonts.ready.catch(() => undefined),
-        new Promise((resolve) => setTimeout(resolve, 5000))
-      ]).then(() => {
-        if (contentOutputMode.value === 'image' && revision === xhsPaginationRevision) {
-          scheduleXhsPagination(0);
-        }
-      });
-    }
+    restoreSelectedXhsPage(previousSelectedIndex);
   }, delay);
 }
 
@@ -720,7 +799,22 @@ function setupXhsPreviewObserver() {
   const container = document.querySelector('.xhs-image-stack');
   if (!container || typeof ResizeObserver === 'undefined') return;
   const update = () => {
-    xhsPreviewScale.value = Math.min(1, Math.max(0.35, (container.clientWidth - 32) / XHS_LOGICAL_WIDTH));
+    const reservedWidth = xhsPreviewMode.value === 'horizontal'
+      ? Math.min(112, Math.max(48, container.clientWidth * 0.18))
+      : 32;
+    const containerStyle = getComputedStyle(container);
+    const shellStyle = getComputedStyle(container.querySelector('.xhs-card-shell'));
+    const reservedHeight = ['paddingTop', 'paddingBottom']
+      .reduce((total, key) => total + (parseFloat(containerStyle[key]) || 0), 0)
+      + ['paddingTop', 'paddingBottom']
+        .reduce((total, key) => total + (parseFloat(shellStyle[key]) || 0), 0);
+    xhsPreviewScale.value = calculateXhsPreviewScale({
+      mode: xhsPreviewMode.value,
+      containerWidth: container.clientWidth,
+      containerHeight: container.clientHeight,
+      reservedWidth,
+      reservedHeight
+    });
   };
   xhsPreviewObserver = new ResizeObserver(update);
   xhsPreviewObserver.observe(container);
@@ -736,6 +830,7 @@ function teardownXhsPreviewObserver() {
 
 function setContentOutputMode(mode) {
   if (mode !== 'text' && mode !== 'image') return;
+  showXhsSettings.value = false;
   contentOutputMode.value = mode;
   if (mode === 'image') {
     nextTick(() => {
@@ -745,6 +840,7 @@ function setContentOutputMode(mode) {
   } else {
     teardownXhsPreviewObserver();
     clearTimeout(xhsPaginationTimer);
+    clearTimeout(xhsScrollSelectionTimer);
     xhsIsPaginating.value = false;
     revokeXhsPreviewUrls();
     xhsCoverCandidates.value = [];
@@ -2496,7 +2592,7 @@ const app = createApp({
       // 下拉浮层右侧溢出视口时自动翻转对齐
       function alignPickerDropdown() {
         const margin = 12;
-        for (const selector of ['.template-dropdown', '.typo-dropdown']) {
+        for (const selector of ['.template-dropdown', '.typo-dropdown', '.xhs-settings-dropdown']) {
           const dropdown = document.querySelector(selector);
           if (!dropdown) continue;
           dropdown.classList.remove('align-right', 'align-fit');
@@ -2512,7 +2608,7 @@ const app = createApp({
           }
         }
       }
-      watch([showTemplatePicker, showTypoPicker], () => nextTick(alignPickerDropdown));
+      watch([showTemplatePicker, showTypoPicker, showXhsSettings], () => nextTick(alignPickerDropdown));
       window.addEventListener('resize', () => {
         if (showTemplatePicker.value || showTypoPicker.value) alignPickerDropdown();
       });
@@ -2528,6 +2624,7 @@ const app = createApp({
         if (!event.target.closest('.preview-picker-trigger')) {
           showTemplatePicker.value = false;
           showTypoPicker.value = false;
+          showXhsSettings.value = false;
         }
       });
 
@@ -2564,6 +2661,7 @@ const app = createApp({
       activeTab,
       showTemplatePicker,
       showTypoPicker,
+      showXhsSettings,
 
       // ── Cover Editor ──
       coverTemplateId,
@@ -2744,11 +2842,16 @@ const app = createApp({
       XHS_UPLOAD_WARNING_LIMIT,
       contentOutputMode,
       xhsPages,
+      xhsPageSummary,
       xhsRenderedPages,
       xhsIsPaginating,
       xhsIssues,
       xhsWarning,
       xhsSelectedPageId,
+      xhsSelectedPageIndex,
+      xhsHasPreviousPage,
+      xhsHasNextPage,
+      xhsPreviewMode,
       xhsPreviewScale,
       xhsCoverCandidates,
       xhsExportErrorPageIndexes,
@@ -2756,6 +2859,11 @@ const app = createApp({
       xhsExporting,
       activeXhsSettings,
       setContentOutputMode,
+      setXhsPreviewMode,
+      selectXhsPage,
+      moveXhsSelectedPage,
+      handleXhsPreviewKeydown,
+      handleXhsRailScroll,
       updateActiveXhsSettings,
       insertXhsPageAtCursor,
       insertXhsPageBeforeBlock,

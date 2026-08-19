@@ -179,13 +179,14 @@ export function renderXhsPage(page, settings, options = {}) {
   const theme = XHS_THEMES[settings.themeId] || XHS_THEMES['minimal-white'];
   const meta = options.meta || {};
   const articleTitle = options.articleTitle || (meta.title || '').trim();
+  const layoutHint = page.layoutHint === 'short' ? 'short' : 'flow';
 
   const manualAttrs = page.manualBreakBefore
     ? ` data-manual-break="true" data-marker-start="${page.manualBreakMarkerStart ?? ''}"`
     : '';
 
   const parts = [];
-  parts.push(`<section class="xhs-card" data-page-id="${escapeHtml(page.id)}" data-theme="${escapeHtml(theme.id)}" data-density="${escapeHtml(settings.density)}" data-variant="${escapeHtml(page.variant)}" data-kind="${escapeHtml(page.kind)}" data-page-number="${page.pageNumber}"${manualAttrs}>`);
+  parts.push(`<section class="xhs-card" data-page-id="${escapeHtml(page.id)}" data-theme="${escapeHtml(theme.id)}" data-density="${escapeHtml(settings.density)}" data-variant="${escapeHtml(page.variant)}" data-kind="${escapeHtml(page.kind)}" data-layout-hint="${layoutHint}" data-page-number="${page.pageNumber}"${manualAttrs}>`);
   parts.push(renderThemeDecoration(theme.id, page.kind));
   parts.push('<div class="xhs-card-body">');
   if (page.kind === 'cover') {
@@ -278,6 +279,7 @@ async function ensureXhsFonts(settings) {
  * @returns {{fits:(blocks:object[]) => Promise<boolean>, destroy:() => void}}
  */
 export function createXhsDomMeasurer(stage, settings, options = {}) {
+  const fontsReady = ensureXhsFonts(settings);
   const card = document.createElement('div');
   card.className = 'xhs-card';
   card.setAttribute('data-theme', settings.themeId);
@@ -289,23 +291,36 @@ export function createXhsDomMeasurer(stage, settings, options = {}) {
   card.appendChild(body);
   stage.appendChild(card);
 
-  async function fits(blocks) {
-    await ensureXhsFonts(settings);
+  async function measure(blocks) {
+    await fontsReady;
     body.innerHTML = renderXhsBlocks(blocks);
     if (options.hydrateMedia) await options.hydrateMedia(body);
     await waitForImages(body);
-    // settle font swaps and layout across several frames before measuring
-    for (let frame = 0; frame < 3; frame += 1) {
-      void body.offsetHeight;
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-    }
+    // Fonts and image dimensions are stable here; these reads synchronously
+    // flush layout, so waiting for animation frames only adds latency.
     const TOLERANCE = 2; // sub-pixel rounding
-    return body.scrollHeight <= body.clientHeight + TOLERANCE && body.scrollWidth <= body.clientWidth + TOLERANCE;
+    const fits = body.scrollHeight <= body.clientHeight + TOLERANCE
+      && body.scrollWidth <= body.clientWidth + TOLERANCE;
+    const usedHeight = Array.from(body.children).reduce(
+      (max, child) => Math.max(max, child.offsetTop + child.offsetHeight),
+      0
+    );
+    const availableHeight = body.clientHeight;
+    return {
+      fits,
+      usedHeight,
+      availableHeight,
+      fillRatio: availableHeight > 0 ? usedHeight / availableHeight : 0
+    };
+  }
+
+  async function fits(blocks) {
+    return (await measure(blocks)).fits;
   }
 
   function destroy() {
     card.remove();
   }
 
-  return { fits, destroy };
+  return { measure, fits, destroy };
 }

@@ -18,6 +18,9 @@ export const XHS_EXPORT_SCALE = 2;
 /** Product warning threshold; NOT an official upload limit. */
 export const XHS_UPLOAD_WARNING_LIMIT = 18;
 
+/** Editorial threshold for suggesting a multi-post series; never blocks export. */
+export const XHS_SERIES_SUGGESTION_LIMIT = 12;
+
 /** Markdown comment used as a manual page break. */
 export const XHS_PAGE_MARKER = '<!-- xhs-page -->';
 
@@ -29,9 +32,9 @@ export const XHS_DENSITIES = ['relaxed', 'standard', 'compact'];
 
 /** Density presets in logical px. */
 export const XHS_DENSITY_PRESETS = {
-  relaxed: { bodySize: 26, lineHeight: 1.75, blockGap: 24 },
-  standard: { bodySize: 24, lineHeight: 1.65, blockGap: 20 },
-  compact: { bodySize: 22, lineHeight: 1.55, blockGap: 16 }
+  relaxed: { bodySize: 22, lineHeight: 1.65, blockGap: 18 },
+  standard: { bodySize: 20, lineHeight: 1.55, blockGap: 14 },
+  compact: { bodySize: 18, lineHeight: 1.48, blockGap: 10 }
 };
 
 const clamp = (value, min, max, fallback) => {
