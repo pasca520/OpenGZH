@@ -61,7 +61,7 @@ import {
   renderCardPreviewHtml
 } from './core/card-styles.js';
 
-const { createApp, ref, reactive, watch, nextTick, onMounted, computed } = window.Vue;
+const { createApp, ref, reactive, watch, nextTick, onMounted, onBeforeUnmount, computed } = window.Vue;
 
 const UNTITLED_PREFIX = '未命名文档';
 
@@ -127,6 +127,7 @@ const showXhsSettings = ref(false);
 const CARD_PICKER_BOUNDARY_SELECTOR = '.card-picker-anchor';
 const showCardPicker = ref(false);
 const cardTargetState = ref({ ok: true, existing: false, reason: '' });
+let cardPickerToolbarObserver = null;
 
 // ── Cover Editor State ──
 const coverTemplateId = ref('pure-white');
@@ -2783,6 +2784,15 @@ const app = createApp({
         if (showCardPicker.value) constrainCardPickerHeight();
       });
 
+      const cardPickerToolbar = document.querySelector('.editor-toolbar');
+      if (cardPickerToolbar && typeof ResizeObserver !== 'undefined') {
+        cardPickerToolbarObserver = new ResizeObserver(() => {
+          if (!showCardPicker.value) return;
+          nextTick(constrainCardPickerHeight);
+        });
+        cardPickerToolbarObserver.observe(cardPickerToolbar);
+      }
+
       // 点击外部关闭下拉菜单
       document.addEventListener('click', (event) => {
         if (!event.target.closest('.device-model-picker')) {
@@ -2833,6 +2843,12 @@ const app = createApp({
       persistDocumentState();
 
       nextTick(() => setupSyncScroll());
+    });
+
+    onBeforeUnmount(() => {
+      if (!cardPickerToolbarObserver) return;
+      cardPickerToolbarObserver.disconnect();
+      cardPickerToolbarObserver = null;
     });
 
     return {

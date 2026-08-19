@@ -444,6 +444,25 @@ describe('card picker editor integration', () => {
     expect(resize).toContain('constrainCardPickerHeight()');
   });
 
+  it('remeasures animated toolbar reflow with one lifecycle-bound ResizeObserver', () => {
+    const mountedObserver = sliceBetween(
+      source,
+      "const cardPickerToolbar = document.querySelector('.editor-toolbar')",
+      '\n\n      // \u70b9\u51fb\u5916\u90e8\u5173\u95ed\u4e0b\u62c9\u83dc\u5355'
+    );
+    const cleanup = sliceBetween(source, 'onBeforeUnmount(() => {', '\n\n    return {');
+
+    expect(source).toMatch(/const\s*\{[^}]*onBeforeUnmount[^}]*\}\s*=\s*window\.Vue/);
+    expect(source).toMatch(/let\s+cardPickerToolbarObserver\s*=\s*null/);
+    expect(mountedObserver).toContain('new ResizeObserver(');
+    expect(mountedObserver).toContain('cardPickerToolbarObserver.observe(cardPickerToolbar)');
+    expect(mountedObserver).toMatch(/if\s*\(!showCardPicker\.value\)\s*return/);
+    expect(mountedObserver).toContain('nextTick(constrainCardPickerHeight)');
+    expect(mountedObserver).not.toContain('setTimeout(');
+    expect(cleanup).toContain('cardPickerToolbarObserver.disconnect()');
+    expect(cleanup).toContain('cardPickerToolbarObserver = null');
+  });
+
   it('focuses an enabled card or the dialog after opening without touching the cached selection', () => {
     const focusPicker = sliceBetween(
       source,
@@ -541,7 +560,7 @@ describe('card picker UI', () => {
     expect(itemButton).toContain(':key="card.id"');
     expect(itemButton).toContain('type="button"');
     expect(itemButton).toContain(':disabled="!cardTargetState.ok"');
-    expect(itemButton).toContain(':aria-label="\'应用\' + card.name + \'卡片样式\'"');
+    expect(itemButton).toContain(':aria-label="\'应用\' + card.name"');
     expect(itemButton).toContain('@click="applySelectedCard(card.id)"');
     expect(html).toMatch(/class="card-picker-preview"[^>]*aria-hidden="true"[^>]*v-html="getCardPreviewHtml\(card\.id\)"/);
     expect(html).toContain('{{ card.name }}');
