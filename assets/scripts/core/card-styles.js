@@ -505,7 +505,7 @@ export function getCardStyle(styleId) {
   return CARD_STYLE_BY_ID.get(styleId) || null;
 }
 
-const BODY_HEADING_RESET_STYLE = 'display: block !important; background: transparent !important; background-color: transparent !important; padding: 0 !important; border: none !important; border-top: none !important; border-right: none !important; border-bottom: none !important; border-left: none !important; border-radius: 0 !important; font-size: inherit !important; font-weight: inherit !important; font-style: normal !important; font-family: inherit !important; letter-spacing: inherit !important; text-transform: none !important; text-align: left !important; text-decoration: none !important; text-indent: 0 !important;';
+const BODY_HEADING_RESET_STYLE = 'display: block !important; background: transparent !important; background-color: transparent !important; padding: 0 !important; border: none !important; border-top: none !important; border-right: none !important; border-bottom: none !important; border-left: none !important; border-radius: 0 !important; font-size: inherit !important; font-weight: inherit !important; font-style: normal !important; font-family: inherit !important; font-variant: inherit !important; letter-spacing: inherit !important; text-transform: none !important; text-align: left !important; text-decoration: none !important; text-indent: 0 !important;';
 const OWNED_DECORATIONS = new Set(['quote-open', 'quote-close', 'number']);
 
 function applyTrustedStyle(element, styleText) {

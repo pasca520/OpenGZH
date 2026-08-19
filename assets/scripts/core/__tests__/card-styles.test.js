@@ -1578,6 +1578,21 @@ describe('card presentation DOM application', () => {
     expect(heading.style.getPropertyPriority('font-size')).toBe('important');
   });
 
+  it('resets the real wechat-ft small-caps heading variant on a body card', () => {
+    const doc = new FakeDocument();
+    const heading = appendElement(doc, doc.createElement('div'), 'h4', '正文标题');
+    const ftTheme = STYLES['wechat-ft'];
+
+    expect(ftTheme.styles.h4).toMatch(/font-variant:\s*small-caps/);
+    heading.setAttribute('style', ftTheme.styles.h4);
+    createCard(doc, 'accent-bar', [heading]);
+
+    applyCardStyles(doc, ftTheme);
+
+    expect(heading.style.getPropertyValue('font-variant')).toBe('inherit');
+    expect(heading.style.getPropertyPriority('font-variant')).toBe('important');
+  });
+
   it('creates two real quote spans and stays stable when applied twice', () => {
     const doc = new FakeDocument();
     const userDecoration = appendElement(doc, doc.createElement('div'), 'span', '用户元素');
