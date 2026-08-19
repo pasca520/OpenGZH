@@ -422,6 +422,45 @@ describe('card picker editor integration', () => {
     expect(preview).toContain('STYLES[currentStyle.value]');
   });
 
+  it('measures the desktop picker inside the clipped editor panel and reuses the resize listener', () => {
+    const constrain = sliceBetween(
+      source,
+      'function constrainCardPickerHeight(',
+      'function focusCardPicker('
+    );
+    expect(constrain).toMatch(/window\.innerWidth\s*<=\s*768/);
+    expect(constrain).toContain("document.querySelector('.card-picker')");
+    expect(constrain).toContain("closest('.editor-panel')");
+    expect(constrain).toContain('getBoundingClientRect()');
+    expect(constrain).toContain("style.setProperty('--card-picker-max-height'");
+
+    const resize = sliceBetween(
+      source,
+      "window.addEventListener('resize'",
+      '\n\n      // \u70b9\u51fb\u5916\u90e8\u5173\u95ed\u4e0b\u62c9\u83dc\u5355'
+    );
+    expect(source.match(/window\.addEventListener\(['"]resize['"]/g)).toHaveLength(1);
+    expect(resize).toContain('showCardPicker.value');
+    expect(resize).toContain('constrainCardPickerHeight()');
+  });
+
+  it('focuses an enabled card or the dialog after opening without touching the cached selection', () => {
+    const focusPicker = sliceBetween(
+      source,
+      'function focusCardPicker(',
+      'async function openCardPicker('
+    );
+    const open = sliceBetween(source, 'async function openCardPicker(', 'function closeCardPicker(');
+
+    expect(focusPicker).toContain("document.querySelector('.card-picker-item:not(:disabled)')");
+    expect(focusPicker).toContain("document.querySelector('.card-picker')");
+    expect(focusPicker).toMatch(/\.focus\(\)/);
+    expect(open).toContain('await nextTick()');
+    expect(open).toContain('constrainCardPickerHeight()');
+    expect(open).toContain('focusCardPicker()');
+    expect(`${focusPicker}\n${open}`).not.toContain('editorSelection.value =');
+  });
+
   it('keeps future trigger clicks inside the shared card picker boundary', () => {
     const outsideClick = sliceBetween(
       source,
@@ -437,16 +476,23 @@ describe('card picker editor integration', () => {
     expect(outsideClick).not.toContain("closest('.card-picker')");
   });
 
-  it('closes only the card picker on outside click and Escape without overwriting selection', () => {
+  it('restores trigger focus only for Escape and never overwrites the cached selection', () => {
     const outsideClick = sliceBetween(
       source,
       "document.addEventListener('click'",
       '\n\n      imageStore ='
     );
-    expect(outsideClick).toContain('showCardPicker.value = false');
+    const close = sliceBetween(source, 'function closeCardPicker(', 'function formatCardEditFailureReason(');
+
+    expect(outsideClick).toContain('closeCardPicker(false)');
     expect(outsideClick).toMatch(/addEventListener\(['"]keydown['"]/);
     expect(outsideClick).toMatch(/event\.key\s*===\s*['"]Escape['"]/);
-    expect(outsideClick).not.toContain('editorSelection.value =');
+    expect(outsideClick).toContain('showCardPicker.value');
+    expect(outsideClick).toContain('event.preventDefault()');
+    expect(outsideClick).toContain('closeCardPicker(true)');
+    expect(close).toContain("document.querySelector('.card-picker-trigger')");
+    expect(close).toContain('nextTick(');
+    expect(`${outsideClick}\n${close}`).not.toContain('editorSelection.value =');
   });
 });
 
@@ -469,6 +515,7 @@ describe('card picker UI', () => {
     expect(anchor).toContain('class="card-picker"');
     expect(anchor).toContain('role="dialog"');
     expect(anchor).toContain('aria-label="卡片样式"');
+    expect(anchor).toContain('tabindex="-1"');
     expect(html.match(/class="card-picker-anchor"/g)).toHaveLength(1);
     expect(anchor.match(/@click="openCardPicker"/g)).toHaveLength(1);
     expect(anchor.match(/@mousedown\.prevent/g)).toHaveLength(3);
@@ -494,8 +541,9 @@ describe('card picker UI', () => {
     expect(itemButton).toContain(':key="card.id"');
     expect(itemButton).toContain('type="button"');
     expect(itemButton).toContain(':disabled="!cardTargetState.ok"');
+    expect(itemButton).toContain(':aria-label="\'应用\' + card.name + \'卡片样式\'"');
     expect(itemButton).toContain('@click="applySelectedCard(card.id)"');
-    expect(html).toContain('v-html="getCardPreviewHtml(card.id)"');
+    expect(html).toMatch(/class="card-picker-preview"[^>]*aria-hidden="true"[^>]*v-html="getCardPreviewHtml\(card\.id\)"/);
     expect(html).toContain('{{ card.name }}');
     expect(removeButton).toContain('type="button"');
     expect(removeButton).toContain(':disabled="!cardTargetState.existing"');
@@ -506,6 +554,7 @@ describe('card picker UI', () => {
     const css = read('assets/styles/editor.css');
 
     expect(css).toMatch(/\.card-picker\s*\{[^}]*max-height:[^;}]+[^}]*overflow-y:\s*auto/s);
+    expect(css).toMatch(/\.card-picker\s*\{[^}]*max-height:\s*min\(540px,\s*var\(--card-picker-max-height,/s);
     expect(css).toMatch(/\.card-picker-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s);
     expect(css).toMatch(/\.card-picker-item:focus-visible/);
     expect(css).toMatch(/\.card-picker-item:disabled\s*\{[^}]*(?:cursor:\s*not-allowed|opacity:)/s);

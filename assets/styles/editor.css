@@ -126,7 +126,7 @@
   box-sizing: border-box;
   width: min(520px, 100%);
   max-width: 100%;
-  max-height: min(540px, calc(100vh - 160px));
+  max-height: min(540px, var(--card-picker-max-height, calc(100vh - 160px)));
   overflow-y: auto;
   padding: var(--space-6);
   background: var(--color-surface);

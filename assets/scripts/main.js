@@ -1762,13 +1762,42 @@ function analyzeCardTarget() {
   return cardTargetState.value;
 }
 
-function openCardPicker() {
-  analyzeCardTarget();
-  showCardPicker.value = true;
+function constrainCardPickerHeight() {
+  if (window.innerWidth <= 768) return;
+
+  const picker = document.querySelector('.card-picker');
+  const editorPanel = picker?.closest('.editor-panel');
+  if (!picker || !editorPanel) return;
+
+  const margin = 12;
+  const pickerTop = picker.getBoundingClientRect().top;
+  const panelBottom = editorPanel.getBoundingClientRect().bottom;
+  const maxHeight = Math.max(0, Math.floor(panelBottom - pickerTop - margin));
+  picker.style.setProperty('--card-picker-max-height', `${maxHeight}px`);
 }
 
-function closeCardPicker() {
+function focusCardPicker() {
+  const focusTarget = document.querySelector('.card-picker-item:not(:disabled)')
+    || document.querySelector('.card-picker');
+  if (focusTarget) focusTarget.focus();
+}
+
+async function openCardPicker() {
+  analyzeCardTarget();
+  showCardPicker.value = true;
+  await nextTick();
+  constrainCardPickerHeight();
+  focusCardPicker();
+}
+
+function closeCardPicker(restoreTriggerFocus = false) {
+  const wasOpen = showCardPicker.value;
   showCardPicker.value = false;
+  if (!restoreTriggerFocus || !wasOpen) return;
+
+  nextTick(() => {
+    document.querySelector('.card-picker-trigger')?.focus();
+  });
 }
 
 function formatCardEditFailureReason(reason) {
@@ -2751,6 +2780,7 @@ const app = createApp({
       watch([showTemplatePicker, showTypoPicker, showXhsSettings], () => nextTick(alignPickerDropdown));
       window.addEventListener('resize', () => {
         if (showTemplatePicker.value || showTypoPicker.value) alignPickerDropdown();
+        if (showCardPicker.value) constrainCardPickerHeight();
       });
 
       // 点击外部关闭下拉菜单
@@ -2767,12 +2797,13 @@ const app = createApp({
           showXhsSettings.value = false;
         }
         if (!event.target.closest(CARD_PICKER_BOUNDARY_SELECTOR)) {
-          showCardPicker.value = false;
+          closeCardPicker(false);
         }
       });
       document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape') {
-          showCardPicker.value = false;
+        if (event.key === 'Escape' && showCardPicker.value) {
+          event.preventDefault();
+          closeCardPicker(true);
         }
       });
 
