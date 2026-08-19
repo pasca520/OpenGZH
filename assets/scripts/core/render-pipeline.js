@@ -1,12 +1,13 @@
 import { applyCodeHighlighting } from './code-highlight.js';
 import { applyGzhStructure, applyEndDivider } from './gzh-structure.js';
+import { mergeTheme, applyBlockStyles } from './style-override.js';
 
 /**
  * Render pipeline.
  * @module render-pipeline
  */
 
-export async function renderPipeline({ markdown, md, imageStore, styleConfig, codeTheme, displaySettings }) {
+export async function renderPipeline({ markdown, md, imageStore, styleConfig, codeTheme, displaySettings, styleOverride = null }) {
   if (!markdown.trim()) return '';
 
   const { preprocessMarkdown } = await import('./markdown-engine.js');
@@ -18,7 +19,12 @@ export async function renderPipeline({ markdown, md, imageStore, styleConfig, co
     html = await processImageProtocol(html, imageStore);
   }
 
-  return applyInlineStyles(html, styleConfig, codeTheme, displaySettings);
+  // 样式覆盖层：主题 ⊗ 文档覆盖 = 最终样式（预览与复制共用同一 merged config）
+  const merged = styleOverride && Object.keys(styleOverride).length > 0
+    ? mergeTheme(styleConfig, styleOverride)
+    : styleConfig;
+
+  return applyInlineStyles(html, merged, codeTheme, displaySettings, { enableStructure: Boolean(styleConfig?.gzh) });
 }
 
 async function processImageProtocol(html, imageStore) {
@@ -46,7 +52,7 @@ async function processImageProtocol(html, imageStore) {
   return doc.body.innerHTML;
 }
 
-function applyInlineStyles(html, styleConfig, codeTheme, displaySettings) {
+function applyInlineStyles(html, styleConfig, codeTheme, displaySettings, extra = {}) {
   const style = styleConfig.styles;
   const fontScale = Number(displaySettings?.fontScale) || 1;
   // 字号档位以 14px 为 1.0x 基准：实际倍数 = 档位倍数 × 14 ÷ 主题正文基准，
@@ -79,11 +85,13 @@ function applyInlineStyles(html, styleConfig, codeTheme, displaySettings) {
   applyCodeHighlighting(doc, { codeTheme, styleConfig });
   applyFontFamilyOverride(doc, fontStyle);
   applyImageDisplaySettings(doc, displaySettings);
-  if (styleConfig?.gzh) {
+  // 块级盒子（L3）：类名样式内联化，跟随合并后的主题色
+  applyBlockStyles(doc, styleConfig?.gzh);
+  if (styleConfig?.gzh && extra.enableStructure) {
     applyGzhStructure(doc, styleConfig.gzh);
   }
-  // 结尾分隔线：所有主题独立生效
-  applyEndDivider(doc, displaySettings?.endStyle, styleConfig?.gzh);
+  // 结尾分隔线：所有主题独立生效。仅原始带 gzh 的主题跟随 token 颜色（保持既有行为）
+  applyEndDivider(doc, displaySettings?.endStyle, extra.enableStructure ? styleConfig?.gzh : undefined);
 
   const container = doc.createElement('div');
   container.setAttribute('style', mergeStyleText(scaledStyle.container, fontStyle?.container));

@@ -387,7 +387,8 @@ async function rebalancePair(left, right, measure) {
     const leftBlocks = blocks.slice(0, split);
     const rightBlocks = blocks.slice(split);
     if (hasHeadingOrphan(leftBlocks) || hasHeadingOrphan(rightBlocks)) continue;
-    const [leftMeasure, rightMeasure] = await Promise.all([measure(leftBlocks), measure(rightBlocks)]);
+    const leftMeasure = await measure(leftBlocks);
+    const rightMeasure = await measure(rightBlocks);
     if (!leftMeasure.fits || !rightMeasure.fits) continue;
     candidates.push({
       split,

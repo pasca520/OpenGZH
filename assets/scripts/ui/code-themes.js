@@ -501,6 +501,12 @@ const LEGACY_THEME_ALIASES = {
 export const DEFAULT_CODE_THEME = 'one-dark';
 export const FOLLOW_THEME_CODE_STYLE = 'follow-theme';
 
+/**
+ * 精选代码主题：下拉列表仅展示这些（「跟随主题风格」+ 精选 = 共 6 项）。
+ * CODE_THEMES 全量数据仍保留，保证已保存的旧 currentCodeTheme 可正常解析与渲染。
+ */
+export const CURATED_CODE_THEME_KEYS = ['one-dark', 'monokai', 'dracula', 'solarized-light', 'nord'];
+
 function resolveThemeKey(key) {
   if (!key) return null;
   if (CODE_THEMES[key]) return key;
@@ -640,11 +646,11 @@ export function getCodeThemeList() {
       description: '默认的文章样式风格',
       preview: createCodeThemePreview(followPreviewTheme)
     },
-    ...Object.entries(CODE_THEMES).map(([key, value]) => ({
+    ...CURATED_CODE_THEME_KEYS.filter((key) => CODE_THEMES[key]).map((key) => ({
       key,
-      name: value.name,
-      description: value.description,
-      preview: createCodeThemePreview(value)
+      name: CODE_THEMES[key].name,
+      description: CODE_THEMES[key].description,
+      preview: createCodeThemePreview(CODE_THEMES[key])
     }))
   ];
 }

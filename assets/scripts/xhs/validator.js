@@ -7,7 +7,7 @@
 
 import { XHS_LOGICAL_WIDTH, XHS_LOGICAL_HEIGHT } from './constants.js';
 
-export const XHS_MIN_BODY_FONT = 22;
+export const XHS_MIN_BODY_FONT = 18;
 export const XHS_MIN_TABLE_CODE_FONT = 16;
 export const XHS_MIN_FOOTER_FONT = 14;
 export const XHS_MIN_CONTRAST = 4.5;

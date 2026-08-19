@@ -22,6 +22,12 @@ OpenGZH 是一个面向微信公众号排版的纯前端 Markdown 编辑器。
 4. 删除文档走确认弹窗流程；删除最后一篇后会自动新建空白文档
 5. About 页面与样式已拆分：`about.html` + `assets/styles/about.css`
 6. 图片链路为：压缩 + IndexedDB + `img://` 协议 + 复制时转 Base64
+7. 样式覆盖层已实现（见 `docs/STYLE-OVERRIDE-DESIGN.md`）：
+   - 核心模块 `assets/scripts/core/style-override.js`：`mergeTheme`（主题 ⊗ 文档覆盖）、L3 盒子内联化 `applyBlockStyles`、`{.class}` 标记插件、front matter 序列化/解析
+   - 文档级覆盖存于 `documents[].styleOverride`（可选字段，缺省 `{}`，向后兼容）
+   - 入口在预览工具栏「排版」下拉内的「样式覆盖」分区（L1 主题色/排版参数、L2 标题/引用/表格/分割线、L3 盒子库、样式刷子、还原模板默认；无独立「样式」按钮）；下拉内代码主题卡片保持紧凑（3 列）
+   - 预览与「复制到公众号」共用同一 merged 样式配置；导出 MD 前置 `opengzh-style` front matter，导入 MD 时解析恢复
+   - `{.ogzh-info}` 等行尾标记需与目标段落在同一段落内（无空行）
 
 ## 关键不变量（必须保持）
 

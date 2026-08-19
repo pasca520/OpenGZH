@@ -10,7 +10,7 @@
 
   <link rel="icon" type="image/svg+xml" href="assets/images/logo.svg?v=1">
   <link rel="stylesheet" href="assets/styles/base.css?v=1">
-  <link rel="stylesheet" href="assets/styles/editor.css?v=10">
+  <link rel="stylesheet" href="assets/styles/editor.css?v=11">
   <link rel="stylesheet" href="assets/styles/panel.css?v=1">
   <link rel="stylesheet" href="assets/styles/cover.css?v=1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.25/dist/katex.min.css">
@@ -32,7 +32,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;500;600;700&family=LXGW+WenKai:wght@400;700&family=ZCOOL+XiaoWei&family=ZCOOL+KuaiLe&family=ZCOOL+QingKe+HuangYou&family=Ma+Shan+Zheng&family=Liu+Jian+Mao+Cao&family=Long+Cang&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/styles/xhs.css?v=4">
+  <link rel="stylesheet" href="assets/styles/xhs.css?v=6">
 </head>
 <body>
   <div id="app">
@@ -619,7 +619,7 @@
                     {{ xhsExporting ? '正在导出…' : '下载全部 ZIP' }}
                   </button>
                 </div>
-                <span v-if="xhsWarning" class="xhs-warning" role="alert">{{ xhsWarning }}</span>
+                <span v-if="contentOutputMode === 'image' && xhsWarning" class="xhs-warning" role="alert">{{ xhsWarning }}</span>
 
                 <!-- Template Picker (replaces old header 主题 button) -->
                 <div class="preview-picker-trigger" v-if="contentOutputMode === 'text' && renderedContent">
@@ -693,6 +693,86 @@
                         </div>
                       </div>
 
+                      <!-- Reading Spacing -->
+                      <div class="misc-panel-section">
+                        <div class="code-panel-section-title">阅读间距</div>
+                        <div class="typography-spacing-stack">
+                          <div class="typography-spacing-row">
+                            <div class="typography-spacing-label">行间距</div>
+                            <div class="misc-button-grid typography-spacing-grid">
+                              <button
+                                v-for="option in lineHeightOptions"
+                                :key="`line-height-${option.value}`"
+                                class="segmented-option-btn compact"
+                                :class="{ active: styleParamPresetValue('lineHeight') === option.value }"
+                                @click="setStyleParamPreset('lineHeight', option.value)"
+                              >
+                                <span>{{ option.label }}</span>
+                                <small>{{ option.meta }}</small>
+                              </button>
+                            </div>
+                          </div>
+
+                          <div class="typography-spacing-row">
+                            <div class="typography-spacing-label">字间距</div>
+                            <div class="misc-button-grid typography-spacing-grid typography-spacing-grid-wide">
+                              <button
+                                v-for="option in letterSpacingOptions"
+                                :key="`letter-spacing-${option.value}`"
+                                class="segmented-option-btn compact"
+                                :class="{ active: styleParamPresetValue('letterSpacing') === option.value }"
+                                @click="setStyleParamPreset('letterSpacing', option.value)"
+                              >
+                                <span>{{ option.label }}</span>
+                                <small>{{ option.meta }}</small>
+                              </button>
+                            </div>
+                          </div>
+
+                          <div class="typography-spacing-row">
+                            <div class="typography-spacing-label">正文留白</div>
+                            <div class="misc-button-grid typography-spacing-grid">
+                              <button
+                                v-for="option in contentPaddingOptions"
+                                :key="`content-padding-${option.value}`"
+                                class="segmented-option-btn compact"
+                                :class="{ active: styleParamPresetValue('contentPaddingX') === option.value }"
+                                @click="setStyleParamPreset('contentPaddingX', option.value)"
+                              >
+                                <span>{{ option.label }}</span>
+                                <small>{{ option.meta }}</small>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <details class="typography-more">
+                        <summary>
+                          <span>
+                            <strong>更多排版选项</strong>
+                            <small>图片、代码、引用与结尾</small>
+                          </span>
+                          <svg class="lucide lucide-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+                        </summary>
+                        <div class="typography-more-content">
+                      <!-- Image Effects -->
+                      <div class="misc-panel-section">
+                        <div class="code-panel-section-title">图片效果</div>
+                        <div class="misc-button-grid image-effect-grid">
+                          <button
+                            v-for="option in imageEffectOptions"
+                            :key="`image-effect-${option.value}`"
+                            class="segmented-option-btn image-effect-option"
+                            :class="{ active: displaySettings.imageEffect === option.value }"
+                            @click="setImageEffect(option.value)"
+                          >
+                            <span>{{ option.label }}</span>
+                            <small>{{ option.meta }}</small>
+                          </button>
+                        </div>
+                      </div>
+
                       <!-- Code Block Theme -->
                       <div class="misc-panel-section">
                         <div class="code-panel-section-title">代码块样式</div>
@@ -733,32 +813,11 @@
                         </div>
                       </div>
 
-                      <!-- Image Effects -->
+                      <!-- Quote Style -->
                       <div class="misc-panel-section">
-                        <div class="code-panel-section-title">图片效果</div>
-                        <div class="misc-setting-row">
-                          <div class="misc-setting-label">模式</div>
-                          <div class="misc-button-grid misc-button-grid-dual">
-                            <button
-                              v-for="option in imageStyleModeOptions"
-                              :key="`image-style-mode-${option.value}`"
-                              class="segmented-option-btn"
-                              :class="{ active: displaySettings.imageStyleMode === option.value }"
-                              @click="setImageStyleMode(option.value)"
-                            >
-                              <span>{{ option.label }}</span>
-                              <small>{{ option.meta }}</small>
-                            </button>
-                          </div>
-                        </div>
-                        <div class="misc-button-grid image-effect-grid">
-                          <button
-                            v-for="option in imageEffectOptions"
-                            :key="`image-effect-${option.value}`"
-                            class="segmented-option-btn image-effect-option"
-                            :class="{ active: displaySettings.imageEffect === option.value }"
-                            @click="setImageEffect(option.value)"
-                          >
+                        <div class="code-panel-section-title">引用风格</div>
+                        <div class="misc-button-grid misc-button-grid-dual">
+                          <button v-for="option in quotePresetOptions" :key="`quote-${option.value}`" class="segmented-option-btn" :class="{ active: quotePreset === option.value }" @click="setQuotePreset(option.value)">
                             <span>{{ option.label }}</span>
                             <small>{{ option.meta }}</small>
                           </button>
@@ -782,6 +841,9 @@
                         </div>
                         <p class="misc-panel-note">结尾动效在预览与复制中均保留：复制到公众号时自动生成 GIF 动图，公众号后台可正常播放；「经典」为静态样式。</p>
                       </div>
+                        </div>
+                      </details>
+
                     </div>
                   </div>
                 </div>
@@ -852,7 +914,14 @@
             </div>
 
             <!-- 封面设置面板（图片模式） -->
-            <div class="xhs-cover-panel" v-if="contentOutputMode === 'image' && xhsShowCoverPanel">
+            <div id="xhs-cover-editor" class="xhs-cover-panel" v-if="contentOutputMode === 'image' && xhsShowCoverPanel">
+              <div class="xhs-cover-panel-header">
+                <div>
+                  <strong>自定义封面</strong>
+                  <span>仅影响图片模式封面</span>
+                </div>
+                <button class="xhs-cover-panel-close" type="button" aria-label="关闭封面编辑" @click="xhsShowCoverPanel = false">×</button>
+              </div>
               <div class="xhs-cover-field">
                 <label for="xhs-cover-title">封面标题</label>
                 <input id="xhs-cover-title" type="text" :value="activeXhsSettings.cover.titleOverride" placeholder="跟随 Markdown" @input="updateActiveXhsSettings({ cover: { titleOverride: $event.target.value } })">
@@ -871,6 +940,11 @@
               </label>
               <div class="xhs-cover-field">
                 <span class="xhs-cover-label">封面图片</span>
+                <div class="xhs-cover-upload-row">
+                  <button class="xhs-cover-upload" type="button" @click="$refs.xhsCoverImageUpload.click()">上传独立封面</button>
+                  <span>支持 JPG、PNG、WebP，最大 10MB</span>
+                </div>
+                <input ref="xhsCoverImageUpload" class="xhs-cover-file-input" type="file" accept="image/*" @change="handleXhsCoverUpload">
                 <div class="xhs-cover-candidates" v-if="xhsCoverCandidates.length">
                   <button
                     v-for="candidate in xhsCoverCandidates"
@@ -952,6 +1026,14 @@
                       <div class="xhs-card-shell-label">
                         <div class="xhs-shell-primary">
                           <button class="xhs-shell-select" :class="{ active: xhsSelectedPageId === page.id }" :aria-label="'定位到第 ' + page.pageNumber + ' 页'" @click="selectXhsPage(page.id)">{{ page.kind === 'cover' ? '封面' : String(page.pageNumber).padStart(2, '0') }}</button>
+                          <button
+                            v-if="page.kind === 'cover'"
+                            class="xhs-shell-edit"
+                            type="button"
+                            aria-controls="xhs-cover-editor"
+                            :aria-expanded="xhsShowCoverPanel ? 'true' : 'false'"
+                            @click="xhsShowCoverPanel = true"
+                          >编辑封面</button>
                           <button
                             v-if="xhsPreviewMode === 'horizontal' && index > 0 && xhsSelectedPageId === page.id && !page.manualBreakBefore"
                             class="xhs-shell-break"
@@ -1040,6 +1122,6 @@
     </template>
   </div>
 
-  <script type="module" src="assets/scripts/main.js?v=10"></script>
+  <script type="module" src="assets/scripts/main.js?v=12"></script>
 </body>
 </html>

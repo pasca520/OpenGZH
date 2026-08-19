@@ -5,6 +5,7 @@
  */
 
 import { normalizeXhsSettings } from '../xhs/constants.js';
+import { normalizeStyleOverride } from '../core/style-override.js';
 
 const KEY_STYLE = 'currentStyle';
 const KEY_CONTENT = 'markdownInput';
@@ -99,7 +100,8 @@ function normalizeDocument(doc, index = 0) {
     updatedAt,
     sortOrder: typeof doc.sortOrder === 'number' ? doc.sortOrder : index,
     dirty: Boolean(doc.dirty),
-    xhs: normalizeXhsSettings(doc.xhs)
+    xhs: normalizeXhsSettings(doc.xhs),
+    styleOverride: normalizeStyleOverride(doc.styleOverride)
   };
 }
 

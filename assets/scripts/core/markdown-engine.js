@@ -3,6 +3,8 @@
  * @module markdown-engine
  */
 
+import { registerAttrClasses } from './style-override.js';
+
 const EMPHASIS_MARKERS = new Set([0x2A, 0x5F, 0x7E]);
 
 function isCjkLetter(charCode) {
@@ -107,6 +109,7 @@ export function createMarkdownEngine() {
 
   patchMarkdownScanner(md);
   registerMathPlugin(md);
+  registerAttrClasses(md);
 
   md.renderer.rules.fence = (tokens, idx) => {
     const token = tokens[idx];

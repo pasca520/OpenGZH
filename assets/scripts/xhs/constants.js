@@ -32,9 +32,9 @@ export const XHS_DENSITIES = ['relaxed', 'standard', 'compact'];
 
 /** Density presets in logical px. */
 export const XHS_DENSITY_PRESETS = {
-  relaxed: { bodySize: 22, lineHeight: 1.65, blockGap: 18 },
-  standard: { bodySize: 20, lineHeight: 1.55, blockGap: 14 },
-  compact: { bodySize: 18, lineHeight: 1.48, blockGap: 10 }
+  relaxed: { bodySize: 20, lineHeight: 1.55, blockGap: 14 },
+  standard: { bodySize: 18, lineHeight: 1.45, blockGap: 10 },
+  compact: { bodySize: 18, lineHeight: 1.35, blockGap: 6 }
 };
 
 const clamp = (value, min, max, fallback) => {

@@ -31,9 +31,9 @@ describe('xhs settings', () => {
 
   it('uses reading-first density presets and a separate series suggestion limit', () => {
     expect(XHS_DENSITY_PRESETS).toEqual({
-      relaxed: { bodySize: 22, lineHeight: 1.65, blockGap: 18 },
-      standard: { bodySize: 20, lineHeight: 1.55, blockGap: 14 },
-      compact: { bodySize: 18, lineHeight: 1.48, blockGap: 10 }
+      relaxed: { bodySize: 20, lineHeight: 1.55, blockGap: 14 },
+      standard: { bodySize: 18, lineHeight: 1.45, blockGap: 10 },
+      compact: { bodySize: 18, lineHeight: 1.35, blockGap: 6 }
     });
     expect(XHS_SERIES_SUGGESTION_LIMIT).toBe(12);
   });

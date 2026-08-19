@@ -836,3 +836,158 @@
     grid-template-columns: repeat(2, minmax(128px, 1fr));
   }
 }
+
+/* ── 样式覆盖（合入排版下拉，见 docs/STYLE-OVERRIDE-DESIGN.md）── */
+.typo-section-heading {
+  margin: 2px 0 0;
+  padding-top: var(--space-6);
+  border-top: 1px dashed var(--color-border);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  letter-spacing: 0.5px;
+}
+
+/* 排版下拉内：代码主题紧凑化（仅作用于 typo-dropdown，不影响其他区域） */
+.typo-dropdown .code-theme-grid-inline {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.typo-dropdown .code-theme-card-compact {
+  gap: 4px;
+  padding: 6px;
+}
+
+.typo-dropdown .code-theme-card-compact .code-theme-name {
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.typo-dropdown .code-theme-preview-compact {
+  min-height: 40px;
+  border-radius: 4px;
+}
+
+.typo-dropdown .code-theme-preview-compact .code-theme-preview-topbar {
+  display: none;
+}
+
+.typo-dropdown .code-theme-preview-compact .code-theme-preview-code {
+  padding: 5px 7px 6px;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+/* 排版下拉内：行内刷子按钮 */
+.misc-button-row .segmented-option-btn.style-inline-btn {
+  flex-direction: row;
+  gap: 4px;
+  padding: 6px 10px;
+  min-width: 0;
+}
+
+.style-color-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.style-color-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.style-color-item span {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.style-color-item input[type="color"],
+.style-inline-row input[type="color"] {
+  width: 36px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  flex: none;
+}
+
+.style-inline-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.style-inline-btn {
+  min-width: auto !important;
+  padding: 5px 10px;
+}
+
+.misc-style-number {
+  width: 76px;
+  height: 30px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 0 8px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+}
+
+.style-box-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.style-box-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: border-color 150ms ease, color 150ms ease, background 150ms ease;
+}
+
+.style-box-btn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.style-box-btn svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.style-danger-btn {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.style-danger-btn:hover {
+  background: #fef2f2;
+}
+
+@media (max-width: 1024px) {
+  .style-color-grid,
+  .style-box-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

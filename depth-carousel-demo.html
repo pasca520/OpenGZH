@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DepthCarousel Demo — Vue 3 移植 · 无 React / 无 gsap</title>
+  <meta name="description" content="React Bits DepthCarousel 组件的 Vue 3 零依赖移植版演示页">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="assets/styles/depth-carousel.css">
+  <style>
+    :root {
+      color-scheme: dark;
+      --demo-bg: #07080b;
+      --demo-panel: rgba(255, 255, 255, 0.05);
+      --demo-border: rgba(255, 255, 255, 0.1);
+      --demo-text: #e8eaf0;
+      --demo-muted: #8a90a0;
+      --demo-accent: #6ea8fe;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(1200px 600px at 50% -10%, rgba(80, 120, 220, 0.14), transparent 60%),
+        var(--demo-bg);
+      color: var(--demo-text);
+      font-family: "Plus Jakarta Sans", "Noto Sans SC", ui-sans-serif, system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .demo {
+      width: min(1080px, 94vw);
+      padding: 40px 0 48px;
+    }
+    .demo-header { text-align: center; margin-bottom: 28px; }
+    .demo-header h1 {
+      margin: 0 0 6px;
+      font-size: 26px;
+      letter-spacing: -0.02em;
+      font-weight: 700;
+    }
+    .demo-header p {
+      margin: 0;
+      color: var(--demo-muted);
+      font-size: 13.5px;
+    }
+    .demo-header p code {
+      color: var(--demo-accent);
+      background: rgba(110, 168, 254, 0.1);
+      border: 1px solid rgba(110, 168, 254, 0.25);
+      border-radius: 6px;
+      padding: 1px 6px;
+      font-size: 12.5px;
+    }
+    .demo-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 12px;
+      font-size: 12px;
+      color: #9be8b7;
+      background: rgba(64, 190, 120, 0.1);
+      border: 1px solid rgba(64, 190, 120, 0.3);
+      border-radius: 999px;
+      padding: 3px 10px;
+    }
+    .demo-stage {
+      position: relative;
+      height: 520px;
+      border-radius: 20px;
+      border: 1px solid var(--demo-border);
+      background: rgba(255, 255, 255, 0.02);
+      overflow: hidden;
+    }
+    .demo-stage::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+      background-size: 36px 36px;
+      pointer-events: none;
+    }
+    .demo-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    .demo-controls button {
+      font: inherit;
+      font-size: 13px;
+      color: var(--demo-text);
+      background: var(--demo-panel);
+      border: 1px solid var(--demo-border);
+      border-radius: 10px;
+      padding: 8px 14px;
+      cursor: pointer;
+      transition: border-color 0.2s ease, background 0.2s ease;
+    }
+    .demo-controls button:hover { border-color: rgba(255, 255, 255, 0.28); }
+    .demo-controls button.is-on {
+      background: rgba(110, 168, 254, 0.16);
+      border-color: var(--demo-accent);
+      color: #cfe2ff;
+    }
+    .demo-status {
+      margin-top: 14px;
+      text-align: center;
+      font-size: 13px;
+      color: var(--demo-muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .demo-status b { color: var(--demo-text); font-weight: 600; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/vue@3.4.15/dist/vue.global.prod.js"></script>
+</head>
+<body>
+  <main class="demo">
+    <header class="demo-header">
+      <div class="demo-badge">✓ Vue 3 移植 · 零依赖（无 React / 无 gsap）</div>
+      <h1>DepthCarousel</h1>
+      <p>React Bits 深度轮播 · <code>requestAnimationFrame</code> 补间等价替代 gsap · 默认双侧扇形（焦点居中，左右均有卡片）</p>
+    </header>
+
+    <section class="demo-stage" id="app"></section>
+
+    <div class="demo-controls" id="controls">
+      <button id="btn-autoplay" type="button">自动播放：开</button>
+      <button id="btn-loop" type="button">循环：开</button>
+      <button id="btn-direction" type="button">倾斜方向：右</button>
+      <button id="btn-symmetric" type="button">双侧扇形：开</button>
+    </div>
+
+    <div class="demo-status" id="status">当前：—</div>
+  </main>
+
+  <script type="module">
+    import DepthCarousel from './assets/scripts/components/DepthCarousel.js';
+
+    const { createApp, h, reactive } = window.Vue;
+
+    const demoItems = [
+      { image: 'https://picsum.photos/seed/depth-a/800/1000', alt: '晨光' },
+      { image: 'https://picsum.photos/seed/depth-b/800/1000', alt: '山脊' },
+      { image: 'https://picsum.photos/seed/depth-c/800/1000', alt: '海雾' },
+      { image: 'https://picsum.photos/seed/depth-d/800/1000', alt: '沙丘' },
+      { image: 'https://picsum.photos/seed/depth-e/800/1000', alt: '极夜' }
+    ];
+
+    const cfg = reactive({ autoplay: true, loop: true, tiltDirection: 'right', symmetric: true });
+    const statusEl = document.getElementById('status');
+    const btnAutoplay = document.getElementById('btn-autoplay');
+    const btnLoop = document.getElementById('btn-loop');
+    const btnDirection = document.getElementById('btn-direction');
+    const btnSymmetric = document.getElementById('btn-symmetric');
+
+    const syncButtons = () => {
+      btnAutoplay.textContent = `自动播放：${cfg.autoplay ? '开' : '关'}`;
+      btnAutoplay.classList.toggle('is-on', cfg.autoplay);
+      btnLoop.textContent = `循环：${cfg.loop ? '开' : '关'}`;
+      btnLoop.classList.toggle('is-on', cfg.loop);
+      btnDirection.textContent = `倾斜方向：${cfg.tiltDirection === 'left' ? '左' : '右'}`;
+      btnDirection.classList.toggle('is-on', cfg.tiltDirection === 'left');
+      btnSymmetric.textContent = `双侧扇形：${cfg.symmetric ? '开' : '关'}`;
+      btnSymmetric.classList.toggle('is-on', cfg.symmetric);
+    };
+    btnAutoplay.addEventListener('click', () => { cfg.autoplay = !cfg.autoplay; syncButtons(); });
+    btnLoop.addEventListener('click', () => { cfg.loop = !cfg.loop; syncButtons(); });
+    btnDirection.addEventListener('click', () => {
+      cfg.tiltDirection = cfg.tiltDirection === 'right' ? 'left' : 'right';
+      syncButtons();
+    });
+    btnSymmetric.addEventListener('click', () => {
+      cfg.symmetric = !cfg.symmetric;
+      syncButtons();
+    });
+    syncButtons();
+
+    const App = {
+      setup() {
+        const onChange = (idx, item) => {
+          statusEl.innerHTML = `当前：<b>${item?.alt || 'Slide ' + (idx + 1)}</b>（index ${idx}）`;
+        };
+        return () =>
+          h('div', { style: { height: '520px', position: 'relative' } }, [
+            h(DepthCarousel, {
+              items: demoItems,
+              depth: 220,
+              spread: 90,
+              tilt: 22,
+              tiltDirection: cfg.tiltDirection,
+              perspective: 1400,
+              visibleCards: 4,
+              falloff: 0.2,
+              blur: 6,
+              autoplay: cfg.autoplay,
+              loop: cfg.loop,
+              symmetric: cfg.symmetric,
+              onChange
+            })
+          ]);
+      }
+    };
+
+    createApp(App).mount('#app');
+  </script>
+</body>
+</html>

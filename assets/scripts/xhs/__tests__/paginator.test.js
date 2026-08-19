@@ -69,6 +69,29 @@ describe('xhs paginator', () => {
     expect(content.flatMap((page) => page.blocks).map((item) => item.id)).toEqual(blocks.map((item) => item.id));
   });
 
+  it('serializes rebalancing measurements for the shared DOM card', async () => {
+    nextOffset = 0;
+    const blocks = [block('paragraph', 2), block('paragraph', 1), block('paragraph', 1)];
+    let activeMeasurements = 0;
+    let measurementsOverlapped = false;
+    const measure = async (candidate) => {
+      activeMeasurements += 1;
+      if (activeMeasurements > 1) measurementsOverlapped = true;
+      await Promise.resolve();
+      const result = await measureThreeUnits(candidate);
+      activeMeasurements -= 1;
+      return result;
+    };
+
+    await paginateXhsDocument(
+      { meta: { title: 'T', summary: 'S' }, blocks, headings: [] },
+      settings,
+      { fits: fitsThreeUnits, measure }
+    );
+
+    expect(measurementsOverlapped).toBe(false);
+  });
+
   it('handles empty markdown and a document with only an h1', async () => {
     const empty = await paginateXhsDocument({ meta: { title: '', summary: '' }, blocks: [], headings: [] }, settings, { fits: fitsThreeUnits });
     expect(empty.map((page) => page.kind)).toEqual(['cover']);

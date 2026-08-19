@@ -1,5 +1,15 @@
 import { expect, it } from 'vitest';
-import { contrastRatio, parseCssColor, validateXhsCard, validateXhsSet } from '../validator.js';
+import {
+  XHS_MIN_BODY_FONT,
+  contrastRatio,
+  parseCssColor,
+  validateXhsCard,
+  validateXhsSet
+} from '../validator.js';
+
+it('accepts the 18px logical body-size floor used by dense cards', () => {
+  expect(XHS_MIN_BODY_FONT).toBe(18);
+});
 
 it('reports page-scoped overflow, font, media and contrast issues', async () => {
   const snapshot = {

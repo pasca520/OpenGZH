@@ -8,6 +8,23 @@ import { ImageCompressor } from './core/image-compressor.js';
 import { createMarkdownEngine } from './core/markdown-engine.js';
 import { createTurndownService, createPasteHandler } from './core/paste-handler.js';
 import { renderPipeline } from './core/render-pipeline.js';
+import {
+  mergeTheme,
+  normalizeStyleOverride,
+  serializeStyleFrontMatter,
+  parseStyleFrontMatter,
+  insertBoxMarkdown,
+  getBoxName,
+  TOKEN_KEYS,
+  PARAM_DEFS,
+  BOX_DEFS,
+  BRUSH_CLASSES,
+  getMergedDeclaration,
+  readParamFromStyles,
+  parseDeclarations,
+  serializeDeclarations,
+  normalizeTokenHex
+} from './core/style-override.js';
 import { copyToWechat } from './export/clipboard-exporter.js';
 import { getCategorizedThemes, getStyleName, isRecommended, getStarredStyles, toggleStarStyle } from './ui/theme-manager.js';
 import {
@@ -52,7 +69,6 @@ import {
   createFileMapSource,
   resolveLocalImages,
 } from './core/markdown-image-resolver.js';
-
 const { createApp, ref, reactive, watch, nextTick, onMounted, computed } = window.Vue;
 
 const UNTITLED_PREFIX = '未命名文档';
@@ -116,6 +132,23 @@ const activeTab = ref('editor');
 const showTemplatePicker = ref(false);
 const showTypoPicker = ref(false);
 const showXhsSettings = ref(false);
+
+// ── Style Override (样式覆盖层，见 docs/STYLE-OVERRIDE-DESIGN.md) ──
+const styleBrushMode = ref(false);
+const brushSource = ref('');
+const brushApplying = ref(false);
+const styleTokenDefs = TOKEN_KEYS.map((key) => ({
+  key,
+  label: { accent: '主题色', body: '正文色', muted: '弱化色', line: '分割线色' }[key] || key
+}));
+const styleParamDefs = PARAM_DEFS;
+const styleBoxDefs = BOX_DEFS;
+const quotePresetOptions = [
+  { value: 'theme', label: '跟随主题', meta: '默认引用样式' },
+  { value: 'bar', label: '左线条', meta: '强调左边线' },
+  { value: 'card', label: '底色卡片', meta: '浅色底+左线' },
+  { value: 'top', label: '上边框', meta: '顶部粗线' }
+];
 
 // ── Cover Editor State ──
 const coverTemplateId = ref('pure-white');
@@ -300,6 +333,25 @@ const fontFamilyOptions = [
   { label: '衬线', value: 'serif', meta: '长文质感' },
   { label: '等宽', value: 'mono', meta: '技术文档' }
 ];
+const lineHeightOptions = [
+  { label: '跟随模板', value: 'theme', meta: '模板内置' },
+  { label: '紧凑', value: 1.5, meta: '1.5 倍' },
+  { label: '标准', value: 1.75, meta: '1.75 倍 · 推荐' },
+  { label: '舒展', value: 2, meta: '2.0 倍' }
+];
+const letterSpacingOptions = [
+  { label: '跟随模板', value: 'theme', meta: '模板内置' },
+  { label: '无间距', value: 0, meta: '0px' },
+  { label: '清晰', value: 1, meta: '1px' },
+  { label: '标准', value: 1.5, meta: '1.5px · 推荐' },
+  { label: '宽松', value: 2, meta: '2px' }
+];
+const contentPaddingOptions = [
+  { label: '跟随模板', value: 'theme', meta: '模板内置' },
+  { label: '紧凑', value: 5, meta: '左右 5px' },
+  { label: '标准', value: 10, meta: '左右 10px · 推荐' },
+  { label: '舒展', value: 16, meta: '左右 16px' }
+];
 const imageStyleModeOptions = [
   { label: '默认', value: 'theme', meta: '跟随主题' },
   { label: '自定义', value: 'custom', meta: '覆盖样式' }
@@ -422,7 +474,8 @@ function buildDocument({
   updatedAt = createdAt,
   sortOrder = documents.value.length,
   dirty = false,
-  xhs = createDefaultXhsSettings()
+  xhs = createDefaultXhsSettings(),
+  styleOverride = {}
 } = {}) {
   return {
     id,
@@ -433,7 +486,8 @@ function buildDocument({
     updatedAt,
     sortOrder,
     dirty,
-    xhs: normalizeXhsSettings(xhs)
+    xhs: normalizeXhsSettings(xhs),
+    styleOverride: normalizeStyleOverride(styleOverride)
   };
 }
 
@@ -672,7 +726,12 @@ async function buildXhsPages(markdown, settings) {
 }
 
 async function refreshXhsCoverCandidates(images) {
-  const hydrated = await Promise.all((images || []).map(async (image) => ({
+  const candidates = [...(images || [])];
+  const currentCoverRef = activeXhsSettings.value.cover.imageRef;
+  if (currentCoverRef && !candidates.some((image) => image.src === currentCoverRef)) {
+    candidates.unshift({ src: currentCoverRef, alt: '自定义封面' });
+  }
+  const hydrated = await Promise.all(candidates.map(async (image) => ({
     ...image,
     url: await resolveXhsPreviewUrl(image.src)
   })));
@@ -842,6 +901,8 @@ function setContentOutputMode(mode) {
     clearTimeout(xhsPaginationTimer);
     clearTimeout(xhsScrollSelectionTimer);
     xhsIsPaginating.value = false;
+    xhsWarning.value = '';
+    xhsShowCoverPanel.value = false;
     revokeXhsPreviewUrls();
     xhsCoverCandidates.value = [];
   }
@@ -997,6 +1058,7 @@ async function renderMarkdown() {
       md,
       imageStore,
       styleConfig,
+      styleOverride: getActiveDocument()?.styleOverride,
       codeTheme: getResolvedCodeTheme(),
       displaySettings: displaySettings.value
     });
@@ -1032,12 +1094,13 @@ function switchDocument(documentId) {
   scheduleXhsPagination(0);
 }
 
-function createNewDocument(content = '', manualTitle = '') {
+function createNewDocument(content = '', manualTitle = '', extra = {}) {
   const doc = buildDocument({
     manualTitle,
     title: manualTitle || getUntitledTitle(),
     content,
-    sortOrder: documents.value.length
+    sortOrder: documents.value.length,
+    ...(extra || {})
   });
 
   documents.value.push(doc);
@@ -1160,15 +1223,15 @@ function moveDocument(documentId, direction) {
   persistDocumentState();
 }
 
-async function handleImageUpload(file, textarea) {
+async function handleImageUpload(file, textarea, { insert = true } = {}) {
   if (!file.type.startsWith('image/')) {
     toast.show('请上传图片文件', 'error');
-    return;
+    return null;
   }
 
   if (file.size > 10 * 1024 * 1024) {
     toast.show('图片大小不能超过 10MB', 'error');
-    return;
+    return null;
   }
 
   const imageName = file.name.replace(/\.[^/.]+$/, '') || '图片';
@@ -1190,20 +1253,25 @@ async function handleImageUpload(file, textarea) {
       mimeType: compressedBlob.type || file.type
     });
 
-    const markdownImage = `![${imageName}](img://${imageId})`;
-    insertAtCursor(markdownImage, {
-      textarea,
-      selectionStart: markdownImage.length
-    });
+    const imageRef = `img://${imageId}`;
+    if (insert) {
+      const markdownImage = `![${imageName}](${imageRef})`;
+      insertAtCursor(markdownImage, {
+        textarea,
+        selectionStart: markdownImage.length
+      });
+    }
 
     if (compressionRatio > 10) {
       toast.show(`已保存 (${ImageCompressor.formatSize(originalSize)} → ${ImageCompressor.formatSize(compressedSize)})`, 'success');
     } else {
       toast.show(`已保存 (${ImageCompressor.formatSize(compressedSize)})`, 'success');
     }
+    return imageRef;
   } catch (error) {
     console.error('图片处理失败:', error);
     toast.show(`图片处理失败: ${error.message}`, 'error');
+    return null;
   }
 }
 
@@ -1430,14 +1498,20 @@ async function importMarkdownCandidate(candidate, supplementalInput) {
     return;
   }
 
+  // 解析 opengzh front matter（文档级样式覆盖随 MD 文件往返）
+  const parsed = parseStyleFrontMatter(content);
+  const bodyContent = parsed.content;
+  const docExtra = { styleOverride: parsed.styleOverride || {} };
+
   const fileTitle = file.name.replace(/\.(md|markdown)$/i, '');
   if (!imageStore) {
-    createNewDocument(content, fileTitle);
+    createNewDocument(bodyContent, fileTitle, docExtra);
+    if (parsed.styleOverride) toast.show('已导入并恢复文档样式', 'success');
     return;
   }
 
   try {
-    let result = await resolveLocalImages(content, {
+    let result = await resolveLocalImages(bodyContent, {
       source: candidate.source,
       promptForSource: !candidate.skipSourcePrompt,
       imageStore,
@@ -1465,7 +1539,8 @@ async function importMarkdownCandidate(candidate, supplementalInput) {
     }
 
     // CDN 图片保持原样不处理，只有本地路径图片需要解析导入
-    createNewDocument(result.resolvedMarkdown, fileTitle);
+    createNewDocument(result.resolvedMarkdown, fileTitle, docExtra);
+    if (parsed.styleOverride) toast.show('已导入并恢复文档样式', 'success');
     const remainingCount = result.unmatched.length + result.conflicts.length;
     if (remainingCount > 0) {
       const paths = [...result.unmatched, ...result.conflicts].map((item) => item.path).join('、');
@@ -1478,13 +1553,15 @@ async function importMarkdownCandidate(candidate, supplementalInput) {
   } catch (error) {
     console.error('图片解析失败:', error);
     toast.show(`图片解析失败: ${error.message}`, 'error');
-    createNewDocument(content, fileTitle);
+    createNewDocument(bodyContent, fileTitle, docExtra);
+    if (parsed.styleOverride) toast.show('已导入并恢复文档样式', 'success');
   }
 }
 
 function exportMarkdown() {
   const activeDoc = getActiveDocument();
-  const blob = new Blob([markdownInput.value], { type: 'text/markdown' });
+  const frontMatter = serializeStyleFrontMatter(activeDoc?.styleOverride);
+  const blob = new Blob([frontMatter + markdownInput.value], { type: 'text/markdown' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -1552,7 +1629,8 @@ function resetToDefault() {
 }
 
 async function doCopy() {
-  const styleConfig = STYLES[currentStyle.value];
+  // 复制与预览共用同一 merged 样式配置（含文档级覆盖），保证粘贴即所见
+  const styleConfig = mergeTheme(STYLES[currentStyle.value], getActiveDocument()?.styleOverride);
   const success = await copyToWechat({
     renderedHTML: renderedContent.value,
     styleConfig,
@@ -1676,6 +1754,391 @@ function updateImageShadowColor(value) {
 function getTextarea() {
   return document.querySelector('.markdown-input');
 }
+
+// ── Style Override: 状态与更新 ─────────────────────────────
+
+const activeStyleOverride = computed(() => getActiveDocument()?.styleOverride || {});
+
+/** 主题 ⊗ 文档覆盖 = 当前成稿样式配置 */
+function mergedThemeConfig() {
+  const themeConfig = STYLES[currentStyle.value];
+  return themeConfig ? mergeTheme(themeConfig, activeStyleOverride.value) : null;
+}
+
+/** 未带覆盖的主题默认配置（用于「改回默认即撤销覆盖」判定） */
+function baseThemeConfig() {
+  const themeConfig = STYLES[currentStyle.value];
+  return themeConfig ? mergeTheme(themeConfig, null) : null;
+}
+
+function formatParamValueForDisplay(key, value) {
+  const def = PARAM_DEFS.find((d) => d.key === key);
+  if (!def) return value;
+  return Number(Number(value).toFixed(def.precision));
+}
+
+function styleTokenValue(key) {
+  return mergedThemeConfig()?.gzh?.[key] || '#000000';
+}
+
+function styleParamValue(key) {
+  const overridden = activeStyleOverride.value.params?.[key];
+  if (overridden != null) return overridden;
+  const merged = mergedThemeConfig();
+  if (merged) {
+    const value = readParamFromStyles(merged.styles, key);
+    if (value != null) return formatParamValueForDisplay(key, value);
+  }
+  const def = PARAM_DEFS.find((d) => d.key === key);
+  return def ? def.min : 0;
+}
+
+function styleParamPresetValue(key) {
+  const params = activeStyleOverride.value.params || {};
+  return Object.prototype.hasOwnProperty.call(params, key) ? params[key] : 'theme';
+}
+
+/** 深合并更新文档样式覆盖，并触发保存与重渲染 */
+function updateStyleOverride(patch) {
+  const doc = getActiveDocument();
+  if (!doc) return;
+  const base = normalizeStyleOverride(doc.styleOverride);
+  const next = {
+    tokens: patch?.tokens ?? base.tokens,
+    params: patch?.params ?? base.params,
+    elements: patch?.elements ?? base.elements
+  };
+  doc.styleOverride = normalizeStyleOverride(next);
+  markCurrentDocumentDirty();
+  schedulePersistDocumentState();
+  renderMarkdown();
+}
+
+function setStyleToken(key, value) {
+  const normalized = normalizeTokenHex(value);
+  if (!normalized) return;
+  const tokens = { ...(activeStyleOverride.value.tokens || {}) };
+  const original = baseThemeConfig()?.gzh?.[key];
+  if (normalized === original) {
+    delete tokens[key];
+  } else {
+    tokens[key] = normalized;
+  }
+  updateStyleOverride({ tokens });
+}
+
+function setStyleParam(key, value) {
+  const def = PARAM_DEFS.find((d) => d.key === key);
+  if (!def) return;
+  const number = Number(value);
+  if (!Number.isFinite(number)) return;
+  const clamped = Math.min(def.max, Math.max(def.min, number));
+  const rounded = Number(Number(clamped).toFixed(def.precision));
+  const params = { ...(activeStyleOverride.value.params || {}) };
+  const themeValue = readParamFromStyles(baseThemeConfig()?.styles, key);
+  if (themeValue != null && Math.abs(rounded - themeValue) < 1e-9) {
+    delete params[key];
+  } else {
+    params[key] = rounded;
+  }
+  updateStyleOverride({ params });
+}
+
+function setStyleParamPreset(key, value) {
+  if (value !== 'theme') {
+    setStyleParam(key, value);
+    return;
+  }
+  const params = { ...(activeStyleOverride.value.params || {}) };
+  delete params[key];
+  updateStyleOverride({ params });
+}
+
+function clearStyleOverride() {
+  const doc = getActiveDocument();
+  if (!doc) return;
+  doc.styleOverride = {};
+  markCurrentDocumentDirty();
+  schedulePersistDocumentState();
+  renderMarkdown();
+  toast.show('已还原模板默认样式', 'info');
+}
+
+// ── Style Override: L2 元素类级 ────────────────────────────
+
+function elementCss(selector) {
+  return activeStyleOverride.value.elements?.[selector] || '';
+}
+
+function elementDefault(selector, property) {
+  const merged = mergedThemeConfig();
+  return merged ? getMergedDeclaration(merged.styles, selector, property) : null;
+}
+
+function patchMultiElement(selectors, prop, valueOrNull) {
+  const elements = { ...(activeStyleOverride.value.elements || {}) };
+  selectors.forEach((selector) => {
+    const map = parseDeclarations(elements[selector] || '');
+    if (valueOrNull) map[prop] = valueOrNull;
+    else delete map[prop];
+    const cssText = serializeDeclarations(map);
+    if (cssText) elements[selector] = cssText;
+    else delete elements[selector];
+  });
+  updateStyleOverride({ elements });
+}
+
+function resetElement(selector) {
+  const elements = { ...(activeStyleOverride.value.elements || {}) };
+  delete elements[selector];
+  updateStyleOverride({ elements });
+}
+
+/** 整段替换某 selector 的覆盖 CSS（空字符串则删除该覆盖） */
+function setElementCss(selector, cssText) {
+  const elements = { ...(activeStyleOverride.value.elements || {}) };
+  if (cssText) elements[selector] = cssText;
+  else delete elements[selector];
+  updateStyleOverride({ elements });
+}
+
+/** 标题组：字号（h2/h3 同步） */
+function headingFontSizeValue() {
+  const overridden = parseDeclarations(elementCss('h2'))['font-size'];
+  if (overridden) return parseFloat(overridden) || 19;
+  const def = elementDefault('h2', 'font-size');
+  return def ? (parseFloat(def) || 19) : 19;
+}
+
+function setHeadingFontSize(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return;
+  patchMultiElement(['h2', 'h3'], 'font-size', `${number}px !important`);
+}
+
+/** 标题组：颜色跟随主题（默认开）。关闭时落成明确的主题色值。 */
+const headingColorFollow = computed(() => !parseDeclarations(elementCss('h2'))['color']);
+
+function headingColorValue() {
+  const overridden = parseDeclarations(elementCss('h2'))['color'];
+  if (overridden) return normalizeTokenHex(overridden) || '#111111';
+  return mergedThemeConfig()?.gzh?.accent || '#111111';
+}
+
+function setHeadingColorFollow(follow) {
+  if (follow) {
+    patchMultiElement(['h2', 'h3'], 'color', null);
+    return;
+  }
+  const accent = mergedThemeConfig()?.gzh?.accent || '#111111';
+  patchMultiElement(['h2', 'h3'], 'color', `${accent} !important`);
+}
+
+function setHeadingColor(value) {
+  const hex = normalizeTokenHex(value);
+  if (!hex) return;
+  patchMultiElement(['h2', 'h3'], 'color', `${hex} !important`);
+}
+
+/** 标题组：加粗 */
+const headingBold = computed(() => {
+  const overridden = parseDeclarations(elementCss('h2'))['font-weight'];
+  if (overridden) return ['700', '800', '900'].includes(overridden);
+  const def = elementDefault('h2', 'font-weight');
+  return Boolean(def && /\b(700|800|900)\b/.test(def));
+});
+
+function setHeadingBold(bold) {
+  patchMultiElement(['h2', 'h3'], 'font-weight', bold ? '700 !important' : null);
+}
+
+/** 引用组：风格预设（theme / bar / card / top） */
+const quotePreset = computed(() => {
+  const css = parseDeclarations(elementCss('blockquote'));
+  if (css['border-top'] && !/^none\b/i.test(css['border-top'])) return 'top';
+  if (css['background'] && !/^transparent\b/i.test(css['background'])) return 'card';
+  if (css['border-left'] && !/^none\b/i.test(css['border-left'])) return 'bar';
+  return 'theme';
+});
+
+function setQuotePreset(preset) {
+  if (preset === 'theme') {
+    resetElement('blockquote');
+    return;
+  }
+  const gzh = mergedThemeConfig()?.gzh || {};
+  const accent = gzh.accent || '#2563EB';
+  const soft = gzh.soft || '#F5F3F0';
+  const base = 'margin: 0 10px 26px !important; padding: 14px 16px !important; border-radius: 6px !important;';
+  let extra = '';
+  if (preset === 'bar') extra = 'background: transparent !important; border-left: 4px solid ' + accent + ' !important; border-top: none !important;';
+  if (preset === 'card') extra = `background: ${soft} !important; border-left: 4px solid ${accent} !important; border-top: none !important;`;
+  if (preset === 'top') extra = `background: ${soft} !important; border-top: 3px solid ${accent} !important; border-left: none !important;`;
+  setElementCss('blockquote', base + extra);
+}
+
+/** 表格组：表头底色 */
+function tableHeaderColorValue() {
+  const overridden = normalizeTokenHex(parseDeclarations(elementCss('th'))['background']);
+  if (overridden) return overridden;
+  const def = elementDefault('th', 'background');
+  return normalizeTokenHex(def) || '#F5F5F5';
+}
+
+function setTableHeaderColor(value) {
+  const hex = normalizeTokenHex(value);
+  if (!hex) return;
+  patchMultiElement(['th'], 'background', `${hex} !important`);
+}
+
+/** 表格组：表头加粗 */
+const tableHeaderBold = computed(() => {
+  const overridden = parseDeclarations(elementCss('th'))['font-weight'];
+  if (overridden) return ['700', '800', '900'].includes(overridden);
+  const def = elementDefault('th', 'font-weight');
+  return Boolean(def && /\b(700|800|900)\b/.test(def));
+});
+
+function setTableHeaderBold(bold) {
+  patchMultiElement(['th'], 'font-weight', bold ? '700 !important' : null);
+}
+
+/** 表格组：斑马纹 */
+const tableZebra = computed(() => Boolean(elementCss('tbody tr:nth-child(even)')));
+
+function setTableZebra(enabled) {
+  const selector = 'tbody tr:nth-child(even)';
+  if (!enabled) {
+    resetElement(selector);
+    return;
+  }
+  const accent = mergedThemeConfig()?.gzh?.accent || '#2563EB';
+  patchMultiElement([selector], 'background', `${hexToRgbaLocal(accent, 0.05)} !important`);
+}
+
+function hexToRgbaLocal(hex, opacity) {
+  let h = String(hex).replace('#', '');
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+  if (!/^[0-9a-fA-F]{6}$/.test(h)) return `rgba(0, 0, 0, ${opacity})`;
+  return `rgba(${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)}, ${opacity})`;
+}
+
+/** 分割线组 */
+function hrColorValue() {
+  const overridden = normalizeTokenHex(parseDeclarations(elementCss('hr'))['background']);
+  if (overridden) return overridden;
+  const def = elementDefault('hr', 'background');
+  return normalizeTokenHex(def) || '#E4E4E7';
+}
+
+function setHrColor(value) {
+  const hex = normalizeTokenHex(value);
+  if (!hex) return;
+  patchMultiElement(['hr'], 'background', `${hex} !important`);
+}
+
+function hrHeightValue() {
+  const overridden = parseDeclarations(elementCss('hr'))['height'];
+  if (overridden) return parseFloat(overridden) || 1;
+  const def = elementDefault('hr', 'height');
+  return def ? (parseFloat(def) || 1) : 1;
+}
+
+function setHrHeight(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return;
+  patchMultiElement(['hr'], 'height', `${number}px !important`);
+}
+
+// ── Style Override: L3 盒子与样式刷子 ─────────────────────
+
+function insertStyleBox(key) {
+  const snippet = insertBoxMarkdown(key);
+  if (!snippet) return;
+  insertAtCursor(snippet);
+  renderMarkdown();
+}
+
+function toggleStyleBrush() {
+  if (styleBrushMode.value) {
+    styleBrushMode.value = false;
+    brushApplying.value = false;
+    brushSource.value = '';
+    toast.show('已取消样式刷子', 'info');
+    return;
+  }
+  styleBrushMode.value = true;
+  brushApplying.value = false;
+  brushSource.value = '';
+  toast.show('样式刷子：点击预览中带样式的段落进行复制', 'info');
+}
+
+function setBrushSource(element) {
+  const classes = Array.from(element.classList || []).filter((cls) => BRUSH_CLASSES.includes(cls));
+  if (classes.length === 0) {
+    toast.show('该段落没有可复制的盒子样式', 'error');
+    return;
+  }
+  brushSource.value = classes[0];
+  brushApplying.value = true;
+  styleBrushMode.value = false;
+  toast.show(`已复制「${getBoxName(classes[0].replace('ogzh-', ''))}」样式：请把光标移到目标段落，再点「应用样式」`, 'info');
+}
+
+function applyStyleBrush() {
+  if (!brushApplying.value || !brushSource.value) return;
+  const textarea = getTextarea();
+  const { start } = getEditorSelection(textarea);
+  const full = markdownInput.value;
+
+  // 定位光标所在段落行；光标在空行时回退到上一非空行
+  let lineStart = full.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+  let rawEnd = full.indexOf('\n', lineStart);
+  let lineEnd = rawEnd === -1 ? full.length : rawEnd;
+  let lineText = full.slice(lineStart, lineEnd);
+  while (lineText.trim() === '' && lineStart > 0) {
+    const newStart = full.lastIndexOf('\n', lineStart - 2) + 1;
+    const newEnd = full.indexOf('\n', newStart);
+    lineStart = newStart;
+    lineEnd = newEnd === -1 ? full.length : newEnd;
+    lineText = full.slice(lineStart, lineEnd);
+  }
+  if (!lineText.trim()) {
+    toast.show('找不到目标段落，请把光标移到段落内', 'error');
+    return;
+  }
+
+  // 行内已带标记则替换，避免叠加
+  let base = lineText;
+  const existing = base.match(/\s*\{\.[\w-]+(?:\s+\.[\w-]+)*\}\s*$/);
+  if (existing) base = base.replace(/\s*\{\.[\w-]+(?:\s+\.[\w-]+)*\}\s*$/, '');
+
+  const suffix = `\n{.${brushSource.value}}`;
+  const head = full.slice(0, lineStart);
+  const rest = lineEnd >= full.length ? '' : full.slice(lineEnd + 1);
+  const joined = rest ? `\n${rest}` : '\n';
+  markdownInput.value = head + base + suffix + joined;
+
+  brushApplying.value = false;
+  brushSource.value = '';
+  toast.show('已应用样式', 'success');
+
+  nextTick(() => {
+    const target = textarea || getTextarea();
+    if (!target) return;
+    const position = lineStart + base.length + suffix.length;
+    target.focus();
+    target.selectionStart = position;
+    target.selectionEnd = position;
+    syncEditorSelection({ target });
+  });
+}
+
+const brushStatusLabel = computed(() => {
+  if (brushApplying.value) return '应用样式';
+  if (styleBrushMode.value) return '点击预览中的样式段落';
+  return '复制样式';
+});
 
 function syncEditorSelection(event) {
   const textarea = event?.target || getTextarea();
@@ -1847,6 +2310,22 @@ function handleToolbarImageUpload(event) {
   if (!file) return;
   handleImageUpload(file, getTextarea());
   event.target.value = '';
+}
+
+async function handleXhsCoverUpload(event) {
+  const input = event.target;
+  const file = input.files?.[0];
+  if (!file) return;
+  const imageRef = await handleImageUpload(file, null, { insert: false });
+  input.value = '';
+  if (!imageRef) return;
+
+  const url = await resolveXhsPreviewUrl(imageRef);
+  xhsCoverCandidates.value = [
+    { src: imageRef, url, alt: file.name.replace(/\.[^/.]+$/, '') || '自定义封面' },
+    ...xhsCoverCandidates.value.filter((candidate) => candidate.src !== imageRef)
+  ];
+  selectXhsCoverImage(imageRef);
 }
 
 function handleKeydown(event) {
@@ -2628,6 +3107,14 @@ const app = createApp({
         }
       });
 
+      // 样式刷子：预览区点击带样式段落 → 复制其盒子样式（下次点击「应用样式」写入编辑器光标行）
+      document.addEventListener('click', (event) => {
+        if (!styleBrushMode.value) return;
+        if (!event.target.closest('.preview-content')) return;
+        const boxed = event.target.closest('[class*="ogzh-"]');
+        if (boxed) setBrushSource(boxed);
+      });
+
       imageStore = new ImageStore();
       try {
         await imageStore.init();
@@ -2750,6 +3237,9 @@ const app = createApp({
       codeThemeList,
       fontScaleOptions,
       fontFamilyOptions,
+      lineHeightOptions,
+      letterSpacingOptions,
+      contentPaddingOptions,
       imageStyleModeOptions,
       imageEffectOptions,
       endStyleOptions,
@@ -2831,6 +3321,46 @@ const app = createApp({
       getSaveStateClass,
       togglePanel: (name) => panelManager.toggle(name),
 
+      // ── Style Override (样式覆盖层) ──
+      styleTokenDefs,
+      styleParamDefs,
+      styleBoxDefs,
+      quotePresetOptions,
+      styleTokenValue,
+      styleParamValue,
+      styleParamPresetValue,
+      setStyleToken,
+      setStyleParam,
+      setStyleParamPreset,
+      clearStyleOverride,
+      headingFontSizeValue,
+      setHeadingFontSize,
+      headingColorFollow,
+      headingColorValue,
+      setHeadingColorFollow,
+      setHeadingColor,
+      headingBold,
+      setHeadingBold,
+      resetElement,
+      quotePreset,
+      setQuotePreset,
+      tableHeaderColorValue,
+      setTableHeaderColor,
+      tableHeaderBold,
+      setTableHeaderBold,
+      tableZebra,
+      setTableZebra,
+      hrColorValue,
+      setHrColor,
+      hrHeightValue,
+      setHrHeight,
+      insertStyleBox,
+      styleBrushMode,
+      brushApplying,
+      brushStatusLabel,
+      toggleStyleBrush,
+      applyStyleBrush,
+
       // ── XHS Image Mode ──
       XHS_FEATURE_ENABLED,
       XHS_THEME_IDS,
@@ -2869,6 +3399,7 @@ const app = createApp({
       insertXhsPageBeforeBlock,
       removeXhsPageMarker,
       selectXhsCoverImage,
+      handleXhsCoverUpload,
       clearXhsCoverImage,
       updateXhsFocalPoint,
       exportSingleXhsPage,

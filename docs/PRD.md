@@ -310,7 +310,7 @@ OpenGZH/
 ### P1（中期）
 
 - [ ] 图片管理面板（可视化管理 IndexedDB 中的图片）
-- [ ] 自定义正文主题（用户可编辑主题配置）
+- [x] 自定义正文主题（用户可编辑主题配置）——设计稿见 [STYLE-OVERRIDE-DESIGN.md](./STYLE-OVERRIDE-DESIGN.md)，已实现（L1/L2/L3 覆盖层 + 盒子库 + 样式刷子 + front matter 往返）
 - [ ] 自定义代码块主题
 - [ ] 撤销 / 重做功能
 
