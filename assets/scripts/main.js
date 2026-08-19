@@ -1771,6 +1771,23 @@ function closeCardPicker() {
   showCardPicker.value = false;
 }
 
+function formatCardEditFailureReason(reason) {
+  const messages = {
+    'card-not-found': '当前选区不在卡片内，请重新选择卡片内容。',
+    'unknown-style': '卡片样式不存在，请重新选择。'
+  };
+  if (Object.hasOwn(messages, reason)) return messages[reason];
+  if (typeof reason === 'string' && /[\u3400-\u9fff]/.test(reason)) return reason;
+  return '卡片操作失败，请重新选择后重试。';
+}
+
+function reportCardEditFailure(reason, existing) {
+  const message = formatCardEditFailureReason(reason);
+  cardTargetState.value = { ok: false, existing: Boolean(existing), reason: message };
+  toast.show(message, 'error');
+  return false;
+}
+
 async function applySelectedCard(styleId) {
   const source = markdownInput.value;
   const selection = getEditorSelection();
@@ -1779,10 +1796,7 @@ async function applySelectedCard(styleId) {
 
   if (!existing && selection.start !== selection.end) {
     if (!md) {
-      const reason = '编辑器尚未准备好，请稍后重试。';
-      cardTargetState.value = { ok: false, existing: false, reason };
-      toast.show(reason, 'error');
-      return false;
+      return reportCardEditFailure('编辑器尚未准备好，请稍后重试。', false);
     }
     tokens = md.parse(markdownInput.value, {});
   }
@@ -1795,13 +1809,7 @@ async function applySelectedCard(styleId) {
     tokens
   );
   if (!result.ok) {
-    cardTargetState.value = {
-      ok: false,
-      existing: Boolean(existing),
-      reason: result.reason
-    };
-    toast.show(result.reason, 'error');
-    return false;
+    return reportCardEditFailure(result.reason, Boolean(existing));
   }
 
   markdownInput.value = result.markdown;
@@ -1817,17 +1825,12 @@ async function removeSelectedCard() {
   const selection = getEditorSelection();
   const existing = findCardAtSelection(source, selection.start, selection.end);
   if (!existing) {
-    const reason = 'card-not-found';
-    cardTargetState.value = { ok: false, existing: false, reason };
-    toast.show(reason, 'error');
-    return false;
+    return reportCardEditFailure('card-not-found', false);
   }
 
   const result = removeCardEdit(source, selection.start, selection.end);
   if (!result.ok) {
-    cardTargetState.value = { ok: false, existing: true, reason: result.reason };
-    toast.show(result.reason, 'error');
-    return false;
+    return reportCardEditFailure(result.reason, true);
   }
 
   markdownInput.value = result.markdown;

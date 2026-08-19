@@ -371,6 +371,42 @@ describe('card picker editor integration', () => {
     expect(remove).toContain('await restoreEditorSelection(');
   });
 
+  it('maps internal card edit reasons to actionable Chinese messages', () => {
+    const formatReason = sliceBetween(
+      source,
+      'function formatCardEditFailureReason(',
+      'function reportCardEditFailure('
+    );
+    expect(formatReason).toContain(
+      "'card-not-found': '当前选区不在卡片内，请重新选择卡片内容。'"
+    );
+    expect(formatReason).toContain(
+      "'unknown-style': '卡片样式不存在，请重新选择。'"
+    );
+    expect(formatReason).toContain('Object.hasOwn(messages, reason)');
+    expect(formatReason).toMatch(/return\s+reason/);
+    expect(formatReason).toContain('卡片操作失败，请重新选择后重试。');
+  });
+
+  it('routes apply and remove failures through one mapped state and toast path', () => {
+    const reportFailure = sliceBetween(
+      source,
+      'function reportCardEditFailure(',
+      'async function applySelectedCard('
+    );
+    expect(reportFailure).toContain('formatCardEditFailureReason(');
+    expect(reportFailure).toMatch(/reason:\s*message/);
+    expect(reportFailure).toContain("toast.show(message, 'error')");
+
+    const apply = sliceBetween(source, 'async function applySelectedCard(', 'async function removeSelectedCard(');
+    const remove = sliceBetween(source, 'async function removeSelectedCard(', 'function getCardPreviewHtml(');
+    expect(apply).toContain('reportCardEditFailure(result.reason,');
+    expect(remove).toContain("reportCardEditFailure('card-not-found',");
+    expect(remove).toContain('reportCardEditFailure(result.reason,');
+    expect(apply).not.toContain('toast.show(result.reason');
+    expect(remove).not.toContain('toast.show(result.reason');
+  });
+
   it('restores successful offsets through the real textarea selection path', () => {
     const restore = sliceBetween(source, 'async function restoreEditorSelection(', 'function analyzeCardTarget(');
     expect(restore).toContain('await nextTick()');
