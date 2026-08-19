@@ -140,11 +140,36 @@ describe('mergeTheme', () => {
     expect(parseDeclarations(merged.styles.container)['padding-right']).toBe('10px');
   });
 
+  it('字间距覆盖同时改写 p/li/blockquote，避免各元素自带 letter-spacing 覆盖容器继承值', () => {
+    const theme = {
+      ...baseTheme,
+      styles: {
+        ...baseTheme.styles,
+        container: 'font-size: 15px; letter-spacing: 0.3px;',
+        p: 'font-size: 15px; letter-spacing: 0.3px;',
+        li: 'font-size: 14px; letter-spacing: 0.2px;',
+        blockquote: 'letter-spacing: 0.1px;'
+      }
+    };
+    const merged = mergeTheme(theme, { params: { letterSpacing: 2 } });
+    expect(parseDeclarations(merged.styles.container)['letter-spacing']).toBe('2px');
+    expect(parseDeclarations(merged.styles.p)['letter-spacing']).toBe('2px');
+    expect(parseDeclarations(merged.styles.li)['letter-spacing']).toBe('2px');
+    expect(parseDeclarations(merged.styles.blockquote)['letter-spacing']).toBe('2px');
+  });
+
   it('readParamFromStyles 可回显当前值', () => {
     const merged = mergeTheme(baseTheme, { params: { lineHeight: 1.9, contentPaddingX: 16 } });
     expect(readParamFromStyles(merged.styles, 'lineHeight')).toBe(1.9);
     expect(readParamFromStyles(merged.styles, 'contentPaddingX')).toBe(16);
     expect(readParamFromStyles(baseTheme.styles, 'lineHeight')).toBe(1.8);
+  });
+
+  it('readParamFromStyles 回显字间距当前值（覆盖优先，其次模板默认）', () => {
+    const theme = { ...baseTheme, styles: { ...baseTheme.styles, container: 'font-size: 15px; letter-spacing: 0.3px;' } };
+    expect(readParamFromStyles(theme.styles, 'letterSpacing')).toBe(0.3);
+    const merged = mergeTheme(theme, { params: { letterSpacing: 1.5 } });
+    expect(readParamFromStyles(merged.styles, 'letterSpacing')).toBe(1.5);
   });
 
   it('空覆盖 = 原样返回', () => {

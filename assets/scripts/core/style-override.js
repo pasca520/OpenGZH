@@ -28,7 +28,7 @@ export const PARAM_DEFS = [
 ];
 
 /** 每个排版参数 → 需要改写的 (selector, property) */
-const PARAM_TARGETS = {
+export const PARAM_TARGETS = {
   bodyFontSize: [{ selector: 'p', property: 'font-size' }, { selector: 'container', property: 'font-size' }],
   lineHeight: [
     { selector: 'container', property: 'line-height' },
@@ -44,7 +44,14 @@ const PARAM_TARGETS = {
     { selector: 'pre', property: 'margin-bottom' },
     { selector: 'table', property: 'margin-bottom' }
   ],
-  letterSpacing: [{ selector: 'container', property: 'letter-spacing' }],
+  // 仅放到 container 上会被各主题中 p/li/blockquote 自带的 letter-spacing 覆盖，
+  // 因此与行高一致地对正文/列表/引用一并改写，保证「字间距」真正生效。
+  letterSpacing: [
+    { selector: 'container', property: 'letter-spacing' },
+    { selector: 'p', property: 'letter-spacing' },
+    { selector: 'li', property: 'letter-spacing' },
+    { selector: 'blockquote', property: 'letter-spacing' }
+  ],
   contentPaddingX: [
     { selector: 'container', property: 'padding-left' },
     { selector: 'container', property: 'padding-right' }

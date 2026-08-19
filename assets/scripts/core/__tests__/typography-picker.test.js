@@ -39,4 +39,13 @@ describe('typography picker markup', () => {
     expect(picker).toContain("setStyleParamPreset('letterSpacing', option.value)");
     expect(picker).toContain("setStyleParamPreset('contentPaddingX', option.value)");
   });
+
+  it('行间距/字间距行回显当前数值', () => {
+    expect(picker).toContain("styleParamCurrentLabel('lineHeight')");
+    expect(picker).toContain("styleParamCurrentLabel('letterSpacing')");
+    const lineHeightLabel = picker.slice(picker.indexOf('行间距'), picker.indexOf('行间距') + 200);
+    const letterSpacingLabel = picker.slice(picker.indexOf('字间距'), picker.indexOf('字间距') + 200);
+    expect(lineHeightLabel).toContain('typography-spacing-current');
+    expect(letterSpacingLabel).toContain('typography-spacing-current');
+  });
 });

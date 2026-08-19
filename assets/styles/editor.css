@@ -752,6 +752,14 @@
   font-weight: 600;
 }
 
+.typo-dropdown .typography-spacing-current {
+  margin-left: 6px;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
 .typo-dropdown .typography-spacing-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }

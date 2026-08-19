@@ -17,6 +17,7 @@ import {
   getBoxName,
   TOKEN_KEYS,
   PARAM_DEFS,
+  PARAM_TARGETS,
   BOX_DEFS,
   BRUSH_CLASSES,
   getMergedDeclaration,
@@ -1798,6 +1799,25 @@ function styleParamPresetValue(key) {
   return Object.prototype.hasOwnProperty.call(params, key) ? params[key] : 'theme';
 }
 
+/**
+ * 排版参数当前生效值文本（覆盖或模板默认）——用于「行间距/字间距」行回显当前数值。
+ * 返回 merged styles 中首个命中的声明原值（去 !important），如 '1.75' / '0.3px' / '0.022em'；
+ * 主题未声明时给出语义兜底：字间距 = 0px（normal 即无附加间距）、行间距回「模板默认」。
+ */
+function styleParamCurrentLabel(key) {
+  const merged = mergedThemeConfig();
+  if (!merged) return '';
+  const targets = PARAM_TARGETS[key] || [];
+  for (const { selector, property } of targets) {
+    const value = getMergedDeclaration(merged.styles, selector, property);
+    if (value == null) continue;
+    return String(value).replace(/\s*!\s*important\s*$/i, '').trim();
+  }
+  if (key === 'letterSpacing') return '0px';
+  if (key === 'lineHeight') return '模板默认';
+  return '';
+}
+
 /** 深合并更新文档样式覆盖，并触发保存与重渲染 */
 function updateStyleOverride(patch) {
   const doc = getActiveDocument();
@@ -3329,6 +3349,7 @@ const app = createApp({
       styleTokenValue,
       styleParamValue,
       styleParamPresetValue,
+      styleParamCurrentLabel,
       setStyleToken,
       setStyleParam,
       setStyleParamPreset,

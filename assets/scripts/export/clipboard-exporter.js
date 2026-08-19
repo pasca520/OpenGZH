@@ -635,6 +635,9 @@ function buildWechatOrderedParagraph(doc, item, order, styleConfig) {
     lineHeight: extractStyleValue(listItemStyle, 'line-height')
       || extractStyleValue(paragraphStyle, 'line-height')
       || extractStyleValue(containerStyle, 'line-height'),
+    letterSpacing: extractStyleValue(listItemStyle, 'letter-spacing')
+      || extractStyleValue(paragraphStyle, 'letter-spacing')
+      || extractStyleValue(containerStyle, 'letter-spacing'),
     color: extractStyleValue(listItemStyle, 'color')
       || extractStyleValue(paragraphStyle, 'color')
       || extractStyleValue(containerStyle, 'color'),
@@ -692,6 +695,9 @@ function normalizeListTypographyForWechat(doc, styleConfig) {
   const lineHeight = extractStyleValue(listItemStyle, 'line-height')
     || extractStyleValue(paragraphStyle, 'line-height')
     || extractStyleValue(containerStyle, 'line-height');
+  const letterSpacing = extractStyleValue(listItemStyle, 'letter-spacing')
+    || extractStyleValue(paragraphStyle, 'letter-spacing')
+    || extractStyleValue(containerStyle, 'letter-spacing');
   const color = extractStyleValue(listItemStyle, 'color')
     || extractStyleValue(paragraphStyle, 'color')
     || extractStyleValue(containerStyle, 'color');
@@ -699,7 +705,7 @@ function normalizeListTypographyForWechat(doc, styleConfig) {
     || extractStyleValue(paragraphStyle, 'font-family')
     || extractStyleValue(containerStyle, 'font-family');
 
-  const typographyStyle = buildTypographyStyle({ fontSize, lineHeight, color, fontFamily });
+  const typographyStyle = buildTypographyStyle({ fontSize, lineHeight, letterSpacing, color, fontFamily });
 
   doc.querySelectorAll('ol, ul').forEach((list) => {
     const currentStyle = list.getAttribute('style') || '';
@@ -735,10 +741,11 @@ function normalizeListTypographyForWechat(doc, styleConfig) {
   });
 }
 
-function buildTypographyStyle({ fontSize, lineHeight, color, fontFamily }) {
+function buildTypographyStyle({ fontSize, lineHeight, color, fontFamily, letterSpacing }) {
   const declarations = [];
   if (fontSize) declarations.push(`font-size: ${fontSize} !important;`);
   if (lineHeight) declarations.push(`line-height: ${lineHeight} !important;`);
+  if (letterSpacing) declarations.push(`letter-spacing: ${letterSpacing} !important;`);
   if (color) declarations.push(`color: ${color} !important;`);
   if (fontFamily) declarations.push(`font-family: ${fontFamily} !important;`);
   return declarations.join(' ');
@@ -793,6 +800,7 @@ function inlineContainerTypographyForWechat(doc, styleConfig) {
   const containerStyle = styleConfig?.styles?.container || '';
   const containerFontSize = extractStyleValue(containerStyle, 'font-size');
   const containerLineHeight = extractStyleValue(containerStyle, 'line-height');
+  const containerLetterSpacing = extractStyleValue(containerStyle, 'letter-spacing');
   const containerColor = extractStyleValue(containerStyle, 'color');
   const containerFontFamily = extractStyleValue(containerStyle, 'font-family');
 
@@ -807,6 +815,9 @@ function inlineContainerTypographyForWechat(doc, styleConfig) {
       }
       if (containerLineHeight && !extractStyleValue(currentStyle, 'line-height')) {
         additions.push(`line-height: ${containerLineHeight} !important;`);
+      }
+      if (containerLetterSpacing && !extractStyleValue(currentStyle, 'letter-spacing')) {
+        additions.push(`letter-spacing: ${containerLetterSpacing} !important;`);
       }
       if (containerColor && !extractStyleValue(currentStyle, 'color')) {
         additions.push(`color: ${containerColor} !important;`);
@@ -831,8 +842,8 @@ function wrapSectionIfNeeded(doc, styleConfig) {
   const paddingMatch = containerStyle.match(/padding:\s*([^;]+)/);
   const maxWidthMatch = containerStyle.match(/max-width:\s*([^;]+)/);
 
-  // 显式带上正文排版（字号/行高/颜色/字体），避免微信编辑器以默认 16px 兜底
-  const typographyDeclarations = ['font-size', 'line-height', 'color', 'font-family']
+  // 显式带上正文排版（字号/行高/字间距/颜色/字体），避免微信编辑器以默认 16px 兜底
+  const typographyDeclarations = ['font-size', 'line-height', 'letter-spacing', 'color', 'font-family']
     .map((property) => {
       const value = extractStyleValue(containerStyle, property);
       return value ? `${property}: ${value} !important;` : '';

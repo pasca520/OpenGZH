@@ -10,7 +10,7 @@
 
   <link rel="icon" type="image/svg+xml" href="assets/images/logo.svg?v=1">
   <link rel="stylesheet" href="assets/styles/base.css?v=1">
-  <link rel="stylesheet" href="assets/styles/editor.css?v=11">
+  <link rel="stylesheet" href="assets/styles/editor.css?v=12">
   <link rel="stylesheet" href="assets/styles/panel.css?v=1">
   <link rel="stylesheet" href="assets/styles/cover.css?v=1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.25/dist/katex.min.css">
@@ -698,7 +698,7 @@
                         <div class="code-panel-section-title">阅读间距</div>
                         <div class="typography-spacing-stack">
                           <div class="typography-spacing-row">
-                            <div class="typography-spacing-label">行间距</div>
+                            <div class="typography-spacing-label">行间距<span class="typography-spacing-current">当前 {{ styleParamCurrentLabel('lineHeight') }}</span></div>
                             <div class="misc-button-grid typography-spacing-grid">
                               <button
                                 v-for="option in lineHeightOptions"
@@ -714,7 +714,7 @@
                           </div>
 
                           <div class="typography-spacing-row">
-                            <div class="typography-spacing-label">字间距</div>
+                            <div class="typography-spacing-label">字间距<span class="typography-spacing-current">当前 {{ styleParamCurrentLabel('letterSpacing') }}</span></div>
                             <div class="misc-button-grid typography-spacing-grid typography-spacing-grid-wide">
                               <button
                                 v-for="option in letterSpacingOptions"
@@ -1122,6 +1122,6 @@
     </template>
   </div>
 
-  <script type="module" src="assets/scripts/main.js?v=12"></script>
+  <script type="module" src="assets/scripts/main.js?v=13"></script>
 </body>
 </html>
