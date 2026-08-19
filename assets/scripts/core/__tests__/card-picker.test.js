@@ -449,3 +449,62 @@ describe('card picker editor integration', () => {
     expect(outsideClick).not.toContain('editorSelection.value =');
   });
 });
+
+describe('card picker UI', () => {
+  it('keeps the trigger and dialog in one selection-safe boundary', () => {
+    const html = read('index.html');
+    const anchor = sliceBetween(
+      html,
+      '<div class="card-picker-anchor">',
+      '<button v-if="contentOutputMode === \'image\'"'
+    );
+
+    expect(anchor).toContain('type="button"');
+    expect(anchor).toContain('class="editor-tool-btn card-picker-trigger"');
+    expect(anchor).toContain('aria-haspopup="dialog"');
+    expect(anchor).toContain(':aria-expanded="showCardPicker"');
+    expect(anchor).toContain('@mousedown.prevent');
+    expect(anchor).toContain('@click="openCardPicker"');
+    expect(anchor).toContain('v-if="showCardPicker"');
+    expect(anchor).toContain('class="card-picker"');
+    expect(anchor).toContain('role="dialog"');
+    expect(anchor).toContain('aria-label="卡片样式"');
+    expect(html.match(/class="card-picker-anchor"/g)).toHaveLength(1);
+    expect(anchor.match(/@click="openCardPicker"/g)).toHaveLength(1);
+    expect(anchor.match(/@mousedown\.prevent/g)).toHaveLength(3);
+
+    const divTags = [...anchor.matchAll(/<\/?div\b[^>]*>/g)];
+    let depth = 0;
+    divTags.forEach(([tag], index) => {
+      depth += tag.startsWith('</') ? -1 : 1;
+      expect(depth).toBeGreaterThanOrEqual(0);
+      if (depth === 0) expect(index).toBe(divTags.length - 1);
+    });
+    expect(depth).toBe(0);
+  });
+
+  it('renders the registry-driven actions and communicates invalid targets', () => {
+    const html = read('index.html');
+
+    expect(html).toContain('v-if="!cardTargetState.ok" class="card-picker-reason" role="status"');
+    expect(html).toContain('{{ cardTargetState.reason }}');
+    expect(html).toContain('v-for="card in cardStyles"');
+    expect(html).toContain(':disabled="!cardTargetState.ok"');
+    expect(html).toContain('@click="applySelectedCard(card.id)"');
+    expect(html).toContain('v-html="getCardPreviewHtml(card.id)"');
+    expect(html).toContain('{{ card.name }}');
+    expect(html).toContain(':disabled="!cardTargetState.existing"');
+    expect(html).toContain('@click="removeSelectedCard"');
+  });
+
+  it('has two desktop columns, one mobile column, visible focus, and constrained overflow', () => {
+    const css = read('assets/styles/editor.css');
+
+    expect(css).toMatch(/\.card-picker\s*\{[^}]*max-height:[^;}]+[^}]*overflow-y:\s*auto/s);
+    expect(css).toMatch(/\.card-picker-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s);
+    expect(css).toMatch(/\.card-picker-item:focus-visible/);
+    expect(css).toMatch(/\.card-picker-item:disabled\s*\{[^}]*(?:cursor:\s*not-allowed|opacity:)/s);
+    expect(css).toMatch(/@media\s*\(max-width:\s*640px\)[\s\S]*\.card-picker-grid\s*\{[^}]*grid-template-columns:\s*1fr/s);
+    expect(css).toMatch(/@media\s*\(max-width:\s*640px\)[\s\S]*\.card-picker\s*\{[^}]*width:\s*100%[^}]*max-width:\s*100%/s);
+  });
+});
