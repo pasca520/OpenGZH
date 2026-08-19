@@ -313,6 +313,37 @@ describe('card parser integration', () => {
     ].join('\n'));
   });
 
+  it('does not repeatedly rescan a large literal closer-placeholder prefix', () => {
+    const placeholderPrefix = 'OGZH_CARD_CLOSER_PLACEHOLDER_';
+    const markdown = `${placeholderPrefix}${'_'.repeat(4096)}\n\n普通正文`;
+    const includes = vi.spyOn(String.prototype, 'includes');
+
+    try {
+      expect(preprocessMarkdown(markdown)).toBe(markdown);
+      const placeholderScans = includes.mock.calls.filter(
+        ([search]) => typeof search === 'string' && search.startsWith(placeholderPrefix)
+      );
+      expect(placeholderScans.length).toBeLessThanOrEqual(1);
+    } finally {
+      includes.mockRestore();
+    }
+  });
+
+  it('preserves CRLF card closers, trailing spaces, and literal placeholder text byte for byte', () => {
+    const markdown = [
+      '前文',
+      '',
+      ':::ogzh-card minimal-outline',
+      '- 第一项',
+      '- OGZH_CARD_CLOSER_PLACEHOLDER____ 是正文',
+      ':::   ',
+      '',
+      '后文'
+    ].join('\r\n');
+
+    expect(preprocessMarkdown(markdown)).toBe(markdown);
+  });
+
   it('applies card styles after gzh structure and before the end divider', () => {
     const source = read('assets/scripts/core/render-pipeline.js');
     const gzhIndex = source.indexOf('applyGzhStructure(doc, styleConfig.gzh)');

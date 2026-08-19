@@ -138,27 +138,28 @@ function registerMathPlugin(md) {
   });
 }
 
-export function preprocessMarkdown(content) {
+function applyLegacyListCleanup(content) {
   let normalized = content;
-  // ponytail: shield standalone directive closers from legacy list cleanup;
-  // the block rule remains responsible for deciding whether a card is valid.
-  let closerPlaceholder = 'OGZH_CARD_CLOSER_PLACEHOLDER_';
-  while (normalized.includes(closerPlaceholder)) closerPlaceholder += '_';
-  const cardCloserStarts = new Set(
-    scanCardRanges(normalized).map((range) => range.closerStart)
-  );
-  const cardClosers = [];
-  normalized = normalized.replace(/^:::[\t ]*(?=\r?$)/gm, (closer, offset) => {
-    if (!cardCloserStarts.has(offset)) return closer;
-    const index = cardClosers.push(closer) - 1;
-    return `${closerPlaceholder}${index}`;
-  });
   normalized = normalized.replace(/^(\s*(?:\d+\.|-|\*)\s+[^:\n]+)\n\s*:\s*(.+?)$/gm, '$1: $2');
   normalized = normalized.replace(/^(\s*(?:\d+\.|-|\*)\s+.+?:)\s*\n\s+(.+?)$/gm, '$1 $2');
   normalized = normalized.replace(/^(\s*(?:\d+\.|-|\*)\s+[^:\n]+)\n:\s*(.+?)$/gm, '$1: $2');
   normalized = normalized.replace(/^(\s*(?:\d+\.|-|\*)\s+.+?)\n\n\s+(.+?)$/gm, '$1 $2');
-  return normalized.replace(
-    new RegExp(`${closerPlaceholder}(\\d+)`, 'g'),
-    (_match, index) => cardClosers[Number(index)]
-  );
+  return normalized;
+}
+
+export function preprocessMarkdown(content) {
+  const cardRanges = scanCardRanges(content);
+  if (cardRanges.length === 0) return applyLegacyListCleanup(content);
+
+  // ponytail: keep valid card closers out of legacy list cleanup while
+  // preserving every closer byte, including CRLF-adjacent trailing spaces.
+  let cursor = 0;
+  const normalized = [];
+  for (const range of cardRanges) {
+    normalized.push(applyLegacyListCleanup(content.slice(cursor, range.closerStart)));
+    normalized.push(content.slice(range.closerStart, range.closerEnd));
+    cursor = range.closerEnd;
+  }
+  normalized.push(applyLegacyListCleanup(content.slice(cursor)));
+  return normalized.join('');
 }
