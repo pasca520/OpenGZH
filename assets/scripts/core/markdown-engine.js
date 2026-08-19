@@ -1,4 +1,4 @@
-import { registerCardDirective } from './card-styles.js';
+import { registerCardDirective, scanCardRanges } from './card-styles.js';
 
 /**
  * Markdown engine setup with CJK emphasis patching.
@@ -140,9 +140,25 @@ function registerMathPlugin(md) {
 
 export function preprocessMarkdown(content) {
   let normalized = content;
+  // ponytail: shield standalone directive closers from legacy list cleanup;
+  // the block rule remains responsible for deciding whether a card is valid.
+  let closerPlaceholder = 'OGZH_CARD_CLOSER_PLACEHOLDER_';
+  while (normalized.includes(closerPlaceholder)) closerPlaceholder += '_';
+  const cardCloserStarts = new Set(
+    scanCardRanges(normalized).map((range) => range.closerStart)
+  );
+  const cardClosers = [];
+  normalized = normalized.replace(/^:::[\t ]*(?=\r?$)/gm, (closer, offset) => {
+    if (!cardCloserStarts.has(offset)) return closer;
+    const index = cardClosers.push(closer) - 1;
+    return `${closerPlaceholder}${index}`;
+  });
   normalized = normalized.replace(/^(\s*(?:\d+\.|-|\*)\s+[^:\n]+)\n\s*:\s*(.+?)$/gm, '$1: $2');
   normalized = normalized.replace(/^(\s*(?:\d+\.|-|\*)\s+.+?:)\s*\n\s+(.+?)$/gm, '$1 $2');
   normalized = normalized.replace(/^(\s*(?:\d+\.|-|\*)\s+[^:\n]+)\n:\s*(.+?)$/gm, '$1: $2');
   normalized = normalized.replace(/^(\s*(?:\d+\.|-|\*)\s+.+?)\n\n\s+(.+?)$/gm, '$1 $2');
-  return normalized;
+  return normalized.replace(
+    new RegExp(`${closerPlaceholder}(\\d+)`, 'g'),
+    (_match, index) => cardClosers[Number(index)]
+  );
 }

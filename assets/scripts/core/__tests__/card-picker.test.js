@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { registerCardDirective } from '../card-styles.js';
+import { preprocessMarkdown } from '../markdown-engine.js';
 
 const root = fileURLToPath(new URL('../../../..', import.meta.url));
 const read = (path) => readFileSync(`${root}/${path}`, 'utf8');
@@ -266,8 +267,50 @@ describe('card directive block rule', () => {
 describe('card parser integration', () => {
   it('registers the directive on the browser markdown engine', () => {
     const source = read('assets/scripts/core/markdown-engine.js');
-    expect(source).toContain("import { registerCardDirective } from './card-styles.js'");
+    expect(source).toContain("import { registerCardDirective, scanCardRanges } from './card-styles.js'");
     expect(source).toContain('registerCardDirective(md)');
+  });
+
+  it('preserves card fences when preprocessing a list card', () => {
+    const markdown = [
+      '前文',
+      '',
+      ':::ogzh-card minimal-outline',
+      '- 第一项',
+      '- 第二项',
+      ':::',
+      '',
+      '后文'
+    ].join('\n');
+
+    expect(preprocessMarkdown(markdown)).toBe(markdown);
+  });
+
+  it('keeps legacy list cleanup for unrelated or invalid directive-like text', () => {
+    const ordinary = ['- 普通条目', ':::', '', '后文'].join('\n');
+    const unclosed = [':::ogzh-card accent-bar', '- 普通条目', '后文'].join('\n');
+    const nested = [
+      ':::ogzh-card accent-bar',
+      '- 普通条目',
+      ':::ogzh-card soft-fill',
+      '内层',
+      ':::',
+      ':::',
+      '',
+      '后文'
+    ].join('\n');
+
+    expect(preprocessMarkdown(ordinary)).toBe('- 普通条目: :: 后文');
+    expect(preprocessMarkdown(unclosed)).toBe(unclosed);
+    expect(preprocessMarkdown(nested)).toBe([
+      ':::ogzh-card accent-bar',
+      '- 普通条目: ::ogzh-card soft-fill',
+      '内层',
+      ':::',
+      ':::',
+      '',
+      '后文'
+    ].join('\n'));
   });
 
   it('applies card styles after gzh structure and before the end divider', () => {
