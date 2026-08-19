@@ -29,7 +29,7 @@ export const CARD_STYLES = Object.freeze([
     defaultTitle: '01 阶段结论',
     preview: '01 阶段结论'
   }
-]);
+].map((item) => Object.freeze(item)));
 
 const CARD_STYLE_BY_ID = new Map(CARD_STYLES.map((item) => [item.id, item]));
 
@@ -44,10 +44,11 @@ export function buildCardSnippet(styleId, selectedBody = '') {
   }
 
   const body = selectedBody || BODY_PLACEHOLDER;
+  const opener = `:::ogzh-card ${card.id}\n`;
   const titleLine = card.slots === 'title-body' ? `#### ${card.defaultTitle}\n\n` : '';
-  const markdown = `:::ogzh-card ${card.id}\n${titleLine}${body}\n:::`;
+  const markdown = `${opener}${titleLine}${body}\n:::`;
   const focusedText = card.slots === 'title-body' ? card.defaultTitle : body;
-  const focusStart = markdown.indexOf(focusedText);
+  const focusStart = opener.length + (card.slots === 'title-body' ? '#### '.length : 0);
   return {
     markdown,
     focusStart,

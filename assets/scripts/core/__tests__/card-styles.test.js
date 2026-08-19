@@ -40,6 +40,10 @@ describe('card style registry', () => {
     expect(new Set(CARD_STYLES.map((item) => item.id)).size).toBe(10);
   });
 
+  it('freezes every registry entry', () => {
+    expect(CARD_STYLES.every(Object.isFrozen)).toBe(true);
+  });
+
   it('returns the registered style and rejects unknown ids', () => {
     expect(getCardStyle('accent-bar')).toBe(CARD_STYLES[0]);
     expect(getCardStyle('user-css')).toBeNull();
@@ -80,5 +84,14 @@ describe('card style registry', () => {
       `:::ogzh-card capsule-title\n#### 核心观点\n\n${selected}\n:::`
     );
     expect(result.markdown.slice(result.focusStart, result.focusEnd)).toBe('核心观点');
+  });
+
+  it('focuses a selected body even when it matches text in the opener', () => {
+    const selected = 'accent';
+    const result = buildCardSnippet('accent-bar', selected);
+    const bodyStart = result.markdown.indexOf('\n') + 1;
+
+    expect(result.focusStart).toBe(bodyStart);
+    expect(result.markdown.slice(result.focusStart, result.focusEnd)).toBe(selected);
   });
 });
