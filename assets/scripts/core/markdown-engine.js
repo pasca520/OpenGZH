@@ -151,13 +151,15 @@ export function preprocessMarkdown(content) {
   const cardRanges = scanCardRanges(content);
   if (cardRanges.length === 0) return applyLegacyListCleanup(content);
 
-  // ponytail: keep valid card closers out of legacy list cleanup while
-  // preserving every closer byte, including CRLF-adjacent trailing spaces.
+  // ponytail: keep valid directive boundaries out of legacy list cleanup;
+  // only real card bodies are eligible for the historical normalization.
   let cursor = 0;
   const normalized = [];
   for (const range of cardRanges) {
-    normalized.push(applyLegacyListCleanup(content.slice(cursor, range.closerStart)));
-    normalized.push(content.slice(range.closerStart, range.closerEnd));
+    normalized.push(applyLegacyListCleanup(content.slice(cursor, range.openerStart)));
+    normalized.push(content.slice(range.openerStart, range.contentStart));
+    normalized.push(applyLegacyListCleanup(content.slice(range.contentStart, range.contentEnd)));
+    normalized.push(content.slice(range.contentEnd, range.closerEnd));
     cursor = range.closerEnd;
   }
   normalized.push(applyLegacyListCleanup(content.slice(cursor)));

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
-import { registerCardDirective } from '../card-styles.js';
+import { applyCardEdit, registerCardDirective, scanCardRanges } from '../card-styles.js';
 import { preprocessMarkdown } from '../markdown-engine.js';
 
 const root = fileURLToPath(new URL('../../../..', import.meta.url));
@@ -284,6 +284,55 @@ describe('card parser integration', () => {
     ].join('\n');
 
     expect(preprocessMarkdown(markdown)).toBe(markdown);
+  });
+
+  it('keeps body and title cards inserted at a collapsed list end parseable for LF and CRLF', () => {
+    for (const lineEnding of ['\n', '\r\n']) {
+      for (const styleId of ['accent-bar', 'capsule-title']) {
+        const source = ['- 第一项', '- 第二项'].join(lineEnding);
+        const edit = applyCardEdit(source, source.length, source.length, styleId, []);
+
+        expect(edit.ok).toBe(true);
+        expect(preprocessMarkdown(edit.markdown)).toBe(edit.markdown);
+        expect(scanCardRanges(preprocessMarkdown(edit.markdown))).toMatchObject([
+          { styleId }
+        ]);
+      }
+    }
+  });
+
+  it('preserves empty unknown cards and adjacent card boundaries for LF and CRLF', () => {
+    for (const lineEnding of ['\n', '\r\n']) {
+      const markdown = [
+        '- 列表末项',
+        ':::ogzh-card future-card   ',
+        ':::   ',
+        ':::ogzh-card accent-bar',
+        '正文',
+        ':::'
+      ].join(lineEnding);
+
+      expect(preprocessMarkdown(markdown)).toBe(markdown);
+      expect(scanCardRanges(preprocessMarkdown(markdown)).map(({ styleId }) => styleId)).toEqual([
+        'future-card',
+        'accent-bar'
+      ]);
+    }
+  });
+
+  it('still applies legacy list cleanup inside a valid card body', () => {
+    const markdown = [
+      ':::ogzh-card accent-bar',
+      '- 字段',
+      ': 值',
+      ':::'
+    ].join('\n');
+
+    expect(preprocessMarkdown(markdown)).toBe([
+      ':::ogzh-card accent-bar',
+      '- 字段: 值',
+      ':::'
+    ].join('\n'));
   });
 
   it('keeps legacy list cleanup for unrelated or invalid directive-like text', () => {
