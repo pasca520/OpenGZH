@@ -1,6 +1,18 @@
 const BODY_PLACEHOLDER = '在这里输入卡片内容';
 const CARD_OPENER_PATTERN = /^:::ogzh-card\s+([a-z0-9-]+)\s*$/;
 const CARD_CLOSER_PATTERN = /^:::\s*$/;
+const FORBIDDEN_TOKEN_REASONS = Object.freeze({
+  heading_open: '选区包含标题，请选择普通段落或列表项。',
+  image: '选区包含图片，请单独保留图片。',
+  table_open: '选区包含表格，请选择普通段落或列表项。',
+  fence: '选区包含代码块，请单独保留代码块。',
+  code_block: '选区包含代码块，请单独保留代码块。',
+  blockquote_open: '选区包含引用块，请选择普通段落或列表项。',
+  html_block: '选区包含原始 HTML，请先转换为普通 Markdown。',
+  html_inline: '选区包含原始 HTML，请先转换为普通 Markdown。',
+  math_block: '选区包含公式块，请单独保留公式块。',
+  hr: '选区包含分割线，请选择分割线两侧的内容。'
+});
 
 export const CARD_STYLES = Object.freeze([
   { id: 'accent-bar', name: '左线强调卡', slots: 'body', preview: '重点内容' },
@@ -39,16 +51,13 @@ export function getCardStyle(styleId) {
   return CARD_STYLE_BY_ID.get(styleId) || null;
 }
 
-export function buildCardSnippet(styleId, selectedBody = '') {
-  const card = getCardStyle(styleId);
-  if (!card) {
-    throw new Error(`Unknown card style: ${styleId}`);
-  }
-
+function buildCardSnippetForStyle(card, selectedBody, lineEnding) {
   const body = selectedBody || BODY_PLACEHOLDER;
-  const opener = `:::ogzh-card ${card.id}\n`;
-  const titleLine = card.slots === 'title-body' ? `#### ${card.defaultTitle}\n\n` : '';
-  const markdown = `${opener}${titleLine}${body}\n:::`;
+  const opener = `:::ogzh-card ${card.id}${lineEnding}`;
+  const titleLine = card.slots === 'title-body'
+    ? `#### ${card.defaultTitle}${lineEnding}${lineEnding}`
+    : '';
+  const markdown = `${opener}${titleLine}${body}${lineEnding}:::`;
   const focusedText = card.slots === 'title-body' ? card.defaultTitle : body;
   const focusStart = opener.length + (card.slots === 'title-body' ? '#### '.length : 0);
   return {
@@ -56,6 +65,14 @@ export function buildCardSnippet(styleId, selectedBody = '') {
     focusStart,
     focusEnd: focusStart + focusedText.length
   };
+}
+
+export function buildCardSnippet(styleId, selectedBody = '') {
+  const card = getCardStyle(styleId);
+  if (!card) {
+    throw new Error(`Unknown card style: ${styleId}`);
+  }
+  return buildCardSnippetForStyle(card, selectedBody, '\n');
 }
 
 export function scanCardRanges(source) {
@@ -214,4 +231,202 @@ export function removeCardEdit(source, selectionStart, selectionEnd) {
     selectionEnd: unwrappedStart + content.length,
     kind: 'remove'
   };
+}
+
+function sourceLineBounds(source) {
+  const lines = [];
+  let lineStart = 0;
+
+  for (let index = 0; index < source.length; index += 1) {
+    if (source[index] === '\r' && source[index + 1] === '\n') {
+      lines.push({ start: lineStart, textEnd: index });
+      lineStart = index + 2;
+      index += 1;
+    } else if (source[index] === '\n') {
+      lines.push({ start: lineStart, textEnd: index });
+      lineStart = index + 1;
+    }
+  }
+  lines.push({ start: lineStart, textEnd: source.length });
+  return lines;
+}
+
+function tokenSourceRange(token, lines) {
+  if (!Array.isArray(token?.map) || token.map.length < 2) return null;
+  const [startLine, endLine] = token.map;
+  if (
+    !Number.isInteger(startLine) ||
+    !Number.isInteger(endLine) ||
+    startLine < 0 ||
+    endLine <= startLine ||
+    !lines[startLine] ||
+    !lines[endLine - 1]
+  ) {
+    return null;
+  }
+  return {
+    start: lines[startLine].start,
+    end: lines[endLine - 1].textEnd
+  };
+}
+
+function rangesOverlap(start, end, range) {
+  return start < range.end && end > range.start;
+}
+
+function forbiddenReasonInRange(tokens, lines, start, end) {
+  for (const token of tokens) {
+    const range = tokenSourceRange(token, lines);
+    if (!range || !rangesOverlap(start, end, range)) continue;
+
+    const directReason = FORBIDDEN_TOKEN_REASONS[token.type];
+    if (directReason) return directReason;
+
+    for (const child of token.children || []) {
+      const childReason = FORBIDDEN_TOKEN_REASONS[child.type];
+      if (childReason) return childReason;
+    }
+  }
+  return null;
+}
+
+function isEligibleTargetToken(token) {
+  return (
+    (token.type === 'paragraph_open' && token.level === 0) ||
+    (token.type === 'list_item_open' && token.level === 1)
+  );
+}
+
+function isSupportedTopLevelContainer(token) {
+  return token.type === 'bullet_list_open' || token.type === 'ordered_list_open';
+}
+
+function sourceLineEnding(source) {
+  const firstLf = source.indexOf('\n');
+  return firstLf > 0 && source[firstLf - 1] === '\r' ? '\r\n' : '\n';
+}
+
+function insertCardEdit(source, cursor, card) {
+  const lineEnding = sourceLineEnding(source);
+  const snippet = buildCardSnippetForStyle(card, '', lineEnding);
+  const leftIsLineBoundary = cursor === 0 || source[cursor - 1] === '\n';
+  const rightIsLineBoundary =
+    cursor === source.length || source[cursor] === '\r' || source[cursor] === '\n';
+  const isInsideTextLine = !leftIsLineBoundary && !rightIsLineBoundary;
+  const prefix = leftIsLineBoundary
+    ? ''
+    : lineEnding.repeat(isInsideTextLine ? 2 : 1);
+  const suffix = rightIsLineBoundary
+    ? ''
+    : lineEnding.repeat(isInsideTextLine ? 2 : 1);
+  const snippetStart = cursor + prefix.length;
+
+  return {
+    ok: true,
+    markdown:
+      source.slice(0, cursor) + prefix + snippet.markdown + suffix + source.slice(cursor),
+    selectionStart: snippetStart + snippet.focusStart,
+    selectionEnd: snippetStart + snippet.focusEnd,
+    kind: 'insert'
+  };
+}
+
+function wrapCardEdit(source, targetStart, targetEnd, card) {
+  const selectedBody = source.slice(targetStart, targetEnd);
+  const snippet = buildCardSnippetForStyle(
+    card,
+    selectedBody,
+    sourceLineEnding(source)
+  );
+
+  return {
+    ok: true,
+    markdown:
+      source.slice(0, targetStart) + snippet.markdown + source.slice(targetEnd),
+    selectionStart: targetStart + snippet.focusStart,
+    selectionEnd: targetStart + snippet.focusEnd,
+    kind: 'wrap'
+  };
+}
+
+export function inspectCardTarget(source, selectionStart, selectionEnd, tokens) {
+  if (
+    selectionStart < 0 ||
+    selectionEnd > source.length ||
+    selectionStart >= selectionEnd
+  ) {
+    return { ok: false, reason: '请选择普通段落或列表项。' };
+  }
+
+  const overlappingCard = scanCardRanges(source).find((range) =>
+    rangesOverlap(selectionStart, selectionEnd, range)
+  );
+  if (overlappingCard) {
+    return {
+      ok: false,
+      reason: '选区跨越卡片边界，请缩小选区或先移除卡片。'
+    };
+  }
+
+  const parsedTokens = Array.isArray(tokens) ? tokens : [];
+  const lines = sourceLineBounds(source);
+  const selectedForbiddenReason = forbiddenReasonInRange(
+    parsedTokens,
+    lines,
+    selectionStart,
+    selectionEnd
+  );
+  if (selectedForbiddenReason) {
+    return { ok: false, reason: selectedForbiddenReason };
+  }
+
+  const eligibleRanges = parsedTokens
+    .filter(isEligibleTargetToken)
+    .map((token) => tokenSourceRange(token, lines))
+    .filter((range) => range && rangesOverlap(selectionStart, selectionEnd, range));
+
+  if (eligibleRanges.length === 0) {
+    return { ok: false, reason: '请选择完整的普通段落或列表项。' };
+  }
+
+  const start = Math.min(...eligibleRanges.map((range) => range.start));
+  const end = Math.max(...eligibleRanges.map((range) => range.end));
+  const expandedForbiddenReason = forbiddenReasonInRange(parsedTokens, lines, start, end);
+  if (expandedForbiddenReason) {
+    return { ok: false, reason: expandedForbiddenReason };
+  }
+
+  const hasUnsupportedRoot = parsedTokens.some((token) => {
+    if (token.level !== 0 || !token.map) return false;
+    const range = tokenSourceRange(token, lines);
+    if (!range || !rangesOverlap(start, end, range)) return false;
+    return !isEligibleTargetToken(token) && !isSupportedTopLevelContainer(token);
+  });
+  if (hasUnsupportedRoot) {
+    return { ok: false, reason: '选区不是可支持的普通段落或列表项。' };
+  }
+
+  return { ok: true, start, end };
+}
+
+export function applyCardEdit(source, selectionStart, selectionEnd, styleId, tokens) {
+  const card = getCardStyle(styleId);
+  if (!card) {
+    return unchangedEdit(source, selectionStart, selectionEnd, 'unknown-style');
+  }
+
+  const existing = findCardAtSelection(source, selectionStart, selectionEnd);
+  if (existing) {
+    return replaceCardStyleEdit(source, selectionStart, selectionEnd, styleId);
+  }
+
+  if (selectionStart === selectionEnd) {
+    return insertCardEdit(source, selectionStart, card);
+  }
+
+  const target = inspectCardTarget(source, selectionStart, selectionEnd, tokens);
+  if (!target.ok) {
+    return unchangedEdit(source, selectionStart, selectionEnd, target.reason);
+  }
+  return wrapCardEdit(source, target.start, target.end, card);
 }
