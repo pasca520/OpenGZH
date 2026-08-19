@@ -1,4 +1,6 @@
 const BODY_PLACEHOLDER = '在这里输入卡片内容';
+const CARD_OPENER_PATTERN = /^:::ogzh-card\s+([a-z0-9-]+)\s*$/;
+const CARD_CLOSER_PATTERN = /^:::\s*$/;
 
 export const CARD_STYLES = Object.freeze([
   { id: 'accent-bar', name: '左线强调卡', slots: 'body', preview: '重点内容' },
@@ -53,5 +55,163 @@ export function buildCardSnippet(styleId, selectedBody = '') {
     markdown,
     focusStart,
     focusEnd: focusStart + focusedText.length
+  };
+}
+
+export function scanCardRanges(source) {
+  const ranges = [];
+  const linePattern = /([^\r\n]*)(\r\n|\n|$)/g;
+  let activeCard = null;
+
+  while (linePattern.lastIndex <= source.length) {
+    const match = linePattern.exec(source);
+    if (!match || match[0] === '') break;
+
+    const line = {
+      start: match.index,
+      textEnd: match.index + match[1].length,
+      end: match.index + match[0].length
+    };
+    const openerMatch = CARD_OPENER_PATTERN.exec(match[1]);
+
+    if (openerMatch) {
+      if (activeCard) {
+        activeCard.depth += 1;
+        activeCard.invalid = true;
+      } else {
+        activeCard = {
+          styleId: openerMatch[1],
+          opener: line,
+          depth: 1,
+          invalid: false
+        };
+      }
+      continue;
+    }
+
+    if (!CARD_CLOSER_PATTERN.test(match[1]) || !activeCard) continue;
+
+    activeCard.depth -= 1;
+    if (activeCard.depth > 0) continue;
+
+    if (!activeCard.invalid) {
+      let contentEnd = line.start;
+      if (contentEnd > activeCard.opener.end) {
+        contentEnd -= source.slice(contentEnd - 2, contentEnd) === '\r\n' ? 2 : 1;
+      }
+      ranges.push({
+        styleId: activeCard.styleId,
+        start: activeCard.opener.start,
+        end: line.textEnd,
+        openerStart: activeCard.opener.start,
+        openerEnd: activeCard.opener.textEnd,
+        contentStart: activeCard.opener.end,
+        contentEnd,
+        closerStart: line.start,
+        closerEnd: line.textEnd
+      });
+    }
+    activeCard = null;
+  }
+
+  return ranges;
+}
+
+export function findCardAtSelection(source, selectionStart, selectionEnd) {
+  if (selectionStart > selectionEnd) return null;
+
+  return scanCardRanges(source).find((range) => {
+    if (selectionStart === selectionEnd) {
+      return selectionStart >= range.start && selectionStart < range.end;
+    }
+    return selectionStart >= range.start && selectionEnd <= range.end;
+  }) || null;
+}
+
+function unchangedEdit(source, selectionStart, selectionEnd, reason) {
+  return {
+    ok: false,
+    markdown: source,
+    selectionStart,
+    selectionEnd,
+    kind: 'unchanged',
+    reason
+  };
+}
+
+function mapReplacedOffset(offset, replacedStart, replacedEnd, replacementLength) {
+  if (offset <= replacedStart) return offset;
+  if (offset >= replacedEnd) return offset + replacementLength - (replacedEnd - replacedStart);
+  return replacedStart + Math.min(offset - replacedStart, replacementLength);
+}
+
+export function replaceCardStyleEdit(source, selectionStart, selectionEnd, nextStyleId) {
+  const nextStyle = getCardStyle(nextStyleId);
+  if (!nextStyle) {
+    return unchangedEdit(source, selectionStart, selectionEnd, 'unknown-style');
+  }
+
+  const range = findCardAtSelection(source, selectionStart, selectionEnd);
+  if (!range) {
+    return unchangedEdit(source, selectionStart, selectionEnd, 'card-not-found');
+  }
+
+  const opener = source.slice(range.openerStart, range.openerEnd);
+  const idStart = range.openerStart + opener.indexOf(range.styleId, ':::ogzh-card'.length);
+  const idEnd = idStart + range.styleId.length;
+  let markdown = source.slice(0, idStart) + nextStyleId + source.slice(idEnd);
+  const mappedSelectionStart = mapReplacedOffset(
+    selectionStart,
+    idStart,
+    idEnd,
+    nextStyleId.length
+  );
+  const mappedSelectionEnd = mapReplacedOffset(
+    selectionEnd,
+    idStart,
+    idEnd,
+    nextStyleId.length
+  );
+  const currentStyle = getCardStyle(range.styleId);
+
+  if (currentStyle?.slots === 'body' && nextStyle.slots === 'title-body') {
+    const idLengthDelta = nextStyleId.length - range.styleId.length;
+    const insertAt = range.contentStart + idLengthDelta;
+    const lineEnding = source.slice(range.openerEnd, range.contentStart);
+    const titlePrefix = '#### ';
+    const titleBlock = `${titlePrefix}${nextStyle.defaultTitle}${lineEnding}${lineEnding}`;
+    markdown = markdown.slice(0, insertAt) + titleBlock + markdown.slice(insertAt);
+    return {
+      ok: true,
+      markdown,
+      selectionStart: insertAt + titlePrefix.length,
+      selectionEnd: insertAt + titlePrefix.length + nextStyle.defaultTitle.length,
+      kind: 'replace'
+    };
+  }
+
+  return {
+    ok: true,
+    markdown,
+    selectionStart: mappedSelectionStart,
+    selectionEnd: mappedSelectionEnd,
+    kind: 'replace'
+  };
+}
+
+export function removeCardEdit(source, selectionStart, selectionEnd) {
+  const range = findCardAtSelection(source, selectionStart, selectionEnd);
+  if (!range) {
+    return unchangedEdit(source, selectionStart, selectionEnd, 'card-not-found');
+  }
+
+  const content = source.slice(range.contentStart, range.contentEnd);
+  const unwrappedStart = range.start;
+  return {
+    ok: true,
+    markdown: source.slice(0, range.start) + content + source.slice(range.end),
+    selectionStart: unwrappedStart,
+    selectionEnd: unwrappedStart + content.length,
+    kind: 'remove'
   };
 }
