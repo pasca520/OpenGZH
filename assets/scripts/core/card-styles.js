@@ -505,7 +505,8 @@ export function getCardStyle(styleId) {
   return CARD_STYLE_BY_ID.get(styleId) || null;
 }
 
-const BODY_HEADING_RESET_STYLE = 'background: transparent !important; background-color: transparent !important; padding: 0 !important; border: none !important; border-top: none !important; border-right: none !important; border-bottom: none !important; border-left: none !important;';
+const BODY_HEADING_RESET_STYLE = 'display: block !important; background: transparent !important; background-color: transparent !important; padding: 0 !important; border: none !important; border-top: none !important; border-right: none !important; border-bottom: none !important; border-left: none !important; border-radius: 0 !important; font-size: inherit !important; font-weight: inherit !important; font-style: normal !important; font-family: inherit !important; letter-spacing: inherit !important; text-transform: none !important; text-align: left !important; text-decoration: none !important; text-indent: 0 !important;';
+const OWNED_DECORATIONS = new Set(['quote-open', 'quote-close', 'number']);
 
 function applyTrustedStyle(element, styleText) {
   String(styleText || '').split(';').forEach((declaration) => {
@@ -531,7 +532,11 @@ function directHeading(section) {
 
 function removeCardDecorations(section) {
   Array.from(section.children)
-    .filter((child) => child.hasAttribute('data-ogzh-card-decoration'))
+    .filter((child) => (
+      child.tagName === 'SPAN' &&
+      child.getAttribute('aria-hidden') === 'true' &&
+      OWNED_DECORATIONS.has(child.getAttribute('data-ogzh-card-decoration'))
+    ))
     .forEach((child) => child.remove());
 }
 
@@ -549,10 +554,15 @@ function applyBodyStyles(section, bodyStyle) {
     if (!['P', 'UL', 'OL'].includes(child.tagName)) return;
     applyTrustedStyle(child, bodyStyle);
     if (child.tagName === 'P') return;
+    applyListItemStyles(child, bodyStyle);
+  });
+}
 
-    Array.from(child.children)
-      .filter(({ tagName }) => tagName === 'LI')
-      .forEach((item) => applyTrustedStyle(item, bodyStyle));
+function applyListItemStyles(element, bodyStyle) {
+  Array.from(element.children).forEach((child) => {
+    if (child.tagName === 'SECTION' && child.hasAttribute('data-ogzh-card')) return;
+    if (child.tagName === 'LI') applyTrustedStyle(child, bodyStyle);
+    applyListItemStyles(child, bodyStyle);
   });
 }
 
@@ -563,18 +573,16 @@ function applyQuoteDecoration(doc, section, presentation) {
   const common = `display: inline-block; color: ${quotePair.foreground} !important; font-size: 30px; line-height: 1;`;
   const opening = createCardDecoration(
     doc,
-    'quote',
+    'quote-open',
     '“',
     `${common} margin: 0 8px 4px 0;`
   );
-  opening.setAttribute('data-ogzh-card-decoration-side', 'opening');
   const closing = createCardDecoration(
     doc,
-    'quote',
+    'quote-close',
     '”',
     `${common} display: block; margin: 4px 0 0; text-align: right;`
   );
-  closing.setAttribute('data-ogzh-card-decoration-side', 'closing');
 
   section.insertBefore(opening, section.firstChild);
   section.appendChild(closing);
@@ -590,8 +598,28 @@ function applyNumberDecoration(doc, section, heading, presentation) {
 
   const badge = createCardDecoration(doc, 'number', titleParts[1], presentation.titleStyle);
   heading.setAttribute('aria-label', fullTitle);
-  heading.textContent = titleParts[2];
+  removeVisibleNumberPrefix(heading, titleParts[1]);
   section.insertBefore(badge, heading);
+}
+
+function removeVisibleNumberPrefix(heading, badge) {
+  const visiblePrefix = /^(\d{1,2}\s+)/.exec(String(heading.textContent || ''));
+  if (!visiblePrefix || visiblePrefix[1].trim() !== badge) return;
+
+  let remaining = visiblePrefix[1].length;
+  const visit = (node) => {
+    for (const child of Array.from(node.childNodes || [])) {
+      if (remaining === 0) return;
+      if (child.nodeType === 3) {
+        const removed = Math.min(remaining, child.nodeValue.length);
+        child.nodeValue = child.nodeValue.slice(removed);
+        remaining -= removed;
+      } else {
+        visit(child);
+      }
+    }
+  };
+  visit(heading);
 }
 
 export function applyCardStyles(doc, styleConfig) {
@@ -611,8 +639,8 @@ export function applyCardStyles(doc, styleConfig) {
     if (card.slots === 'title-body') {
       if (heading) applyTrustedStyle(heading, presentation.headingStyle);
     } else if (heading) {
-      applyTrustedStyle(heading, BODY_HEADING_RESET_STYLE);
       applyTrustedStyle(heading, presentation.bodyStyle);
+      applyTrustedStyle(heading, BODY_HEADING_RESET_STYLE);
     }
 
     applyBodyStyles(section, presentation.bodyStyle);

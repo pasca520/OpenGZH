@@ -62,14 +62,38 @@ class FakeStyle {
   }
 }
 
+class FakeText {
+  constructor(value) {
+    this.nodeType = 3;
+    this.nodeValue = String(value);
+    this.parentNode = null;
+  }
+
+  get textContent() {
+    return this.nodeValue;
+  }
+
+  set textContent(value) {
+    this.nodeValue = String(value);
+  }
+
+  remove() {
+    this.parentNode?.removeChild(this);
+  }
+}
+
 class FakeElement {
   constructor(tagName) {
+    this.nodeType = 1;
     this.tagName = String(tagName).toUpperCase();
     this.attributes = new Map();
-    this.children = [];
+    this.childNodes = [];
     this.parentNode = null;
     this.style = new FakeStyle();
-    this.ownText = '';
+  }
+
+  get children() {
+    return this.childNodes.filter(({ nodeType }) => nodeType === 1);
   }
 
   setAttribute(name, value) {
@@ -97,23 +121,23 @@ class FakeElement {
   appendChild(child) {
     if (child.parentNode) child.parentNode.removeChild(child);
     child.parentNode = this;
-    this.children.push(child);
+    this.childNodes.push(child);
     return child;
   }
 
   insertBefore(child, reference) {
     if (child.parentNode) child.parentNode.removeChild(child);
-    const index = this.children.indexOf(reference);
+    const index = this.childNodes.indexOf(reference);
     if (index === -1) return this.appendChild(child);
     child.parentNode = this;
-    this.children.splice(index, 0, child);
+    this.childNodes.splice(index, 0, child);
     return child;
   }
 
   removeChild(child) {
-    const index = this.children.indexOf(child);
+    const index = this.childNodes.indexOf(child);
     if (index !== -1) {
-      this.children.splice(index, 1);
+      this.childNodes.splice(index, 1);
       child.parentNode = null;
     }
     return child;
@@ -124,19 +148,19 @@ class FakeElement {
   }
 
   get firstChild() {
-    return this.children[0] || null;
+    return this.childNodes[0] || null;
   }
 
   get textContent() {
-    return this.ownText + this.children.map((child) => child.textContent).join('');
+    return this.childNodes.map((child) => child.textContent).join('');
   }
 
   set textContent(value) {
-    this.children.forEach((child) => {
+    this.childNodes.forEach((child) => {
       child.parentNode = null;
     });
-    this.children = [];
-    this.ownText = String(value);
+    this.childNodes = [];
+    if (String(value)) this.appendChild(new FakeText(value));
   }
 }
 
@@ -147,6 +171,10 @@ class FakeDocument {
 
   createElement(tagName) {
     return new FakeElement(tagName);
+  }
+
+  createTextNode(value) {
+    return new FakeText(value);
   }
 
   querySelectorAll(selector) {
@@ -1520,16 +1548,18 @@ describe('card presentation DOM application', () => {
 
   it('normalizes a retained h4 when a card changes to a body-only style', () => {
     const doc = new FakeDocument();
-    const heading = appendElement(doc, doc.createElement('div'), 'h4', '保留的标题');
+    const heading = doc.createElement('h4');
+    const strong = appendElement(doc, heading, 'strong', '保留的标题');
     heading.setAttribute(
       'style',
-      'background: red !important; background-color: red !important; padding: 12px !important; border: 3px solid blue !important; border-left: 8px solid blue !important; color: pink !important;'
+      'background: red !important; background-color: red !important; padding: 12px !important; border: 3px solid blue !important; border-left: 8px solid blue !important; color: pink !important; font-size: 32px !important; font-weight: 900 !important; font-style: italic !important; font-family: fantasy !important; letter-spacing: 8px !important; text-transform: uppercase !important; text-align: center !important; text-decoration: underline !important;'
     );
     createCard(doc, 'soft-fill', [heading, appendElement(doc, doc.createElement('div'), 'p', '正文')]);
 
     applyCardStyles(doc, theme);
 
     expect(heading.textContent).toBe('保留的标题');
+    expect(heading.children).toEqual([strong]);
     expect(heading.style.getPropertyValue('background')).toBe('transparent');
     expect(heading.style.getPropertyValue('background-color')).toBe('transparent');
     expect(heading.style.getPropertyValue('padding')).toBe('0');
@@ -1537,32 +1567,65 @@ describe('card presentation DOM application', () => {
     expect(heading.style.getPropertyValue('border-left')).toBe('none');
     expect(heading.style.getPropertyValue('margin')).toBe('0');
     expect(heading.style.getPropertyValue('line-height')).toBe('1.75');
+    expect(heading.style.getPropertyValue('font-size')).toBe('inherit');
+    expect(heading.style.getPropertyValue('font-weight')).toBe('inherit');
+    expect(heading.style.getPropertyValue('font-style')).toBe('normal');
+    expect(heading.style.getPropertyValue('font-family')).toBe('inherit');
+    expect(heading.style.getPropertyValue('letter-spacing')).toBe('inherit');
+    expect(heading.style.getPropertyValue('text-transform')).toBe('none');
+    expect(heading.style.getPropertyValue('text-align')).toBe('left');
+    expect(heading.style.getPropertyValue('text-decoration')).toBe('none');
+    expect(heading.style.getPropertyPriority('font-size')).toBe('important');
   });
 
   it('creates two real quote spans and stays stable when applied twice', () => {
     const doc = new FakeDocument();
-    const section = createCard(doc, 'quote-frame', [appendElement(doc, doc.createElement('div'), 'p', '金句')]);
+    const userDecoration = appendElement(doc, doc.createElement('div'), 'span', '用户元素');
+    userDecoration.setAttribute('data-ogzh-card-decoration', 'user-note');
+    const nonSpan = appendElement(doc, doc.createElement('div'), 'div', '非渲染器 span');
+    nonSpan.setAttribute('data-ogzh-card-decoration', 'quote-open');
+    nonSpan.setAttribute('aria-hidden', 'true');
+    const section = createCard(doc, 'quote-frame', [
+      userDecoration,
+      nonSpan,
+      appendElement(doc, doc.createElement('div'), 'p', '金句')
+    ]);
 
     applyCardStyles(doc, theme);
     const firstStyle = section.getAttribute('style');
-    const firstDecorations = decorations(section);
+    const opening = decorations(section, 'quote-open').filter(({ tagName }) => tagName === 'SPAN');
+    const closing = decorations(section, 'quote-close').filter(({ tagName }) => tagName === 'SPAN');
 
-    expect(firstDecorations).toHaveLength(2);
-    expect(firstDecorations.map((item) => item.tagName)).toEqual(['SPAN', 'SPAN']);
-    expect(firstDecorations.map((item) => item.textContent)).toEqual(['“', '”']);
-    expect(firstDecorations.every((item) => item.getAttribute('aria-hidden') === 'true')).toBe(true);
-    expect(firstDecorations.every((item) => Boolean(item.getAttribute('style')))).toBe(true);
+    expect(opening).toHaveLength(1);
+    expect(closing).toHaveLength(1);
+    expect(opening[0].tagName).toBe('SPAN');
+    expect(closing[0].tagName).toBe('SPAN');
+    expect([opening[0].textContent, closing[0].textContent]).toEqual(['“', '”']);
+    expect([opening[0], closing[0]].every((item) => item.getAttribute('aria-hidden') === 'true')).toBe(true);
+    expect([opening[0], closing[0]].every((item) => Boolean(item.getAttribute('style')))).toBe(true);
+    expect(section.children).toContain(userDecoration);
+    expect(section.children).toContain(nonSpan);
 
     applyCardStyles(doc, theme);
 
-    expect(decorations(section)).toHaveLength(2);
-    expect(decorations(section).map((item) => item.textContent)).toEqual(['“', '”']);
+    expect(decorations(section, 'quote-open').filter(({ tagName }) => tagName === 'SPAN')).toHaveLength(1);
+    expect(decorations(section, 'quote-close').filter(({ tagName }) => tagName === 'SPAN')).toHaveLength(1);
+    expect(section.children).toContain(userDecoration);
+    expect(section.children).toContain(nonSpan);
     expect(section.getAttribute('style')).toBe(firstStyle);
   });
 
   it('turns a numbered title into a real badge and remains stable on reapplication', () => {
     const doc = new FakeDocument();
-    const heading = appendElement(doc, doc.createElement('div'), 'h4', '01 阶段结论');
+    const heading = doc.createElement('h4');
+    const prefix = doc.createTextNode('01 ');
+    const strong = appendElement(doc, doc.createElement('div'), 'strong', '阶段');
+    const gap = doc.createTextNode(' ');
+    const emphasis = appendElement(doc, doc.createElement('div'), 'em', '结论');
+    heading.appendChild(prefix);
+    heading.appendChild(strong);
+    heading.appendChild(gap);
+    heading.appendChild(emphasis);
     const section = createCard(doc, 'numbered-conclusion', [heading, appendElement(doc, doc.createElement('div'), 'p', '正文')]);
 
     applyCardStyles(doc, theme);
@@ -1572,15 +1635,21 @@ describe('card presentation DOM application', () => {
     expect(decorations(section, 'number')[0].textContent).toBe('01');
     expect(decorations(section, 'number')[0].getAttribute('aria-hidden')).toBe('true');
     expect(decorations(section, 'number')[0].style.getPropertyValue('display')).toBe('inline-block');
-    expect(heading.textContent).toBe('阶段结论');
-    expect(heading.getAttribute('aria-label')).toBe('01 阶段结论');
+    expect(prefix.nodeValue).toBe('');
+    expect(heading.children).toEqual([strong, emphasis]);
+    expect(heading.childNodes).toContain(gap);
+    expect(heading.textContent).toBe('阶段 结论');
+    expect(heading.textContent.replace(/\s+/g, '')).toBe('阶段结论');
+    expect(heading.getAttribute('aria-label')).toBe('01 阶段 结论');
 
     applyCardStyles(doc, theme);
 
     expect(decorations(section, 'number')).toHaveLength(1);
     expect(decorations(section, 'number')[0].textContent).toBe('01');
-    expect(heading.textContent).toBe('阶段结论');
-    expect(heading.getAttribute('aria-label')).toBe('01 阶段结论');
+    expect(prefix.nodeValue).toBe('');
+    expect(heading.children).toEqual([strong, emphasis]);
+    expect(heading.textContent).toBe('阶段 结论');
+    expect(heading.getAttribute('aria-label')).toBe('01 阶段 结论');
     expect(heading.getAttribute('style')).toBe(firstStyle);
   });
 
@@ -1605,7 +1674,16 @@ describe('card presentation DOM application', () => {
     paragraph.appendChild(strong);
     paragraph.appendChild(link);
     const list = doc.createElement('ul');
-    const item = appendElement(doc, list, 'li', '列表项');
+    const item = appendElement(doc, list, 'li', '一级列表项');
+    const nestedList = doc.createElement('ul');
+    const nestedItem = appendElement(doc, nestedList, 'li', '二级列表项');
+    item.appendChild(nestedList);
+    const nestedCard = doc.createElement('section');
+    nestedCard.setAttribute('data-ogzh-card', 'future-card');
+    const nestedCardList = doc.createElement('ol');
+    const nestedCardItem = appendElement(doc, nestedCardList, 'li', '嵌套卡片列表项');
+    nestedCard.appendChild(nestedCardList);
+    nestedItem.appendChild(nestedCard);
     createCard(doc, 'accent-bar', [paragraph, list]);
 
     applyCardStyles(doc, theme);
@@ -1615,6 +1693,8 @@ describe('card presentation DOM application', () => {
     expect(list.children).toEqual([item]);
     expect(list.style.getPropertyValue('margin')).toBe('0');
     expect(item.style.getPropertyValue('line-height')).toBe('1.75');
+    expect(nestedItem.style.getPropertyValue('line-height')).toBe('1.75');
+    expect(nestedCardItem.getAttribute('style')).toBeNull();
     expect(strong.getAttribute('style')).toBeNull();
     expect(link.getAttribute('style')).toBeNull();
   });
