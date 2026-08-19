@@ -468,6 +468,17 @@ function escapeHtml(value) {
     .replaceAll("'", '&#39;');
 }
 
+function quoteDecorationStyles(presentation) {
+  const quotePair = presentation.contrastPairs.find(({ role }) => role === 'quote-mark');
+  if (!quotePair) return null;
+
+  const common = `color: ${quotePair.foreground} !important; font-size: 30px; line-height: 1;`;
+  return {
+    opening: `display: inline-block; ${common} margin: 0 8px 4px 0;`,
+    closing: `display: block; ${common} margin: 4px 0 0; text-align: right;`
+  };
+}
+
 export function renderCardPreviewHtml(styleId, styleConfig) {
   const card = getCardStyle(styleId);
   if (!card) return '';
@@ -482,9 +493,8 @@ export function renderCardPreviewHtml(styleId, styleConfig) {
   let content;
 
   if (presentation.decoration === 'quote') {
-    const quotePair = presentation.contrastPairs.find(({ role }) => role === 'quote-mark');
-    const quoteStyle = escapeHtml(`display: inline-block; margin: 0 8px 4px 0; color: ${quotePair.foreground} !important; font-size: 30px; line-height: 1;`);
-    content = `<span data-ogzh-card-decoration="quote" aria-hidden="true" style="${quoteStyle}">“</span><p style="${bodyStyle}">${escapeHtml(card.preview)}</p>`;
+    const quoteStyles = quoteDecorationStyles(presentation);
+    content = `<span data-ogzh-card-decoration="quote-open" aria-hidden="true" style="${escapeHtml(quoteStyles.opening)}">“</span><p style="${bodyStyle}">${escapeHtml(card.preview)}</p><span data-ogzh-card-decoration="quote-close" aria-hidden="true" style="${escapeHtml(quoteStyles.closing)}">”</span>`;
   } else if (presentation.decoration === 'number') {
     const title = card.defaultTitle.trim();
     const titleParts = /^(\d{1,2})\s+(.+)$/.exec(title);
@@ -567,21 +577,20 @@ function applyListItemStyles(element, bodyStyle) {
 }
 
 function applyQuoteDecoration(doc, section, presentation) {
-  const quotePair = presentation.contrastPairs.find(({ role }) => role === 'quote-mark');
-  if (!quotePair) return;
+  const quoteStyles = quoteDecorationStyles(presentation);
+  if (!quoteStyles) return;
 
-  const common = `display: inline-block; color: ${quotePair.foreground} !important; font-size: 30px; line-height: 1;`;
   const opening = createCardDecoration(
     doc,
     'quote-open',
     '“',
-    `${common} margin: 0 8px 4px 0;`
+    quoteStyles.opening
   );
   const closing = createCardDecoration(
     doc,
     'quote-close',
     '”',
-    `${common} display: block; margin: 4px 0 0; text-align: right;`
+    quoteStyles.closing
   );
 
   section.insertBefore(opening, section.firstChild);
@@ -919,6 +928,10 @@ function mapReplacedOffset(offset, replacedStart, replacedEnd, replacementLength
   return replacedStart + Math.min(offset - replacedStart, replacementLength);
 }
 
+function startsWithH4Block(content) {
+  return /^(?:[\t ]*(?:\r\n|\n))* {0,3}####(?:[\t ]+|(?=\r?\n|$))/.test(content);
+}
+
 export function replaceCardStyleEdit(source, selectionStart, selectionEnd, nextStyleId) {
   const nextStyle = getCardStyle(nextStyleId);
   if (!nextStyle) {
@@ -948,7 +961,12 @@ export function replaceCardStyleEdit(source, selectionStart, selectionEnd, nextS
   );
   const currentStyle = getCardStyle(range.styleId);
 
-  if (currentStyle?.slots === 'body' && nextStyle.slots === 'title-body') {
+  const currentContent = source.slice(range.contentStart, range.contentEnd);
+  if (
+    currentStyle?.slots !== 'title-body' &&
+    nextStyle.slots === 'title-body' &&
+    !startsWithH4Block(currentContent)
+  ) {
     const idLengthDelta = nextStyleId.length - range.styleId.length;
     const insertAt = range.contentStart + idLengthDelta;
     const lineEnding = source.slice(range.openerEnd, range.contentStart);

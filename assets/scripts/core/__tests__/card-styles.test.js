@@ -965,6 +965,65 @@ describe('card source edits', () => {
     );
   });
 
+  it('inserts and focuses the default title when changing an unknown card to title-body', () => {
+    const source = ':::ogzh-card future-card\n正文 **逐字保留**\n:::';
+    const cursor = source.indexOf('正文');
+    const result = replaceCardStyleEdit(source, cursor, cursor, 'capsule-title');
+
+    expect(result).toMatchObject({ ok: true, kind: 'replace' });
+    expect(result.markdown).toBe(
+      ':::ogzh-card capsule-title\n#### 核心观点\n\n正文 **逐字保留**\n:::'
+    );
+    expect(result.markdown.slice(result.selectionStart, result.selectionEnd)).toBe('核心观点');
+  });
+
+  it('does not duplicate an existing first H4 when changing an unknown card to title-body', () => {
+    const source = ':::ogzh-card future-card\n\n#### 原标题\n\n正文\n:::';
+    const cursor = source.indexOf('正文');
+    const result = replaceCardStyleEdit(source, cursor, cursor, 'label-title');
+
+    expect(result.markdown).toBe(
+      ':::ogzh-card label-title\n\n#### 原标题\n\n正文\n:::'
+    );
+    expect(result.markdown.match(/^ {0,3}#### /gm)).toHaveLength(1);
+    expect(result.markdown.slice(result.selectionStart, result.selectionEnd)).toBe('');
+  });
+
+  it('recognizes a three-space H4 after CRLF blank lines in an unknown card', () => {
+    const source = ':::ogzh-card future-card\r\n \r\n   #### 原标题\r\n\r\n正文\r\n:::';
+    const cursor = source.indexOf('正文');
+    const result = replaceCardStyleEdit(source, cursor, cursor, 'capsule-title');
+
+    expect(result.markdown).toBe(
+      ':::ogzh-card capsule-title\r\n \r\n   #### 原标题\r\n\r\n正文\r\n:::'
+    );
+    expect(result.markdown.replaceAll('\r\n', '')).not.toContain('\n');
+    expect(result.markdown.match(/^ {0,3}#### /gm)).toHaveLength(1);
+  });
+
+  it('uses CRLF for an inserted title when changing an unknown card to title-body', () => {
+    const source = ':::ogzh-card future-card\r\n正文\r\n:::';
+    const cursor = source.indexOf('正文');
+    const result = replaceCardStyleEdit(source, cursor, cursor, 'label-title');
+
+    expect(result.markdown).toBe(
+      ':::ogzh-card label-title\r\n#### 核心观点\r\n\r\n正文\r\n:::'
+    );
+    expect(result.markdown.replaceAll('\r\n', '')).not.toContain('\n');
+    expect(result.markdown.slice(result.selectionStart, result.selectionEnd)).toBe('核心观点');
+  });
+
+  it('does not duplicate an existing first H4 when changing a known body card to title-body', () => {
+    const source = ':::ogzh-card accent-bar\n#### 原标题\n\n正文\n:::';
+    const cursor = source.indexOf('正文');
+    const result = replaceCardStyleEdit(source, cursor, cursor, 'capsule-title');
+
+    expect(result.markdown).toBe(
+      ':::ogzh-card capsule-title\n#### 原标题\n\n正文\n:::'
+    );
+    expect(result.markdown.match(/^ {0,3}#### /gm)).toHaveLength(1);
+  });
+
   it('keeps the original title and body when changing title-body to body', () => {
     const source = ':::ogzh-card capsule-title\n#### 原标题\n\n正文 **逐字保留**\n:::';
     const cursor = source.indexOf('正文');
@@ -1856,12 +1915,36 @@ describe('card preview HTML', () => {
   });
 
   it('uses real spans for quote and number decorations', () => {
-    expect(renderCardPreviewHtml('quote-frame', theme)).toMatch(
-      /<span[^>]+data-ogzh-card-decoration="quote"[^>]*>/
+    const quoteHtml = renderCardPreviewHtml('quote-frame', theme);
+    expect(quoteHtml).toMatch(
+      /<span[^>]+data-ogzh-card-decoration="quote-open"[^>]*>/
+    );
+    expect(quoteHtml).toMatch(
+      /<span[^>]+data-ogzh-card-decoration="quote-close"[^>]*>/
     );
     expect(renderCardPreviewHtml('numbered-conclusion', theme)).toMatch(
       /<span[^>]+data-ogzh-card-decoration="number"[^>]*>/
     );
+  });
+
+  it('renders quote preview with exactly two styled decorations around the body', () => {
+    const presentation = buildCardPresentation(
+      'quote-frame',
+      resolveCardTokens(theme),
+      { nativeDark: true }
+    );
+    const quotePair = presentation.contrastPairs.find(({ role }) => role === 'quote-mark');
+    const common = `color: ${quotePair.foreground} !important; font-size: 30px; line-height: 1;`;
+    const html = renderCardPreviewHtml('quote-frame', theme);
+
+    expect(html).toBe(
+      `<section data-ogzh-card-preview="quote-frame" style="${presentation.containerStyle}">` +
+      `<span data-ogzh-card-decoration="quote-open" aria-hidden="true" style="display: inline-block; ${common} margin: 0 8px 4px 0;">“</span>` +
+      `<p style="${presentation.bodyStyle}">一句值得记住的话</p>` +
+      `<span data-ogzh-card-decoration="quote-close" aria-hidden="true" style="display: block; ${common} margin: 4px 0 0; text-align: right;">”</span>` +
+      '</section>'
+    );
+    expect(html.match(/data-ogzh-card-decoration=/g)).toHaveLength(2);
   });
 
   it('renders the numbered preview with one badge, a de-numbered title, and placeholder body', () => {
