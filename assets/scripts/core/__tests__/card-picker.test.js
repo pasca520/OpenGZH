@@ -6,6 +6,14 @@ import { registerCardDirective } from '../card-styles.js';
 const root = fileURLToPath(new URL('../../../..', import.meta.url));
 const read = (path) => readFileSync(`${root}/${path}`, 'utf8');
 
+function sliceBetween(source, start, end) {
+  const startIndex = source.indexOf(start);
+  const endIndex = source.indexOf(end, startIndex + start.length);
+  expect(startIndex, `missing start marker: ${start}`).toBeGreaterThanOrEqual(0);
+  expect(endIndex, `missing end marker: ${end}`).toBeGreaterThan(startIndex);
+  return source.slice(startIndex, endIndex);
+}
+
 function registeredRule(tokenize = vi.fn()) {
   const before = vi.fn();
   const md = {
@@ -289,5 +297,105 @@ describe('card parser integration', () => {
     const packageJson = JSON.parse(read('package.json'));
     expect(packageJson.dependencies).toBeUndefined();
     expect(packageJson.devDependencies).toEqual({ vitest: '^3.1.1' });
+  });
+});
+
+describe('card picker editor integration', () => {
+  const source = read('assets/scripts/main.js');
+
+  it('imports the shared card catalog and edit helpers and exposes picker state', () => {
+    const importMatch = source.match(
+      /^import\s*\{([^}]*)\}\s*from\s*['"]\.\/core\/card-styles\.js['"]/m
+    );
+    expect(importMatch).not.toBeNull();
+
+    const importedNames = new Set(
+      importMatch[1].split(',').map((name) => name.trim()).filter(Boolean)
+    );
+    expect(importedNames).toEqual(new Set([
+      'CARD_STYLES',
+      'applyCardEdit',
+      'findCardAtSelection',
+      'inspectCardTarget',
+      'removeCardEdit',
+      'renderCardPreviewHtml'
+    ]));
+    expect(source).toMatch(/const\s+showCardPicker\s*=\s*ref\(false\)/);
+    expect(source).toMatch(
+      /const\s+cardTargetState\s*=\s*ref\(\{\s*ok:\s*true,\s*existing:\s*false,\s*reason:\s*['"]{2}\s*\}\)/
+    );
+
+    const setupReturn = source.slice(source.lastIndexOf('\n    return {'));
+    for (const name of [
+      'cardStyles: CARD_STYLES',
+      'showCardPicker',
+      'cardTargetState',
+      'analyzeCardTarget',
+      'openCardPicker',
+      'closeCardPicker',
+      'applySelectedCard',
+      'removeSelectedCard',
+      'getCardPreviewHtml'
+    ]) {
+      expect(setupReturn).toContain(name);
+    }
+  });
+
+  it('analyzes only new non-empty selections with markdown tokens', () => {
+    const analyze = sliceBetween(source, 'function analyzeCardTarget(', 'function openCardPicker(');
+    expect(analyze).toContain('getEditorSelection()');
+    expect(analyze).toContain('findCardAtSelection(');
+    expect(analyze).toMatch(/selection\.start\s*===\s*selection\.end/);
+    expect(analyze).toContain('md.parse(markdownInput.value, {})');
+    expect(analyze).toContain('inspectCardTarget(');
+
+    const markdownWatch = sliceBetween(
+      source,
+      'watch(markdownInput,',
+      'watch(currentDocumentTitle,'
+    );
+    expect(markdownWatch).not.toContain('md.parse(');
+  });
+
+  it('revalidates apply and remove actions at the cached editor selection', () => {
+    const apply = sliceBetween(source, 'async function applySelectedCard(', 'async function removeSelectedCard(');
+    expect(apply).toContain('getEditorSelection()');
+    expect(apply).toContain('findCardAtSelection(');
+    expect(apply).toContain('md.parse(markdownInput.value, {})');
+    expect(apply).toContain('applyCardEdit(');
+    expect(apply).toContain('await restoreEditorSelection(');
+
+    const remove = sliceBetween(source, 'async function removeSelectedCard(', 'function getCardPreviewHtml(');
+    expect(remove).toContain('getEditorSelection()');
+    expect(remove.indexOf('findCardAtSelection(')).toBeLessThan(remove.indexOf('removeCardEdit('));
+    expect(remove).toContain('await restoreEditorSelection(');
+  });
+
+  it('restores successful offsets through the real textarea selection path', () => {
+    const restore = sliceBetween(source, 'async function restoreEditorSelection(', 'function analyzeCardTarget(');
+    expect(restore).toContain('await nextTick()');
+    expect(restore).toContain('getTextarea()');
+    expect(restore).toMatch(/\.focus\(\)/);
+    expect(restore).toContain('.setSelectionRange(');
+    expect(restore).toContain('syncEditorSelection(');
+  });
+
+  it('renders card previews with the active article theme', () => {
+    const preview = sliceBetween(source, 'function getCardPreviewHtml(', '\nfunction ');
+    expect(preview).toContain('renderCardPreviewHtml(');
+    expect(preview).toContain('STYLES[currentStyle.value]');
+  });
+
+  it('closes only the card picker on outside click and Escape without overwriting selection', () => {
+    const outsideClick = sliceBetween(
+      source,
+      "document.addEventListener('click'",
+      '\n\n      imageStore ='
+    );
+    expect(outsideClick).toContain("closest('.card-picker')");
+    expect(outsideClick).toContain('showCardPicker.value = false');
+    expect(outsideClick).toMatch(/addEventListener\(['"]keydown['"]/);
+    expect(outsideClick).toMatch(/event\.key\s*===\s*['"]Escape['"]/);
+    expect(outsideClick).not.toContain('editorSelection.value =');
   });
 });

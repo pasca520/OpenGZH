@@ -52,6 +52,14 @@ import {
   createFileMapSource,
   resolveLocalImages,
 } from './core/markdown-image-resolver.js';
+import {
+  CARD_STYLES,
+  applyCardEdit,
+  findCardAtSelection,
+  inspectCardTarget,
+  removeCardEdit,
+  renderCardPreviewHtml
+} from './core/card-styles.js';
 
 const { createApp, ref, reactive, watch, nextTick, onMounted, computed } = window.Vue;
 
@@ -116,6 +124,8 @@ const activeTab = ref('editor');
 const showTemplatePicker = ref(false);
 const showTypoPicker = ref(false);
 const showXhsSettings = ref(false);
+const showCardPicker = ref(false);
+const cardTargetState = ref({ ok: true, existing: false, reason: '' });
 
 // ── Cover Editor State ──
 const coverTemplateId = ref('pure-white');
@@ -1705,6 +1715,132 @@ function getEditorSelection(textarea = getTextarea()) {
   };
 }
 
+async function restoreEditorSelection(start, end) {
+  await nextTick();
+  const textarea = getTextarea();
+  if (!textarea) return;
+
+  textarea.focus();
+  textarea.setSelectionRange(start, end);
+  syncEditorSelection({ target: textarea });
+}
+
+function analyzeCardTarget() {
+  const selection = getEditorSelection();
+  const existing = findCardAtSelection(
+    markdownInput.value,
+    selection.start,
+    selection.end
+  );
+
+  if (existing) {
+    cardTargetState.value = { ok: true, existing: true, reason: '' };
+  } else if (selection.start === selection.end) {
+    cardTargetState.value = { ok: true, existing: false, reason: '' };
+  } else if (!md) {
+    cardTargetState.value = {
+      ok: false,
+      existing: false,
+      reason: '编辑器尚未准备好，请稍后重试。'
+    };
+  } else {
+    const tokens = md.parse(markdownInput.value, {});
+    const target = inspectCardTarget(
+      markdownInput.value,
+      selection.start,
+      selection.end,
+      tokens
+    );
+    cardTargetState.value = {
+      ok: target.ok,
+      existing: false,
+      reason: target.reason || ''
+    };
+  }
+
+  return cardTargetState.value;
+}
+
+function openCardPicker() {
+  analyzeCardTarget();
+  showCardPicker.value = true;
+}
+
+function closeCardPicker() {
+  showCardPicker.value = false;
+}
+
+async function applySelectedCard(styleId) {
+  const source = markdownInput.value;
+  const selection = getEditorSelection();
+  const existing = findCardAtSelection(source, selection.start, selection.end);
+  let tokens;
+
+  if (!existing && selection.start !== selection.end) {
+    if (!md) {
+      const reason = '编辑器尚未准备好，请稍后重试。';
+      cardTargetState.value = { ok: false, existing: false, reason };
+      toast.show(reason, 'error');
+      return false;
+    }
+    tokens = md.parse(markdownInput.value, {});
+  }
+
+  const result = applyCardEdit(
+    source,
+    selection.start,
+    selection.end,
+    styleId,
+    tokens
+  );
+  if (!result.ok) {
+    cardTargetState.value = {
+      ok: false,
+      existing: Boolean(existing),
+      reason: result.reason
+    };
+    toast.show(result.reason, 'error');
+    return false;
+  }
+
+  markdownInput.value = result.markdown;
+  closeCardPicker();
+  cardTargetState.value = { ok: true, existing: result.kind === 'replace', reason: '' };
+  toast.show('已应用卡片样式', 'success');
+  await restoreEditorSelection(result.selectionStart, result.selectionEnd);
+  return true;
+}
+
+async function removeSelectedCard() {
+  const source = markdownInput.value;
+  const selection = getEditorSelection();
+  const existing = findCardAtSelection(source, selection.start, selection.end);
+  if (!existing) {
+    const reason = 'card-not-found';
+    cardTargetState.value = { ok: false, existing: false, reason };
+    toast.show(reason, 'error');
+    return false;
+  }
+
+  const result = removeCardEdit(source, selection.start, selection.end);
+  if (!result.ok) {
+    cardTargetState.value = { ok: false, existing: true, reason: result.reason };
+    toast.show(result.reason, 'error');
+    return false;
+  }
+
+  markdownInput.value = result.markdown;
+  closeCardPicker();
+  cardTargetState.value = { ok: true, existing: false, reason: '' };
+  toast.show('已移除卡片样式', 'success');
+  await restoreEditorSelection(result.selectionStart, result.selectionEnd);
+  return true;
+}
+
+function getCardPreviewHtml(styleId) {
+  return renderCardPreviewHtml(styleId, STYLES[currentStyle.value]);
+}
+
 function insertAtCursor(text, options = {}) {
   const textarea = options.textarea || getTextarea();
   const { start, end } = getEditorSelection(textarea);
@@ -2626,6 +2762,14 @@ const app = createApp({
           showTypoPicker.value = false;
           showXhsSettings.value = false;
         }
+        if (!event.target.closest('.card-picker')) {
+          showCardPicker.value = false;
+        }
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          showCardPicker.value = false;
+        }
       });
 
       imageStore = new ImageStore();
@@ -2662,6 +2806,15 @@ const app = createApp({
       showTemplatePicker,
       showTypoPicker,
       showXhsSettings,
+      cardStyles: CARD_STYLES,
+      showCardPicker,
+      cardTargetState,
+      analyzeCardTarget,
+      openCardPicker,
+      closeCardPicker,
+      applySelectedCard,
+      removeSelectedCard,
+      getCardPreviewHtml,
 
       // ── Cover Editor ──
       coverTemplateId,
