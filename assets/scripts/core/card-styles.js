@@ -47,6 +47,329 @@ export const CARD_STYLES = Object.freeze([
 
 const CARD_STYLE_BY_ID = new Map(CARD_STYLES.map((item) => [item.id, item]));
 
+const DEFAULT_CARD_TOKENS = Object.freeze({
+  accent: '#576b95',
+  body: '#262626',
+  muted: '#666666',
+  line: '#d9d9d9',
+  soft: '#f6f7f9',
+  surface: '#ffffff'
+});
+
+const BORDER_COLOR_PROPERTIES = Object.freeze([
+  'border-left-color',
+  'border-left',
+  'border-color',
+  'border',
+  'border-bottom-color',
+  'border-bottom',
+  'border-top-color',
+  'border-top'
+]);
+const BACKGROUND_COLOR_PROPERTIES = Object.freeze(['background-color', 'background']);
+
+function normalizeColor(value) {
+  if (typeof value !== 'string') return null;
+  const color = value.trim().toLowerCase();
+  const shortHex = /^#([0-9a-f]{3})$/.exec(color);
+  if (shortHex) {
+    return `#${Array.from(shortHex[1], (digit) => digit + digit).join('')}`;
+  }
+  if (/^#[0-9a-f]{6}$/.test(color)) return color;
+  if (color === 'black') return '#000000';
+  if (color === 'white') return '#ffffff';
+
+  const rgb = /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})(?:\s*,\s*(1(?:\.0*)?))?\s*\)$/.exec(color);
+  if (!rgb) return null;
+  const channels = rgb.slice(1, 4).map(Number);
+  if (channels.some((channel) => channel > 255)) return null;
+  return `#${channels.map((channel) => channel.toString(16).padStart(2, '0')).join('')}`;
+}
+
+function cssDeclarations(styleText) {
+  if (typeof styleText !== 'string') return [];
+  return styleText.split(';').flatMap((declaration) => {
+    const colon = declaration.indexOf(':');
+    if (colon < 1) return [];
+    return [[
+      declaration.slice(0, colon).trim().toLowerCase(),
+      declaration.slice(colon + 1).trim().replace(/\s*!important\s*$/i, '')
+    ]];
+  });
+}
+
+function colorFromDeclaration(value, allowBorderSyntax) {
+  const direct = normalizeColor(value);
+  if (direct || !allowBorderSyntax) return direct;
+
+  const colorToken = value.match(/#[0-9a-f]{3}(?![0-9a-f])|#[0-9a-f]{6}(?![0-9a-f])|rgba?\([^)]*\)|\b(?:black|white)\b/i);
+  return colorToken ? normalizeColor(colorToken[0]) : null;
+}
+
+function colorFromStyle(styleText, properties) {
+  const declarations = cssDeclarations(styleText);
+  for (const property of properties) {
+    const declaration = declarations.findLast(([name]) => name === property);
+    if (!declaration) continue;
+    const color = colorFromDeclaration(
+      declaration[1],
+      property.startsWith('border')
+    );
+    if (color) return color;
+  }
+  return null;
+}
+
+function colorFromSelectors(styles, candidates) {
+  for (const [selector, properties] of candidates) {
+    const color = colorFromStyle(styles?.[selector], properties);
+    if (color) return color;
+  }
+  return null;
+}
+
+export function resolveCardTokens(styleConfig) {
+  const gzh = styleConfig?.gzh || {};
+  const styles = styleConfig?.styles || {};
+  const accentFromStyles = colorFromSelectors(styles, [
+    ['h2', BORDER_COLOR_PROPERTIES],
+    ['h2', ['color']],
+    ['h1', BORDER_COLOR_PROPERTIES],
+    ['h1', ['color']],
+    ['blockquote', BORDER_COLOR_PROPERTIES],
+    ['blockquote', ['color']]
+  ]);
+  const bodyFromStyles = colorFromSelectors(styles, [
+    ['p', ['color']],
+    ['container', ['color']]
+  ]);
+  const mutedFromStyles = colorFromSelectors(styles, [
+    ['em', ['color']],
+    ['blockquote', ['color']]
+  ]);
+  const lineFromStyles = colorFromSelectors(styles, [
+    ['table', BORDER_COLOR_PROPERTIES],
+    ['table', BACKGROUND_COLOR_PROPERTIES],
+    ['td', BORDER_COLOR_PROPERTIES],
+    ['td', BACKGROUND_COLOR_PROPERTIES],
+    ['hr', BORDER_COLOR_PROPERTIES],
+    ['hr', BACKGROUND_COLOR_PROPERTIES]
+  ]);
+  const softFromStyles = colorFromSelectors(styles, [
+    ['blockquote', BACKGROUND_COLOR_PROPERTIES],
+    ['th', BACKGROUND_COLOR_PROPERTIES],
+    ['code', BACKGROUND_COLOR_PROPERTIES]
+  ]);
+  const surfaceFromStyles = colorFromSelectors(styles, [
+    ['container', BACKGROUND_COLOR_PROPERTIES]
+  ]);
+
+  return {
+    accent: normalizeColor(gzh.accent) || accentFromStyles || DEFAULT_CARD_TOKENS.accent,
+    body: normalizeColor(gzh.body) || bodyFromStyles || DEFAULT_CARD_TOKENS.body,
+    muted: normalizeColor(gzh.muted) || mutedFromStyles || DEFAULT_CARD_TOKENS.muted,
+    line: normalizeColor(gzh.line) || lineFromStyles || DEFAULT_CARD_TOKENS.line,
+    soft: normalizeColor(gzh.soft) || softFromStyles || DEFAULT_CARD_TOKENS.soft,
+    surface: normalizeColor(gzh.bg) || surfaceFromStyles || DEFAULT_CARD_TOKENS.surface
+  };
+}
+
+function normalizedTokenSet(tokens) {
+  return Object.fromEntries(Object.entries(DEFAULT_CARD_TOKENS).map(([role, fallback]) => [
+    role,
+    normalizeColor(tokens?.[role]) || fallback
+  ]));
+}
+
+function relativeLuminance(color) {
+  const normalized = normalizeColor(color);
+  if (!normalized) return null;
+  const channels = [1, 3, 5].map((offset) => {
+    const value = Number.parseInt(normalized.slice(offset, offset + 2), 16) / 255;
+    return value <= 0.04045
+      ? value / 12.92
+      : ((value + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+}
+
+export function contrastRatio(colorA, colorB) {
+  const luminanceA = relativeLuminance(colorA);
+  const luminanceB = relativeLuminance(colorB);
+  if (luminanceA === null || luminanceB === null) return 0;
+  const lighter = Math.max(luminanceA, luminanceB);
+  const darker = Math.min(luminanceA, luminanceB);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function readableForeground(foreground, background) {
+  if (contrastRatio(foreground, background) >= 4.5) return foreground;
+  return contrastRatio('#000000', background) >= contrastRatio('#ffffff', background)
+    ? '#000000'
+    : '#ffffff';
+}
+
+function contrastPair(role, foreground, background) {
+  return { role, foreground, background, minimum: 4.5 };
+}
+
+function presentationResult({
+  containerStyle,
+  titleStyle = '',
+  bodyStyle,
+  decoration = null,
+  solidBackground = null,
+  solidText = null,
+  contrastPairs
+}) {
+  return {
+    containerStyle,
+    titleStyle,
+    bodyStyle,
+    decoration,
+    solidBackground,
+    solidText,
+    contrastPairs
+  };
+}
+
+export function buildCardPresentation(styleId, tokenInput) {
+  if (!getCardStyle(styleId)) return null;
+
+  const tokens = normalizedTokenSet(tokenInput);
+  const common = 'margin: 20px 0; padding: 18px 20px; box-sizing: border-box; max-width: 100%; overflow-wrap: break-word;';
+  const bodyOnSoft = readableForeground(tokens.body, tokens.soft);
+  const bodyOnSurface = readableForeground(tokens.body, tokens.surface);
+  const solidText = readableForeground(tokens.surface, tokens.accent);
+  const bodyStyle = (foreground) =>
+    `margin: 0; color: ${foreground} !important; line-height: 1.75; text-align: left; overflow-wrap: break-word;`;
+  const bodyPair = (foreground, background) =>
+    contrastPair('body', foreground, background);
+
+  switch (styleId) {
+    case 'accent-bar':
+      return presentationResult({
+        containerStyle: `${common} border-left: 4px solid ${tokens.accent}; background-color: ${tokens.soft}; border-radius: 6px; color: ${bodyOnSoft} !important;`,
+        bodyStyle: bodyStyle(bodyOnSoft),
+        contrastPairs: [bodyPair(bodyOnSoft, tokens.soft)]
+      });
+    case 'minimal-outline':
+      return presentationResult({
+        containerStyle: `${common} border: 1px solid ${tokens.line}; background-color: ${tokens.surface}; border-radius: 6px; color: ${bodyOnSurface} !important;`,
+        bodyStyle: bodyStyle(bodyOnSurface),
+        contrastPairs: [bodyPair(bodyOnSurface, tokens.surface)]
+      });
+    case 'soft-fill':
+      return presentationResult({
+        containerStyle: `${common} border: none; background-color: ${tokens.soft}; border-radius: 14px; color: ${bodyOnSoft} !important;`,
+        bodyStyle: bodyStyle(bodyOnSoft),
+        contrastPairs: [bodyPair(bodyOnSoft, tokens.soft)]
+      });
+    case 'quote-frame': {
+      const quoteText = readableForeground(tokens.accent, tokens.surface);
+      return presentationResult({
+        containerStyle: `${common} border: 1px solid ${tokens.line}; background-color: ${tokens.surface}; border-radius: 10px; color: ${bodyOnSurface} !important;`,
+        bodyStyle: bodyStyle(bodyOnSurface),
+        decoration: 'quote',
+        contrastPairs: [
+          bodyPair(bodyOnSurface, tokens.surface),
+          contrastPair('quote-mark', quoteText, tokens.surface)
+        ]
+      });
+    }
+    case 'top-rule':
+      return presentationResult({
+        containerStyle: `${common} border-top: 4px solid ${tokens.accent}; background-color: ${tokens.soft}; border-radius: 0 0 8px 8px; color: ${bodyOnSoft} !important;`,
+        bodyStyle: bodyStyle(bodyOnSoft),
+        contrastPairs: [bodyPair(bodyOnSoft, tokens.soft)]
+      });
+    case 'double-frame':
+      return presentationResult({
+        containerStyle: `${common} border: 3px double ${tokens.line}; background-color: ${tokens.surface}; border-radius: 8px; color: ${bodyOnSurface} !important;`,
+        bodyStyle: bodyStyle(bodyOnSurface),
+        contrastPairs: [bodyPair(bodyOnSurface, tokens.surface)]
+      });
+    case 'solid-contrast':
+      return presentationResult({
+        containerStyle: `${common} border: none; background-color: ${tokens.accent}; border-radius: 10px; color: ${solidText} !important;`,
+        bodyStyle: bodyStyle(solidText),
+        solidBackground: tokens.accent,
+        solidText,
+        contrastPairs: [contrastPair('solid-fill', solidText, tokens.accent)]
+      });
+    case 'capsule-title':
+      return presentationResult({
+        containerStyle: `${common} border: 1px solid ${tokens.line}; background-color: ${tokens.surface}; border-radius: 12px; color: ${bodyOnSurface} !important; text-align: center;`,
+        titleStyle: `display: inline-block; margin: 0 auto 12px; padding: 5px 14px; background-color: ${tokens.accent}; color: ${solidText} !important; border-radius: 999px; font-size: 15px; line-height: 1.5;`,
+        bodyStyle: bodyStyle(bodyOnSurface),
+        contrastPairs: [
+          bodyPair(bodyOnSurface, tokens.surface),
+          contrastPair('capsule-title', solidText, tokens.accent)
+        ]
+      });
+    case 'label-title':
+      return presentationResult({
+        containerStyle: `${common} border: none; background-color: ${tokens.soft}; border-radius: 8px; color: ${bodyOnSoft} !important;`,
+        titleStyle: `display: block; margin: -18px -20px 14px; padding: 10px 20px; background-color: ${tokens.accent}; color: ${solidText} !important; border-radius: 8px 8px 0 0; font-size: 16px; line-height: 1.5;`,
+        bodyStyle: bodyStyle(bodyOnSoft),
+        contrastPairs: [
+          bodyPair(bodyOnSoft, tokens.soft),
+          contrastPair('title-strip', solidText, tokens.accent)
+        ]
+      });
+    case 'numbered-conclusion': {
+      const titleText = readableForeground(tokens.body, tokens.surface);
+      return presentationResult({
+        containerStyle: `${common} border: 1px solid ${tokens.line}; background-color: ${tokens.surface}; border-radius: 8px; color: ${bodyOnSurface} !important;`,
+        titleStyle: `display: inline-block; margin: 0 10px 12px 0; padding: 4px 9px; background-color: ${tokens.accent}; color: ${solidText} !important; border-radius: 6px; font-weight: 700; line-height: 1.4;`,
+        bodyStyle: bodyStyle(bodyOnSurface),
+        decoration: 'number',
+        contrastPairs: [
+          bodyPair(bodyOnSurface, tokens.surface),
+          contrastPair('title', titleText, tokens.surface),
+          contrastPair('number-badge', solidText, tokens.accent)
+        ]
+      });
+    }
+    default:
+      return null;
+  }
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+export function renderCardPreviewHtml(styleId, styleConfig) {
+  const card = getCardStyle(styleId);
+  if (!card) return '';
+  const presentation = buildCardPresentation(styleId, resolveCardTokens(styleConfig));
+  const containerStyle = escapeHtml(presentation.containerStyle);
+  const bodyStyle = escapeHtml(presentation.bodyStyle);
+  let content;
+
+  if (presentation.decoration === 'quote') {
+    const quotePair = presentation.contrastPairs.find(({ role }) => role === 'quote-mark');
+    const quoteStyle = escapeHtml(`display: inline-block; margin: 0 8px 4px 0; color: ${quotePair.foreground} !important; font-size: 30px; line-height: 1;`);
+    content = `<span data-ogzh-card-decoration="quote" aria-hidden="true" style="${quoteStyle}">“</span><p style="${bodyStyle}">${escapeHtml(card.preview)}</p>`;
+  } else if (presentation.decoration === 'number') {
+    const titlePair = presentation.contrastPairs.find(({ role }) => role === 'title');
+    const headingStyle = escapeHtml(`display: inline-block; margin: 0 0 12px; color: ${titlePair.foreground} !important; font-size: 16px; line-height: 1.5;`);
+    content = `<span data-ogzh-card-decoration="number" aria-hidden="true" style="${escapeHtml(presentation.titleStyle)}">01</span><h4 style="${headingStyle}">${escapeHtml(card.defaultTitle)}</h4><p style="${bodyStyle}">${escapeHtml(card.preview)}</p>`;
+  } else if (card.slots === 'title-body') {
+    content = `<h4 style="${escapeHtml(presentation.titleStyle)}">${escapeHtml(card.defaultTitle)}</h4><p style="${bodyStyle}">${escapeHtml(card.preview)}</p>`;
+  } else {
+    content = `<p style="${bodyStyle}">${escapeHtml(card.preview)}</p>`;
+  }
+
+  return `<section data-ogzh-card-preview="${escapeHtml(card.id)}" style="${containerStyle}">${content}</section>`;
+}
+
 export function getCardStyle(styleId) {
   return CARD_STYLE_BY_ID.get(styleId) || null;
 }

@@ -1,15 +1,20 @@
 import { describe, expect, it } from 'vitest';
+import { STYLES } from '../../../styles/themes/index.js';
 import * as cardStyles from '../card-styles.js';
 import {
   CARD_STYLES,
   applyCardEdit,
+  buildCardPresentation,
   buildCardSnippet,
+  contrastRatio,
   findCardAtSelection,
   getCardStyle,
   inspectCardTarget,
   parseCardFence,
   removeCardEdit,
+  renderCardPreviewHtml,
   replaceCardStyleEdit,
+  resolveCardTokens,
   scanCardRanges
 } from '../card-styles.js';
 
@@ -800,5 +805,219 @@ describe('card source edits', () => {
     );
     expect(result.markdown.replaceAll('\r\n', '')).not.toContain('\n');
     expect(result.markdown.slice(result.selectionStart, result.selectionEnd)).toBe('核心观点');
+  });
+});
+
+describe('theme-aware card tokens', () => {
+  const SAFE_COLOR = /^#[0-9a-f]{6}$/;
+
+  it('prefers and normalizes every explicit gzh semantic token', () => {
+    expect(resolveCardTokens({
+      gzh: {
+        accent: '#AbC',
+        body: '#123456',
+        muted: '#667788',
+        line: '#DDEEFF',
+        soft: '#f0f1f2',
+        bg: '#010203'
+      },
+      styles: {
+        h2: 'border-left: 4px solid #ffffff;',
+        p: 'color: #ffffff;'
+      }
+    })).toEqual({
+      accent: '#aabbcc',
+      body: '#123456',
+      muted: '#667788',
+      line: '#ddeeff',
+      soft: '#f0f1f2',
+      surface: '#010203'
+    });
+  });
+
+  it('derives semantic colors from relevant style declarations without gzh', () => {
+    expect(resolveCardTokens({
+      styles: {
+        container: 'color: #243447; background-color: #fdfefe;',
+        h2: 'color: #111111; border-left: 4px solid #1a73e8;',
+        p: 'color: #345678 !important;',
+        em: 'color: #657786;',
+        blockquote: 'background: #eef4fb; color: #556677;',
+        td: 'border-bottom: 1px solid #ccd6dd;',
+        code: 'background-color: #edf2f7;'
+      }
+    })).toEqual({
+      accent: '#1a73e8',
+      body: '#345678',
+      muted: '#657786',
+      line: '#ccd6dd',
+      soft: '#eef4fb',
+      surface: '#fdfefe'
+    });
+  });
+
+  it('uses the last repeated declaration because that is the effective CSS value', () => {
+    expect(resolveCardTokens({
+      styles: {
+        blockquote: 'background-color: #fafafa; background-color: #e9f3fd;'
+      }
+    }).soft).toBe('#e9f3fd');
+  });
+
+  it('returns only safe non-empty colors when theme values are missing or malicious', () => {
+    const tokens = resolveCardTokens({
+      gzh: {
+        accent: '#f00; position: fixed',
+        body: 'url(javascript:alert(1))',
+        muted: 'expression(alert(1))',
+        line: 'var(--attacker)',
+        soft: '<style>body{display:grid}</style>',
+        bg: 'transparent; background:url(https://evil.invalid)'
+      },
+      styles: {
+        h2: 'color: url(javascript:alert(1)); position: fixed;',
+        container: 'background-image: url(https://evil.invalid);'
+      }
+    });
+
+    expect(Object.values(tokens).every((value) => SAFE_COLOR.test(value))).toBe(true);
+    expect(JSON.stringify(tokens)).not.toMatch(/position|javascript|expression|url|style/i);
+  });
+});
+
+describe('card presentation recipes', () => {
+  const tokens = {
+    accent: '#1a73e8',
+    body: '#243447',
+    muted: '#657786',
+    line: '#ccd6dd',
+    soft: '#eef4fb',
+    surface: '#ffffff'
+  };
+
+  it('computes WCAG contrast and fails closed for invalid colors', () => {
+    expect(contrastRatio('#000', '#fff')).toBeCloseTo(21, 5);
+    expect(contrastRatio('#777777', '#ffffff')).toBeCloseTo(4.478, 3);
+    expect(contrastRatio('not-a-color', '#ffffff')).toBe(0);
+    expect(contrastRatio('#ffffff', 'url(javascript:1)')).toBe(0);
+  });
+
+  it('builds ten structurally distinct, static-flow presentations', () => {
+    const presentations = CARD_STYLES.map((card) =>
+      buildCardPresentation(card.id, tokens)
+    );
+    const serialized = JSON.stringify(presentations);
+
+    expect(presentations).toHaveLength(10);
+    expect(new Set(presentations.map((item) => item.containerStyle)).size).toBe(10);
+    expect(presentations.every((item) => (
+      typeof item.containerStyle === 'string' &&
+      typeof item.titleStyle === 'string' &&
+      typeof item.bodyStyle === 'string' &&
+      Array.isArray(item.contrastPairs)
+    ))).toBe(true);
+    expect(presentations.map((item) => item.decoration)).toEqual([
+      null, null, null, 'quote', null, null, null, null, null, 'number'
+    ]);
+    expect(serialized).not.toMatch(/display\s*:\s*(?:flex|grid)|position\s*:|::(?:before|after)|<table/i);
+  });
+
+  it('uses the ten approved container and title recipes', () => {
+    const presentation = Object.fromEntries(CARD_STYLES.map(({ id }) => [
+      id,
+      buildCardPresentation(id, tokens)
+    ]));
+    const common = /margin:\s*20px 0.*padding:\s*18px 20px.*box-sizing:\s*border-box.*max-width:\s*100%.*overflow-wrap:\s*break-word/;
+
+    expect(Object.values(presentation).every((item) => common.test(item.containerStyle))).toBe(true);
+    expect(presentation['accent-bar'].containerStyle).toMatch(/border-left:\s*4px solid #1a73e8.*background-color:\s*#eef4fb.*border-radius:\s*6px/);
+    expect(presentation['minimal-outline'].containerStyle).toMatch(/border:\s*1px solid #ccd6dd.*background-color:\s*#ffffff.*border-radius:\s*6px/);
+    expect(presentation['soft-fill'].containerStyle).toMatch(/border:\s*none.*background-color:\s*#eef4fb.*border-radius:\s*14px/);
+    expect(presentation['quote-frame'].containerStyle).toMatch(/border:\s*1px solid #ccd6dd.*border-radius:\s*10px/);
+    expect(presentation['top-rule'].containerStyle).toMatch(/border-top:\s*4px solid #1a73e8.*background-color:\s*#eef4fb.*border-radius:\s*0 0 8px 8px/);
+    expect(presentation['double-frame'].containerStyle).toMatch(/border:\s*3px double #ccd6dd.*background-color:\s*#ffffff.*border-radius:\s*8px/);
+    expect(presentation['solid-contrast'].containerStyle).toMatch(/background-color:\s*#1a73e8.*border-radius:\s*10px/);
+    expect(presentation['capsule-title'].titleStyle).toMatch(/display:\s*inline-block.*border-radius:\s*999px/);
+    expect(presentation['label-title'].titleStyle).toMatch(/display:\s*block.*background-color:\s*#1a73e8/);
+    expect(presentation['numbered-conclusion'].titleStyle).toMatch(/display:\s*inline-block/);
+    expect(presentation['numbered-conclusion'].containerStyle).not.toMatch(/table/i);
+  });
+
+  it('returns a safe null result for an unknown card id', () => {
+    expect(buildCardPresentation('future-card', tokens)).toBeNull();
+  });
+
+  it('chooses a readable solid foreground', () => {
+    const presentation = buildCardPresentation('solid-contrast', {
+      ...tokens,
+      accent: '#777777',
+      surface: '#888888'
+    });
+
+    expect(contrastRatio(
+      presentation.solidText,
+      presentation.solidBackground
+    )).toBeGreaterThanOrEqual(4.5);
+    expect(['#000000', '#ffffff']).toContain(presentation.solidText);
+  });
+
+  it('keeps every real theme and card text surface at WCAG AA contrast', () => {
+    const failures = [];
+
+    for (const [themeId, theme] of Object.entries(STYLES)) {
+      const resolved = resolveCardTokens(theme);
+      for (const card of CARD_STYLES) {
+        const presentation = buildCardPresentation(card.id, resolved);
+        for (const pair of presentation.contrastPairs) {
+          const ratio = contrastRatio(pair.foreground, pair.background);
+          if (ratio < pair.minimum) {
+            failures.push(`${themeId}/${card.id}/${pair.role}=${ratio.toFixed(2)}`);
+          }
+        }
+      }
+    }
+
+    expect(failures, failures.join('\n')).toEqual([]);
+    expect(resolveCardTokens(STYLES['gzh-yehang']).surface).toBe('#191414');
+  });
+});
+
+describe('card preview HTML', () => {
+  const theme = STYLES['gzh-yehang'];
+
+  it('renders every registry card from trusted inline presentation styles', () => {
+    for (const card of CARD_STYLES) {
+      const html = renderCardPreviewHtml(card.id, theme);
+
+      expect(html, card.id).toContain(`data-ogzh-card-preview="${card.id}"`);
+      expect(html, card.id).toContain('style="');
+      expect(html, card.id).toContain(card.preview);
+      if (card.defaultTitle) expect(html, card.id).toContain(card.defaultTitle);
+      expect(html, card.id).not.toContain(':::ogzh-card');
+      expect(html, card.id).not.toMatch(/class=|<table|display\s*:\s*(?:flex|grid)|position\s*:|::(?:before|after)/i);
+    }
+  });
+
+  it('uses real spans for quote and number decorations', () => {
+    expect(renderCardPreviewHtml('quote-frame', theme)).toMatch(
+      /<span[^>]+data-ogzh-card-decoration="quote"[^>]*>/
+    );
+    expect(renderCardPreviewHtml('numbered-conclusion', theme)).toMatch(
+      /<span[^>]+data-ogzh-card-decoration="number"[^>]*>/
+    );
+  });
+
+  it('returns empty HTML for unknown ids and cannot copy malicious theme CSS', () => {
+    expect(renderCardPreviewHtml('future-card', theme)).toBe('');
+
+    const html = renderCardPreviewHtml('accent-bar', {
+      gzh: {
+        accent: '#f00; position:fixed',
+        body: '<img src=x onerror=alert(1)>',
+        soft: 'url(javascript:alert(1))',
+        bg: '" onmouseover="alert(1)'
+      }
+    });
+    expect(html).not.toMatch(/position|onerror|onmouseover|javascript|<img/i);
   });
 });
