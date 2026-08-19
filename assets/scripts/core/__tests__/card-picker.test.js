@@ -262,6 +262,29 @@ describe('card parser integration', () => {
     expect(source).toContain('registerCardDirective(md)');
   });
 
+  it('applies card styles after gzh structure and before the end divider', () => {
+    const source = read('assets/scripts/core/render-pipeline.js');
+    const gzhIndex = source.indexOf('applyGzhStructure(doc, styleConfig.gzh)');
+    const cardIndex = source.indexOf('applyCardStyles(doc, styleConfig)');
+    const dividerIndex = source.indexOf('applyEndDivider(doc, displaySettings?.endStyle');
+
+    expect(source).toContain("import { applyCardStyles } from './card-styles.js'");
+    expect(gzhIndex).toBeGreaterThan(-1);
+    expect(cardIndex).toBeGreaterThan(gzhIndex);
+    expect(dividerIndex).toBeGreaterThan(cardIndex);
+  });
+
+  it('keeps cards in the shared rendered HTML without clipboard-specific branches', () => {
+    expect(read('assets/scripts/export/clipboard-exporter.js')).not.toContain('data-ogzh-card');
+  });
+
+  it('keeps production card DOM static-flow and table-free', () => {
+    const source = read('assets/scripts/core/card-styles.js');
+
+    expect(source).not.toMatch(/createElement\(\s*['"]table['"]\s*\)/i);
+    expect(source).not.toMatch(/display\s*:\s*(?:flex|grid)|position\s*:|::(?:before|after)/i);
+  });
+
   it('keeps markdown parsing dependency-free', () => {
     const packageJson = JSON.parse(read('package.json'));
     expect(packageJson.dependencies).toBeUndefined();

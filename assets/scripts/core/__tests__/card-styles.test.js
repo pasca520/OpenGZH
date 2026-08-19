@@ -18,6 +18,179 @@ import {
   scanCardRanges
 } from '../card-styles.js';
 
+class FakeStyle {
+  constructor() {
+    this.declarations = new Map();
+  }
+
+  get cssText() {
+    return Array.from(this.declarations, ([property, { value, priority }]) =>
+      `${property}: ${value}${priority ? ` !${priority}` : ''};`
+    ).join(' ');
+  }
+
+  set cssText(styleText) {
+    this.declarations.clear();
+    String(styleText || '').split(';').forEach((declaration) => {
+      const colon = declaration.indexOf(':');
+      if (colon < 1) return;
+      const property = declaration.slice(0, colon).trim().toLowerCase();
+      const rawValue = declaration.slice(colon + 1).trim();
+      const important = /\s*!important\s*$/i.test(rawValue);
+      const value = rawValue.replace(/\s*!important\s*$/i, '');
+      this.setProperty(property, value, important ? 'important' : '');
+    });
+  }
+
+  setProperty(property, value, priority = '') {
+    this.declarations.set(String(property).toLowerCase(), {
+      value: String(value),
+      priority: String(priority).toLowerCase()
+    });
+  }
+
+  removeProperty(property) {
+    this.declarations.delete(String(property).toLowerCase());
+  }
+
+  getPropertyValue(property) {
+    return this.declarations.get(String(property).toLowerCase())?.value || '';
+  }
+
+  getPropertyPriority(property) {
+    return this.declarations.get(String(property).toLowerCase())?.priority || '';
+  }
+}
+
+class FakeElement {
+  constructor(tagName) {
+    this.tagName = String(tagName).toUpperCase();
+    this.attributes = new Map();
+    this.children = [];
+    this.parentNode = null;
+    this.style = new FakeStyle();
+    this.ownText = '';
+  }
+
+  setAttribute(name, value) {
+    const normalizedName = String(name).toLowerCase();
+    if (normalizedName === 'style') {
+      this.style.cssText = value;
+      return;
+    }
+    this.attributes.set(normalizedName, String(value));
+  }
+
+  getAttribute(name) {
+    const normalizedName = String(name).toLowerCase();
+    if (normalizedName === 'style') return this.style.cssText || null;
+    return this.attributes.get(normalizedName) ?? null;
+  }
+
+  hasAttribute(name) {
+    const normalizedName = String(name).toLowerCase();
+    return normalizedName === 'style'
+      ? Boolean(this.style.cssText)
+      : this.attributes.has(normalizedName);
+  }
+
+  appendChild(child) {
+    if (child.parentNode) child.parentNode.removeChild(child);
+    child.parentNode = this;
+    this.children.push(child);
+    return child;
+  }
+
+  insertBefore(child, reference) {
+    if (child.parentNode) child.parentNode.removeChild(child);
+    const index = this.children.indexOf(reference);
+    if (index === -1) return this.appendChild(child);
+    child.parentNode = this;
+    this.children.splice(index, 0, child);
+    return child;
+  }
+
+  removeChild(child) {
+    const index = this.children.indexOf(child);
+    if (index !== -1) {
+      this.children.splice(index, 1);
+      child.parentNode = null;
+    }
+    return child;
+  }
+
+  remove() {
+    this.parentNode?.removeChild(this);
+  }
+
+  get firstChild() {
+    return this.children[0] || null;
+  }
+
+  get textContent() {
+    return this.ownText + this.children.map((child) => child.textContent).join('');
+  }
+
+  set textContent(value) {
+    this.children.forEach((child) => {
+      child.parentNode = null;
+    });
+    this.children = [];
+    this.ownText = String(value);
+  }
+}
+
+class FakeDocument {
+  constructor() {
+    this.body = this.createElement('body');
+  }
+
+  createElement(tagName) {
+    return new FakeElement(tagName);
+  }
+
+  querySelectorAll(selector) {
+    if (selector !== 'section[data-ogzh-card]') {
+      throw new Error(`Unsupported fake selector: ${selector}`);
+    }
+    const matches = [];
+    const visit = (element) => {
+      if (element.tagName === 'SECTION' && element.hasAttribute('data-ogzh-card')) {
+        matches.push(element);
+      }
+      element.children.forEach(visit);
+    };
+    visit(this.body);
+    return matches;
+  }
+}
+
+function appendElement(doc, parent, tagName, text = '') {
+  const element = doc.createElement(tagName);
+  element.textContent = text;
+  parent.appendChild(element);
+  return element;
+}
+
+function createCard(doc, styleId, children = []) {
+  const section = doc.createElement('section');
+  section.setAttribute('data-ogzh-card', styleId);
+  children.forEach((child) => section.appendChild(child));
+  doc.body.appendChild(section);
+  return section;
+}
+
+function decorations(section, kind) {
+  return section.children.filter((child) => (
+    child.hasAttribute('data-ogzh-card-decoration') &&
+    (!kind || child.getAttribute('data-ogzh-card-decoration') === kind)
+  ));
+}
+
+function applyCardStyles(...args) {
+  return cardStyles.applyCardStyles(...args);
+}
+
 describe('card directive parsing', () => {
   it('parses a known directive and preserves inner markdown', () => {
     expect(parseCardFence(':::ogzh-card accent-bar\n正文 **重点**\n:::', 0)).toEqual({
@@ -1296,6 +1469,170 @@ describe('card presentation recipes', () => {
     }
 
     expect(failures, failures.join('\n')).toEqual([]);
+  });
+});
+
+describe('card presentation DOM application', () => {
+  const theme = STYLES['latepost-depth'];
+
+  it('styles only known card containers and their direct body blocks', () => {
+    const doc = new FakeDocument();
+    const paragraph = appendElement(doc, doc.createElement('div'), 'p', '已知正文');
+    const known = createCard(doc, 'accent-bar', [paragraph]);
+    known.setAttribute('style', 'letter-spacing: 1px; background-color: pink !important;');
+    paragraph.setAttribute('style', 'margin: 16px !important;');
+    const nested = doc.createElement('div');
+    const nestedParagraph = appendElement(doc, nested, 'p', '嵌套正文');
+    known.appendChild(nested);
+    const unknownParagraph = appendElement(doc, doc.createElement('div'), 'p', '未知正文');
+    const unknown = createCard(doc, 'future-card" onmouseover="alert(1)', [unknownParagraph]);
+    unknown.setAttribute('style', 'color: purple;');
+    const unknownBefore = unknown.getAttribute('style');
+
+    applyCardStyles(doc, theme);
+
+    expect(known.style.getPropertyValue('letter-spacing')).toBe('1px');
+    expect(known.style.getPropertyValue('border-left')).toContain('solid');
+    expect(known.style.getPropertyValue('background-color')).not.toBe('pink');
+    expect(paragraph.style.getPropertyValue('margin')).toBe('0');
+    expect(paragraph.style.getPropertyPriority('margin')).toBe('important');
+    expect(paragraph.style.getPropertyValue('line-height')).toBe('1.75');
+    expect(nestedParagraph.getAttribute('style')).toBeNull();
+    expect(unknown.getAttribute('style')).toBe(unknownBefore);
+    expect(unknownParagraph.getAttribute('style')).toBeNull();
+  });
+
+  it('styles the first direct title without fabricating a missing h4', () => {
+    const doc = new FakeDocument();
+    const heading = appendElement(doc, doc.createElement('div'), 'h4', '核心观点');
+    const paragraph = appendElement(doc, doc.createElement('div'), 'p', '正文');
+    const titled = createCard(doc, 'capsule-title', [heading, paragraph]);
+    const bodyOnly = createCard(doc, 'label-title', [appendElement(doc, doc.createElement('div'), 'p', '无标题正文')]);
+
+    applyCardStyles(doc, theme);
+
+    expect(heading.style.getPropertyValue('display')).toBe('inline-block');
+    expect(heading.style.getPropertyValue('border')).toBe('none');
+    expect(heading.textContent).toBe('核心观点');
+    expect(titled.children).toContain(heading);
+    expect(bodyOnly.children.map((child) => child.tagName)).toEqual(['P']);
+  });
+
+  it('normalizes a retained h4 when a card changes to a body-only style', () => {
+    const doc = new FakeDocument();
+    const heading = appendElement(doc, doc.createElement('div'), 'h4', '保留的标题');
+    heading.setAttribute(
+      'style',
+      'background: red !important; background-color: red !important; padding: 12px !important; border: 3px solid blue !important; border-left: 8px solid blue !important; color: pink !important;'
+    );
+    createCard(doc, 'soft-fill', [heading, appendElement(doc, doc.createElement('div'), 'p', '正文')]);
+
+    applyCardStyles(doc, theme);
+
+    expect(heading.textContent).toBe('保留的标题');
+    expect(heading.style.getPropertyValue('background')).toBe('transparent');
+    expect(heading.style.getPropertyValue('background-color')).toBe('transparent');
+    expect(heading.style.getPropertyValue('padding')).toBe('0');
+    expect(heading.style.getPropertyValue('border')).toBe('none');
+    expect(heading.style.getPropertyValue('border-left')).toBe('none');
+    expect(heading.style.getPropertyValue('margin')).toBe('0');
+    expect(heading.style.getPropertyValue('line-height')).toBe('1.75');
+  });
+
+  it('creates two real quote spans and stays stable when applied twice', () => {
+    const doc = new FakeDocument();
+    const section = createCard(doc, 'quote-frame', [appendElement(doc, doc.createElement('div'), 'p', '金句')]);
+
+    applyCardStyles(doc, theme);
+    const firstStyle = section.getAttribute('style');
+    const firstDecorations = decorations(section);
+
+    expect(firstDecorations).toHaveLength(2);
+    expect(firstDecorations.map((item) => item.tagName)).toEqual(['SPAN', 'SPAN']);
+    expect(firstDecorations.map((item) => item.textContent)).toEqual(['“', '”']);
+    expect(firstDecorations.every((item) => item.getAttribute('aria-hidden') === 'true')).toBe(true);
+    expect(firstDecorations.every((item) => Boolean(item.getAttribute('style')))).toBe(true);
+
+    applyCardStyles(doc, theme);
+
+    expect(decorations(section)).toHaveLength(2);
+    expect(decorations(section).map((item) => item.textContent)).toEqual(['“', '”']);
+    expect(section.getAttribute('style')).toBe(firstStyle);
+  });
+
+  it('turns a numbered title into a real badge and remains stable on reapplication', () => {
+    const doc = new FakeDocument();
+    const heading = appendElement(doc, doc.createElement('div'), 'h4', '01 阶段结论');
+    const section = createCard(doc, 'numbered-conclusion', [heading, appendElement(doc, doc.createElement('div'), 'p', '正文')]);
+
+    applyCardStyles(doc, theme);
+    const firstStyle = heading.getAttribute('style');
+
+    expect(decorations(section, 'number')).toHaveLength(1);
+    expect(decorations(section, 'number')[0].textContent).toBe('01');
+    expect(decorations(section, 'number')[0].getAttribute('aria-hidden')).toBe('true');
+    expect(decorations(section, 'number')[0].style.getPropertyValue('display')).toBe('inline-block');
+    expect(heading.textContent).toBe('阶段结论');
+    expect(heading.getAttribute('aria-label')).toBe('01 阶段结论');
+
+    applyCardStyles(doc, theme);
+
+    expect(decorations(section, 'number')).toHaveLength(1);
+    expect(decorations(section, 'number')[0].textContent).toBe('01');
+    expect(heading.textContent).toBe('阶段结论');
+    expect(heading.getAttribute('aria-label')).toBe('01 阶段结论');
+    expect(heading.getAttribute('style')).toBe(firstStyle);
+  });
+
+  it('keeps an unnumbered conclusion title unchanged and badge-free', () => {
+    const doc = new FakeDocument();
+    const heading = appendElement(doc, doc.createElement('div'), 'h4', '阶段结论');
+    const section = createCard(doc, 'numbered-conclusion', [heading]);
+
+    applyCardStyles(doc, theme);
+
+    expect(heading.textContent).toBe('阶段结论');
+    expect(heading.getAttribute('aria-label')).toBeNull();
+    expect(heading.style.getPropertyValue('display')).toBe('inline-block');
+    expect(decorations(section, 'number')).toHaveLength(0);
+  });
+
+  it('styles direct lists and items without replacing standard inline content', () => {
+    const doc = new FakeDocument();
+    const strong = appendElement(doc, doc.createElement('div'), 'strong', '重点');
+    const link = appendElement(doc, doc.createElement('div'), 'a', '链接');
+    const paragraph = doc.createElement('p');
+    paragraph.appendChild(strong);
+    paragraph.appendChild(link);
+    const list = doc.createElement('ul');
+    const item = appendElement(doc, list, 'li', '列表项');
+    createCard(doc, 'accent-bar', [paragraph, list]);
+
+    applyCardStyles(doc, theme);
+
+    expect(paragraph.children).toEqual([strong, link]);
+    expect(paragraph.textContent).toBe('重点链接');
+    expect(list.children).toEqual([item]);
+    expect(list.style.getPropertyValue('margin')).toBe('0');
+    expect(item.style.getPropertyValue('line-height')).toBe('1.75');
+    expect(strong.getAttribute('style')).toBeNull();
+    expect(link.getAttribute('style')).toBeNull();
+  });
+
+  it('uses a valid native background to keep the native-dark contrast path', () => {
+    const nativeTheme = STYLES['gzh-yehang'];
+    const ordinaryTheme = { ...nativeTheme, gzh: { ...nativeTheme.gzh } };
+    delete ordinaryTheme.gzh.bg;
+    const nativeDoc = new FakeDocument();
+    const ordinaryDoc = new FakeDocument();
+    const nativeCard = createCard(nativeDoc, 'solid-contrast', [appendElement(nativeDoc, nativeDoc.createElement('div'), 'p', '正文')]);
+    const ordinaryCard = createCard(ordinaryDoc, 'solid-contrast', [appendElement(ordinaryDoc, ordinaryDoc.createElement('div'), 'p', '正文')]);
+
+    applyCardStyles(nativeDoc, nativeTheme);
+    applyCardStyles(ordinaryDoc, ordinaryTheme);
+
+    expect(nativeCard.style.getPropertyValue('background-color')).toBe('#1db954');
+    expect(ordinaryCard.style.getPropertyValue('background-color')).not.toBe('#1db954');
   });
 });
 

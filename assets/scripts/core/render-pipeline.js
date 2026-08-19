@@ -1,4 +1,5 @@
 import { applyCodeHighlighting } from './code-highlight.js';
+import { applyCardStyles } from './card-styles.js';
 import { applyGzhStructure, applyEndDivider } from './gzh-structure.js';
 
 /**
@@ -82,6 +83,7 @@ function applyInlineStyles(html, styleConfig, codeTheme, displaySettings) {
   if (styleConfig?.gzh) {
     applyGzhStructure(doc, styleConfig.gzh);
   }
+  applyCardStyles(doc, styleConfig);
   // 结尾分隔线：所有主题独立生效
   applyEndDivider(doc, displaySettings?.endStyle, styleConfig?.gzh);
 
