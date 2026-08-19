@@ -1,3 +1,5 @@
+import { registerCardDirective } from './card-styles.js';
+
 /**
  * Markdown engine setup with CJK emphasis patching.
  * @module markdown-engine
@@ -107,6 +109,7 @@ export function createMarkdownEngine() {
 
   patchMarkdownScanner(md);
   registerMathPlugin(md);
+  registerCardDirective(md);
 
   md.renderer.rules.fence = (tokens, idx) => {
     const token = tokens[idx];

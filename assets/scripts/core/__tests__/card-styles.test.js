@@ -7,10 +7,53 @@ import {
   findCardAtSelection,
   getCardStyle,
   inspectCardTarget,
+  parseCardFence,
   removeCardEdit,
   replaceCardStyleEdit,
   scanCardRanges
 } from '../card-styles.js';
+
+describe('card directive parsing', () => {
+  it('parses a known directive and preserves inner markdown', () => {
+    expect(parseCardFence(':::ogzh-card accent-bar\n正文 **重点**\n:::', 0)).toEqual({
+      styleId: 'accent-bar',
+      known: true,
+      content: '正文 **重点**',
+      startLine: 0,
+      closingLine: 2
+    });
+  });
+
+  it('keeps an unknown directive body but does not mark the id as known', () => {
+    expect(parseCardFence('前文\n:::ogzh-card future-card\n正文\n:::', 1)).toEqual({
+      styleId: 'future-card',
+      known: false,
+      content: '正文',
+      startLine: 1,
+      closingLine: 3
+    });
+  });
+
+  it('preserves CRLF bytes inside a directive', () => {
+    expect(
+      parseCardFence(':::ogzh-card soft-fill\r\n第一行\r\n\r\n第二行\r\n:::', 0)
+    ).toMatchObject({
+      content: '第一行\r\n\r\n第二行',
+      closingLine: 4
+    });
+  });
+
+  it('refuses non-openers, unclosed directives, and nested directives', () => {
+    expect(parseCardFence('前文\n:::ogzh-card accent-bar\n正文\n:::', 0)).toBeNull();
+    expect(parseCardFence(':::ogzh-card accent-bar\n正文', 0)).toBeNull();
+    expect(
+      parseCardFence(
+        ':::ogzh-card accent-bar\n:::ogzh-card soft-fill\n正文\n:::\n:::',
+        0
+      )
+    ).toBeNull();
+  });
+});
 
 describe('card edit public API', () => {
   it('exports selection inspection and unified edit entry points', () => {

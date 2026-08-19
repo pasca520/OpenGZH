@@ -51,6 +51,79 @@ export function getCardStyle(styleId) {
   return CARD_STYLE_BY_ID.get(styleId) || null;
 }
 
+export function parseCardFence(source, startLine) {
+  if (!Number.isInteger(startLine) || startLine < 0) return null;
+
+  const lines = [];
+  const linePattern = /([^\r\n]*)(\r\n|\n|$)/g;
+  while (linePattern.lastIndex <= source.length) {
+    const match = linePattern.exec(source);
+    if (!match || match[0] === '') break;
+    lines.push({
+      text: match[1],
+      start: match.index,
+      end: match.index + match[0].length
+    });
+  }
+
+  const opener = lines[startLine];
+  const openerMatch = opener && CARD_OPENER_PATTERN.exec(opener.text);
+  if (!openerMatch) return null;
+
+  for (let line = startLine + 1; line < lines.length; line += 1) {
+    if (CARD_OPENER_PATTERN.test(lines[line].text)) return null;
+    if (!CARD_CLOSER_PATTERN.test(lines[line].text)) continue;
+
+    let contentEnd = lines[line].start;
+    if (contentEnd > opener.end) {
+      contentEnd -= source.slice(contentEnd - 2, contentEnd) === '\r\n' ? 2 : 1;
+    }
+    const styleId = openerMatch[1];
+    return {
+      styleId,
+      known: Boolean(getCardStyle(styleId)),
+      content: source.slice(opener.end, contentEnd),
+      startLine,
+      closingLine: line
+    };
+  }
+
+  return null;
+}
+
+export function registerCardDirective(md) {
+  function cardDirectiveRule(state, startLine, endLine, silent) {
+    const card = parseCardFence(state.src, startLine);
+    if (!card || card.closingLine >= endLine) return false;
+    if (silent) return true;
+
+    const opening = state.push('ogzh_card_open', 'section', 1);
+    opening.block = true;
+    opening.map = [startLine, card.closingLine + 1];
+    if (card.known) opening.attrSet('data-ogzh-card', card.styleId);
+
+    const oldParentType = state.parentType;
+    const oldLineMax = state.lineMax;
+    try {
+      state.parentType = 'ogzh_card';
+      state.lineMax = card.closingLine;
+      state.md.block.tokenize(state, startLine + 1, card.closingLine);
+    } finally {
+      state.parentType = oldParentType;
+      state.lineMax = oldLineMax;
+    }
+
+    const closing = state.push('ogzh_card_close', 'section', -1);
+    closing.block = true;
+    state.line = card.closingLine + 1;
+    return true;
+  }
+
+  md.block.ruler.before('fence', 'ogzh_card', cardDirectiveRule, {
+    alt: ['paragraph', 'reference', 'blockquote', 'list']
+  });
+}
+
 function buildCardSnippetForStyle(card, selectedBody, lineEnding) {
   const body = selectedBody || BODY_PLACEHOLDER;
   const opener = `:::ogzh-card ${card.id}${lineEnding}`;
