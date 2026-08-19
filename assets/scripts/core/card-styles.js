@@ -133,7 +133,42 @@ export function parseCardFence(source, startLine) {
 }
 
 export function registerCardDirective(md) {
-  const directiveIndexes = new WeakMap();
+  const directiveCaches = new WeakMap();
+
+  function analyzeDirectiveCandidate(state, startLine, endLine, styleId, cache) {
+    const openers = [startLine];
+    let depth = 1;
+
+    for (let lineNumber = startLine + 1; lineNumber < endLine; lineNumber += 1) {
+      const line = state.src.slice(state.bMarks[lineNumber], state.eMarks[lineNumber]);
+      const openerMatch = CARD_OPENER_PATTERN.exec(line);
+      if (openerMatch) {
+        openers.push(lineNumber);
+        depth += 1;
+        continue;
+      }
+      if (!CARD_CLOSER_PATTERN.test(line)) continue;
+
+      depth -= 1;
+      if (depth > 0) continue;
+      if (openers.length > 1) {
+        for (const opener of openers) cache.set(opener, null);
+        return null;
+      }
+
+      const card = {
+        styleId,
+        known: Boolean(getCardStyle(styleId)),
+        startLine,
+        closingLine: lineNumber
+      };
+      cache.set(startLine, card);
+      return card;
+    }
+
+    for (const opener of openers) cache.set(opener, null);
+    return null;
+  }
 
   function cardDirectiveRule(state, startLine, endLine, silent) {
     const lineStart = state.bMarks?.[startLine];
@@ -147,16 +182,21 @@ export function registerCardDirective(md) {
       return false;
     }
     const line = state.src.slice(lineStart, lineEnd);
-    if (!line.startsWith(':::ogzh-card') || !CARD_OPENER_PATTERN.test(line)) {
+    const openerMatch = line.startsWith(':::ogzh-card')
+      ? CARD_OPENER_PATTERN.exec(line)
+      : null;
+    if (!openerMatch) {
       return false;
     }
 
-    let index = directiveIndexes.get(state);
-    if (!index) {
-      index = buildCardDirectiveIndex(state.src);
-      directiveIndexes.set(state, index);
+    let cache = directiveCaches.get(state);
+    if (!cache) {
+      cache = new Map();
+      directiveCaches.set(state, cache);
     }
-    const card = index.get(startLine);
+    const card = cache.has(startLine)
+      ? cache.get(startLine)
+      : analyzeDirectiveCandidate(state, startLine, endLine, openerMatch[1], cache);
     if (!card || card.closingLine >= endLine) return false;
     if (silent) return true;
 

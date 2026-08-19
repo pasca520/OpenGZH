@@ -189,6 +189,29 @@ describe('card directive block rule', () => {
     expect(tokenize).not.toHaveBeenCalled();
   });
 
+  it('ignores raw opener examples inside a backtick fence that markdown-it already consumed', () => {
+    const source = [
+      '```md',
+      ':::ogzh-card example-only',
+      '```',
+      ':::ogzh-card accent-bar',
+      '真实卡片',
+      ':::'
+    ].join('\n');
+    const tokenize = vi.fn();
+    const { rule } = registeredRule(tokenize);
+    const state = createState(source, tokenize);
+
+    expect(rule(state, 3, state.lineMax, false)).toBe(true);
+    expect(state.tokens[0]).toMatchObject({
+      type: 'ogzh_card_open',
+      attrs: [['data-ogzh-card', 'accent-bar']],
+      map: [3, 6]
+    });
+    expect(tokenize).toHaveBeenCalledWith(state, 4, 5);
+    expect(state.line).toBe(6);
+  });
+
   it('fast-rejects 4000 ordinary lines without scanning the whole document', () => {
     const source = Array.from({ length: 4000 }, (_, index) => `普通行 ${index}`).join('\n');
     const tokenize = vi.fn();
@@ -212,7 +235,7 @@ describe('card directive block rule', () => {
     expect(tokenize).not.toHaveBeenCalled();
   }, 15000);
 
-  it('builds one document index for multiple adjacent openers on the same state', () => {
+  it('analyzes adjacent cards without whole-document rescans', () => {
     const source =
       ':::ogzh-card accent-bar\n卡片一\n:::\n:::ogzh-card soft-fill\n卡片二\n:::';
     const tokenize = vi.fn();
@@ -224,7 +247,7 @@ describe('card directive block rule', () => {
       expect(rule(state, 3, state.lineMax, false)).toBe(true);
     });
 
-    expect(wholeDocumentScans).toBeLessThanOrEqual(state.lineMax + 1);
+    expect(wholeDocumentScans).toBe(0);
     expect(tokenize).toHaveBeenNthCalledWith(1, state, 1, 2);
     expect(tokenize).toHaveBeenNthCalledWith(2, state, 4, 5);
     expect(state.tokens.filter((token) => token.type === 'ogzh_card_open')).toHaveLength(2);
