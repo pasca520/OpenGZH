@@ -55,6 +55,7 @@ const DEFAULT_CARD_TOKENS = Object.freeze({
   soft: '#f6f7f9',
   surface: '#ffffff'
 });
+const SRGB_LINEAR_THRESHOLD = 0.04045;
 
 const BORDER_COLOR_PROPERTIES = Object.freeze([
   'border-left-color',
@@ -181,7 +182,7 @@ function relativeLuminance(color) {
   if (!normalized) return null;
   const channels = [1, 3, 5].map((offset) => {
     const value = Number.parseInt(normalized.slice(offset, offset + 2), 16) / 255;
-    return value <= 0.04045
+    return value <= SRGB_LINEAR_THRESHOLD
       ? value / 12.92
       : ((value + 0.055) / 1.055) ** 2.4;
   });
@@ -220,7 +221,7 @@ function previewChannels(color) {
 function channelLuminance(channels) {
   const linear = channels.map((channel) => {
     const normalized = channel / 255;
-    return normalized <= 0.03928
+    return normalized <= SRGB_LINEAR_THRESHOLD
       ? normalized / 12.92
       : ((normalized + 0.055) / 1.055) ** 2.4;
   });

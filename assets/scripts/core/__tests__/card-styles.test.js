@@ -942,7 +942,7 @@ function cardPreviewContrast(colorA, colorB) {
   const luminance = (color) => {
     const linear = color.map((channel) => {
       const normalized = channel / 255;
-      return normalized <= 0.03928
+      return normalized <= 0.04045
         ? normalized / 12.92
         : ((normalized + 0.055) / 1.055) ** 2.4;
     });
