@@ -1,3 +1,5 @@
+import { registerCardDirective, scanCardRanges } from './card-styles.js';
+
 /**
  * Markdown engine setup with CJK emphasis patching.
  * @module markdown-engine
@@ -110,6 +112,7 @@ export function createMarkdownEngine() {
   patchMarkdownScanner(md);
   registerMathPlugin(md);
   registerAttrClasses(md);
+  registerCardDirective(md);
 
   md.renderer.rules.fence = (tokens, idx) => {
     const token = tokens[idx];
@@ -138,11 +141,30 @@ function registerMathPlugin(md) {
   });
 }
 
-export function preprocessMarkdown(content) {
+function applyLegacyListCleanup(content) {
   let normalized = content;
   normalized = normalized.replace(/^(\s*(?:\d+\.|-|\*)\s+[^:\n]+)\n\s*:\s*(.+?)$/gm, '$1: $2');
   normalized = normalized.replace(/^(\s*(?:\d+\.|-|\*)\s+.+?:)\s*\n\s+(.+?)$/gm, '$1 $2');
   normalized = normalized.replace(/^(\s*(?:\d+\.|-|\*)\s+[^:\n]+)\n:\s*(.+?)$/gm, '$1: $2');
   normalized = normalized.replace(/^(\s*(?:\d+\.|-|\*)\s+.+?)\n\n\s+(.+?)$/gm, '$1 $2');
   return normalized;
+}
+
+export function preprocessMarkdown(content) {
+  const cardRanges = scanCardRanges(content);
+  if (cardRanges.length === 0) return applyLegacyListCleanup(content);
+
+  // ponytail: keep valid directive boundaries out of legacy list cleanup;
+  // only real card bodies are eligible for the historical normalization.
+  let cursor = 0;
+  const normalized = [];
+  for (const range of cardRanges) {
+    normalized.push(applyLegacyListCleanup(content.slice(cursor, range.openerStart)));
+    normalized.push(content.slice(range.openerStart, range.contentStart));
+    normalized.push(applyLegacyListCleanup(content.slice(range.contentStart, range.contentEnd)));
+    normalized.push(content.slice(range.contentEnd, range.closerEnd));
+    cursor = range.closerEnd;
+  }
+  normalized.push(applyLegacyListCleanup(content.slice(cursor)));
+  return normalized.join('');
 }

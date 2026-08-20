@@ -1,4 +1,5 @@
 import { applyCodeHighlighting } from './code-highlight.js';
+import { applyCardStyles } from './card-styles.js';
 import { applyGzhStructure, applyEndDivider } from './gzh-structure.js';
 import { mergeTheme, applyBlockStyles } from './style-override.js';
 
@@ -90,6 +91,7 @@ function applyInlineStyles(html, styleConfig, codeTheme, displaySettings, extra 
   if (styleConfig?.gzh && extra.enableStructure) {
     applyGzhStructure(doc, styleConfig.gzh);
   }
+  applyCardStyles(doc, styleConfig);
   // 结尾分隔线：所有主题独立生效。仅原始带 gzh 的主题跟随 token 颜色（保持既有行为）
   applyEndDivider(doc, displaySettings?.endStyle, extra.enableStructure ? styleConfig?.gzh : undefined);
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   buildLineOffsets,
   parseXhsDocument,
@@ -170,6 +170,65 @@ describe('xhs semantic parser', () => {
     const result = parseXhsDocument(markdown, fakeMd);
     expect(result.blocks[0].type).toBe('formula');
     expect(result.blocks[0].data.display).toBe(true);
+  });
+
+  it('keeps card contents but never exposes directive markers in xhs pages', () => {
+    const markdown = [
+      ':::ogzh-card accent-bar',
+      '卡片正文 **重点**',
+      ':::'
+    ].join('\n');
+    const cardTokens = [
+      token('ogzh_card_open', [0, 3], {
+        tag: 'section',
+        nesting: 1,
+        attrs: [['data-ogzh-card', 'accent-bar']]
+      }),
+      token('paragraph_open', [1, 2], { level: 1, tag: 'p', nesting: 1 }),
+      token('inline', [1, 2], {
+        level: 2,
+        content: '卡片正文 重点',
+        children: [
+          token('text', null, { content: '卡片正文 ' }),
+          token('strong_open', null, { tag: 'strong', nesting: 1 }),
+          token('text', null, { content: '重点' }),
+          token('strong_close', null, { tag: 'strong', nesting: -1 })
+        ]
+      }),
+      token('paragraph_close', null, { level: 1, tag: 'p', nesting: -1 }),
+      token('ogzh_card_close', null, { tag: 'section', nesting: -1 })
+    ];
+    const render = vi.fn(() => (
+      '<section data-ogzh-card="accent-bar"><p>卡片正文 <strong>重点</strong></p></section>'
+    ));
+    const fakeMd = {
+      parse: () => cardTokens,
+      renderer: { render }
+    };
+
+    const result = parseXhsDocument(markdown, fakeMd);
+    expect(render).toHaveBeenCalledTimes(1);
+    const [renderedTokens] = render.mock.calls[0];
+    expect(renderedTokens).toEqual(cardTokens);
+    expect(renderedTokens.map(({ type }) => type)).toEqual([
+      'ogzh_card_open',
+      'paragraph_open',
+      'inline',
+      'paragraph_close',
+      'ogzh_card_close'
+    ]);
+    expect(renderedTokens[2].children.map(({ type }) => type)).toEqual([
+      'text',
+      'strong_open',
+      'text',
+      'strong_close'
+    ]);
+    expect(result.blocks).toHaveLength(1);
+    expect(result.blocks[0]).toMatchObject({ type: 'html', sourceStart: 0 });
+    expect(result.blocks[0].html).toContain('卡片正文');
+    expect(result.blocks[0].html).toContain('<strong>重点</strong>');
+    expect(JSON.stringify(result)).not.toContain(':::ogzh-card');
+    expect(JSON.stringify(result)).not.toContain(':::');
   });
 });
 
