@@ -2206,8 +2206,10 @@ async function restoreEditorSelection(start, end) {
   const textarea = getTextarea();
   if (!textarea) return;
 
-  textarea.focus();
+  const scrollTop = textarea.scrollTop;
   textarea.setSelectionRange(start, end);
+  textarea.focus({ preventScroll: true });
+  textarea.scrollTop = scrollTop;
   syncEditorSelection({ target: textarea });
 }
 

@@ -530,12 +530,15 @@ describe('card picker editor integration', () => {
     expect(remove).not.toContain('toast.show(result.reason');
   });
 
-  it('restores successful offsets through the real textarea selection path', () => {
+  it('restores successful offsets without moving the editor viewport to the document end', () => {
     const restore = sliceBetween(source, 'async function restoreEditorSelection(', 'function analyzeCardTarget(');
     expect(restore).toContain('await nextTick()');
     expect(restore).toContain('getTextarea()');
-    expect(restore).toMatch(/\.focus\(\)/);
+    expect(restore).toContain('const scrollTop = textarea.scrollTop');
     expect(restore).toContain('.setSelectionRange(');
+    expect(restore).toContain('.focus({ preventScroll: true })');
+    expect(restore).toContain('textarea.scrollTop = scrollTop');
+    expect(restore.indexOf('.setSelectionRange(')).toBeLessThan(restore.indexOf('.focus('));
     expect(restore).toContain('syncEditorSelection(');
   });
 
@@ -720,15 +723,15 @@ describe('card picker UI', () => {
     expect(css).toMatch(/@media\s*\(max-width:\s*640px\)[\s\S]*\.card-picker-grid\s*\{[^}]*grid-template-columns:\s*1fr/s);
   });
 
-  it('lets every card preview grow without clipping quote or title content', () => {
+  it('keeps card previews compact while allowing quote or title content to grow', () => {
     const css = read('assets/styles/editor.css');
     const preview = sliceBetween(css, '.card-picker-preview {', '.card-picker-name {');
 
     expect(preview).toMatch(/display:\s*flow-root/);
     expect(preview).toMatch(/height:\s*auto/);
-    expect(preview).toMatch(/min-height:\s*180px/);
+    expect(preview).toMatch(/min-height:\s*140px/);
     expect(preview).toMatch(/overflow:\s*visible/);
-    expect(preview).not.toMatch(/height:\s*120px|overflow:\s*hidden/);
+    expect(preview).not.toMatch(/min-height:\s*180px|height:\s*120px|overflow:\s*hidden/);
   });
 
   it('escapes the clipped editor panel as a viewport-bound mobile scroller', () => {
