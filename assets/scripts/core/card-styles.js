@@ -570,7 +570,13 @@ const SAFE_INLINE_TAGS = new Set(['STRONG', 'EM', 'A', 'DEL']);
 function applyInlineTextStyles(element, foreground) {
   Array.from(element.children).forEach((child) => {
     if (child.tagName === 'SECTION' && child.hasAttribute('data-ogzh-card')) return;
-    if (child.tagName === 'CODE') return;
+    if (child.tagName === 'CODE') {
+      applyTrustedStyle(
+        child,
+        '-webkit-text-fill-color: currentColor !important; -webkit-text-stroke-color: currentColor !important; -webkit-text-stroke-width: 0 !important;'
+      );
+      return;
+    }
     if (SAFE_INLINE_TAGS.has(child.tagName)) {
       const linkStyle = child.tagName === 'A'
         ? ' border-color: currentColor !important; text-decoration-color: currentColor !important; -webkit-text-decoration-color: currentColor !important;'

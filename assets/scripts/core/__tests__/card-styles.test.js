@@ -1623,7 +1623,15 @@ describe('card presentation DOM application', () => {
     code.setAttribute('style', theme.styles.code);
     const codeStrong = appendElement(doc, code, 'strong', '代码内容');
     codeStrong.setAttribute('style', unsafe);
-    const codeBefore = code.getAttribute('style');
+    const codeBefore = Object.fromEntries([
+      'color',
+      'background',
+      'background-color',
+      'background-image',
+      'font-family',
+      'font-size',
+      'padding'
+    ].map((property) => [property, code.style.getPropertyValue(property)]));
     const codeStrongBefore = codeStrong.getAttribute('style');
     const nestedCard = doc.createElement('section');
     nestedCard.setAttribute('data-ogzh-card', 'future-card');
@@ -1654,9 +1662,65 @@ describe('card presentation DOM application', () => {
       expect(link.style.getPropertyValue('border-color')).toBe('currentColor');
       expect(link.style.getPropertyValue('text-decoration-color')).toBe('currentColor');
     }
-    expect(code.getAttribute('style')).toBe(codeBefore);
+    for (const [property, value] of Object.entries(codeBefore)) {
+      expect(code.style.getPropertyValue(property), `direct-code/${property}`).toBe(value);
+    }
+    expect(code.style.getPropertyValue('-webkit-text-fill-color')).toBe('currentColor');
+    expect(code.style.getPropertyValue('-webkit-text-stroke-color')).toBe('currentColor');
+    expect(code.style.getPropertyValue('-webkit-text-stroke-width')).toBe('0');
     expect(codeStrong.getAttribute('style')).toBe(codeStrongBefore);
     expect(nestedStrong.getAttribute('style')).toBe(nestedBefore);
+  });
+
+  it('isolates code colors inherited through safe inline wrappers on every card surface', () => {
+    const scenarios = [
+      { styleId: 'solid-contrast', surface: 'body', wrapperTag: 'strong' },
+      { styleId: 'capsule-title', surface: 'heading', wrapperTag: 'a' },
+      { styleId: 'capsule-title', surface: 'body', wrapperTag: 'a' }
+    ];
+
+    for (const { styleId, surface, wrapperTag } of scenarios) {
+      const doc = new FakeDocument();
+      const presentation = buildCardPresentation(styleId, resolveCardTokens(theme));
+      const heading = styleId === 'capsule-title' ? doc.createElement('h4') : null;
+      const paragraph = doc.createElement('p');
+      const root = surface === 'heading' ? heading : paragraph;
+      const wrapper = doc.createElement(wrapperTag);
+      wrapper.setAttribute('style', theme.styles[wrapperTag]);
+      const code = appendElement(doc, wrapper, 'code', '保留代码');
+      code.setAttribute('style', theme.styles.code);
+      root.appendChild(wrapper);
+      createCard(doc, styleId, heading ? [heading, paragraph] : [paragraph]);
+      const preserved = Object.fromEntries([
+        'color',
+        'background',
+        'background-color',
+        'background-image',
+        'font-family',
+        'font-size',
+        'padding'
+      ].map((property) => [property, code.style.getPropertyValue(property)]));
+      const role = surface === 'heading'
+        ? presentation.headingContrastRole
+        : presentation.bodyContrastRole;
+      const safeForeground = presentation.contrastPairs.find(
+        (pair) => pair.role === role
+      ).foreground;
+
+      applyCardStyles(doc, theme);
+
+      expect(wrapper.style.getPropertyValue('color')).toBe(safeForeground);
+      expect(code.textContent).toBe('保留代码');
+      for (const [property, value] of Object.entries(preserved)) {
+        expect(code.style.getPropertyValue(property), `${styleId}/${surface}/${property}`).toBe(value);
+      }
+      expect(code.style.getPropertyValue('-webkit-text-fill-color')).toBe('currentColor');
+      expect(code.style.getPropertyPriority('-webkit-text-fill-color')).toBe('important');
+      expect(code.style.getPropertyValue('-webkit-text-stroke-color')).toBe('currentColor');
+      expect(code.style.getPropertyPriority('-webkit-text-stroke-color')).toBe('important');
+      expect(code.style.getPropertyValue('-webkit-text-stroke-width')).toBe('0');
+      expect(code.style.getPropertyPriority('-webkit-text-stroke-width')).toBe('important');
+    }
   });
 
   it('styles only known card containers and their direct body blocks', () => {
