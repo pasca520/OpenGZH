@@ -1801,6 +1801,13 @@ function closeCardPicker(restoreTriggerFocus = false) {
   });
 }
 
+function handleDocumentKeydown(event) {
+  if (event.key === 'Escape' && showCardPicker.value) {
+    event.preventDefault();
+    closeCardPicker(true);
+  }
+}
+
 function formatCardEditFailureReason(reason) {
   const messages = {
     'card-not-found': '当前选区不在卡片内，请重新选择卡片内容。',
@@ -2810,12 +2817,7 @@ const app = createApp({
           closeCardPicker(false);
         }
       });
-      document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && showCardPicker.value) {
-          event.preventDefault();
-          closeCardPicker(true);
-        }
-      });
+      document.addEventListener('keydown', handleDocumentKeydown);
 
       imageStore = new ImageStore();
       try {
@@ -2846,6 +2848,7 @@ const app = createApp({
     });
 
     onBeforeUnmount(() => {
+      document.removeEventListener('keydown', handleDocumentKeydown);
       if (!cardPickerToolbarObserver) return;
       cardPickerToolbarObserver.disconnect();
       cardPickerToolbarObserver = null;

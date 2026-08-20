@@ -1571,6 +1571,94 @@ describe('card presentation recipes', () => {
 describe('card presentation DOM application', () => {
   const theme = STYLES['latepost-depth'];
 
+  it('keeps emphasized body text readable on the card surface', () => {
+    const doc = new FakeDocument();
+    const presentation = buildCardPresentation(
+      'solid-contrast',
+      resolveCardTokens(theme)
+    );
+    const paragraph = doc.createElement('p');
+    const strong = appendElement(doc, paragraph, 'strong', '重点');
+    strong.setAttribute('style', theme.styles.strong);
+    createCard(doc, 'solid-contrast', [paragraph]);
+
+    expect(contrastRatio('#b44d4d', presentation.solidBackground)).toBe(1);
+
+    applyCardStyles(doc, theme);
+
+    expect(strong.style.getPropertyValue('color')).toBe(presentation.solidText);
+    expect(strong.style.getPropertyPriority('color')).toBe('important');
+    expect(strong.style.getPropertyValue('background')).toBe('transparent');
+    expect(strong.style.getPropertyValue('background-color')).toBe('transparent');
+    expect(strong.style.getPropertyValue('background-image')).toBe('none');
+    expect(strong.style.getPropertyValue('-webkit-text-fill-color')).toBe(
+      presentation.solidText
+    );
+    expect(contrastRatio(
+      strong.style.getPropertyValue('color'),
+      presentation.solidBackground
+    )).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('secures standard heading and body inline text without crossing code or nested cards', () => {
+    const doc = new FakeDocument();
+    const presentation = buildCardPresentation(
+      'capsule-title',
+      resolveCardTokens(theme)
+    );
+    const unsafe = 'color: #b44d4d !important; -webkit-text-fill-color: #b44d4d !important; background: linear-gradient(red, red) !important; background-color: #b44d4d !important; background-image: linear-gradient(red, red) !important; border-bottom: 1px solid #b44d4d !important; text-decoration-color: #b44d4d !important;';
+    const heading = doc.createElement('h4');
+    const paragraph = doc.createElement('p');
+    const headingInline = ['strong', 'em', 'a', 'del'].map((tagName) => {
+      const element = appendElement(doc, heading, tagName, tagName);
+      element.setAttribute('style', unsafe);
+      return element;
+    });
+    const bodyInline = ['strong', 'em', 'a', 'del'].map((tagName) => {
+      const element = appendElement(doc, paragraph, tagName, tagName);
+      element.setAttribute('style', unsafe);
+      return element;
+    });
+    const code = appendElement(doc, paragraph, 'code', '代码');
+    code.setAttribute('style', theme.styles.code);
+    const codeStrong = appendElement(doc, code, 'strong', '代码内容');
+    codeStrong.setAttribute('style', unsafe);
+    const codeBefore = code.getAttribute('style');
+    const codeStrongBefore = codeStrong.getAttribute('style');
+    const nestedCard = doc.createElement('section');
+    nestedCard.setAttribute('data-ogzh-card', 'future-card');
+    const nestedParagraph = doc.createElement('p');
+    const nestedStrong = appendElement(doc, nestedParagraph, 'strong', '嵌套内容');
+    nestedStrong.setAttribute('style', unsafe);
+    const nestedBefore = nestedStrong.getAttribute('style');
+    nestedCard.appendChild(nestedParagraph);
+    createCard(doc, 'capsule-title', [heading, paragraph, nestedCard]);
+
+    applyCardStyles(doc, theme);
+
+    for (const [elements, expected] of [
+      [headingInline, presentation.solidText],
+      [bodyInline, presentation.contrastPairs.find(({ role }) => role === 'body').foreground]
+    ]) {
+      for (const element of elements) {
+        expect(element.style.getPropertyValue('color')).toBe(expected);
+        expect(element.style.getPropertyPriority('color')).toBe('important');
+        expect(element.style.getPropertyValue('-webkit-text-fill-color')).toBe(expected);
+        expect(element.style.getPropertyPriority('-webkit-text-fill-color')).toBe('important');
+        expect(element.style.getPropertyValue('background')).toBe('transparent');
+        expect(element.style.getPropertyValue('background-color')).toBe('transparent');
+        expect(element.style.getPropertyValue('background-image')).toBe('none');
+      }
+    }
+    for (const link of [headingInline[2], bodyInline[2]]) {
+      expect(link.style.getPropertyValue('border-color')).toBe('currentColor');
+      expect(link.style.getPropertyValue('text-decoration-color')).toBe('currentColor');
+    }
+    expect(code.getAttribute('style')).toBe(codeBefore);
+    expect(codeStrong.getAttribute('style')).toBe(codeStrongBefore);
+    expect(nestedStrong.getAttribute('style')).toBe(nestedBefore);
+  });
+
   it('styles only known card containers and their direct body blocks', () => {
     const doc = new FakeDocument();
     const paragraph = appendElement(doc, doc.createElement('div'), 'p', '已知正文');
@@ -1817,6 +1905,13 @@ describe('card presentation DOM application', () => {
 
   it('styles direct lists and items without replacing standard inline content', () => {
     const doc = new FakeDocument();
+    const presentation = buildCardPresentation(
+      'accent-bar',
+      resolveCardTokens(theme)
+    );
+    const bodyForeground = presentation.contrastPairs.find(
+      ({ role }) => role === presentation.bodyContrastRole
+    ).foreground;
     const strong = appendElement(doc, doc.createElement('div'), 'strong', '重点');
     const link = appendElement(doc, doc.createElement('div'), 'a', '链接');
     const paragraph = doc.createElement('p');
@@ -1844,8 +1939,10 @@ describe('card presentation DOM application', () => {
     expect(item.style.getPropertyValue('line-height')).toBe('1.75');
     expect(nestedItem.style.getPropertyValue('line-height')).toBe('1.75');
     expect(nestedCardItem.getAttribute('style')).toBeNull();
-    expect(strong.getAttribute('style')).toBeNull();
-    expect(link.getAttribute('style')).toBeNull();
+    expect(strong.style.getPropertyValue('color')).toBe(bodyForeground);
+    expect(link.style.getPropertyValue('color')).toBe(bodyForeground);
+    expect(link.style.getPropertyValue('border-color')).toBe('currentColor');
+    expect(link.style.getPropertyValue('text-decoration-color')).toBe('currentColor');
   });
 
   it('overrides loose-list paragraphs without crossing a nested card boundary', () => {
@@ -1895,6 +1992,78 @@ describe('card presentation DOM application', () => {
 
     expect(nativeCard.style.getPropertyValue('background-color')).toBe('#1db954');
     expect(ordinaryCard.style.getPropertyValue('background-color')).not.toBe('#1db954');
+  });
+
+  it('keeps all standard inline text readable across every theme and card surface', () => {
+    const failures = [];
+    let checked = 0;
+
+    for (const [themeId, styleConfig] of Object.entries(STYLES)) {
+      for (const card of CARD_STYLES) {
+        const doc = new FakeDocument();
+        const presentation = buildCardPresentation(
+          card.id,
+          resolveCardTokens(styleConfig),
+          { nativeDark: Boolean(styleConfig.gzh?.bg) }
+        );
+        const paragraph = doc.createElement('p');
+        const bodyInline = ['strong', 'em', 'a', 'del'].map((tagName) => {
+          const element = appendElement(doc, paragraph, tagName, tagName);
+          element.setAttribute(
+            'style',
+            styleConfig.styles[tagName] || styleConfig.styles.strong || 'color: #777777 !important;'
+          );
+          return element;
+        });
+        const children = [];
+        let headingInline = [];
+        if (card.slots === 'title-body') {
+          const heading = doc.createElement('h4');
+          headingInline = ['strong', 'em', 'a', 'del'].map((tagName) => {
+            const element = appendElement(doc, heading, tagName, tagName);
+            element.setAttribute(
+              'style',
+              styleConfig.styles[tagName] || styleConfig.styles.strong || 'color: #777777 !important;'
+            );
+            return element;
+          });
+          children.push(heading);
+        }
+        children.push(paragraph);
+        createCard(doc, card.id, children);
+
+        applyCardStyles(doc, styleConfig);
+
+        for (const [surface, elements, role] of [
+          ['body', bodyInline, presentation.bodyContrastRole],
+          ['heading', headingInline, presentation.headingContrastRole]
+        ]) {
+          const pair = presentation.contrastPairs.find((item) => item.role === role);
+          for (const element of elements) {
+            const foreground = element.style.getPropertyValue('color');
+            const ratio = contrastRatio(foreground, pair.background);
+            checked += 1;
+            if (
+              foreground !== pair.foreground ||
+              element.style.getPropertyPriority('color') !== 'important' ||
+              element.style.getPropertyValue('background') !== 'transparent' ||
+              element.style.getPropertyValue('background-image') !== 'none' ||
+              ratio < 4.5
+            ) {
+              failures.push(
+                `${themeId}/${card.id}/${surface}/${element.tagName.toLowerCase()}=${ratio.toFixed(2)}`
+              );
+            }
+          }
+        }
+      }
+    }
+
+    expect(failures, failures.join('\n')).toEqual([]);
+    expect(checked).toBe(
+      Object.keys(STYLES).length *
+      (CARD_STYLES.length * 4 + CARD_STYLES.filter(({ slots }) => slots === 'title-body').length * 4)
+    );
   });
 });
 

@@ -314,6 +314,8 @@ function presentationResult({
   titleStyle = '',
   headingStyle = '',
   bodyStyle,
+  bodyContrastRole = 'body',
+  headingContrastRole = bodyContrastRole,
   decoration = 'none',
   solidBackground = null,
   solidText = null,
@@ -324,6 +326,8 @@ function presentationResult({
     titleStyle,
     headingStyle,
     bodyStyle,
+    bodyContrastRole,
+    headingContrastRole,
     decoration,
     solidBackground,
     solidText,
@@ -398,6 +402,7 @@ export function buildCardPresentation(styleId, tokenInput, options = {}) {
       return presentationResult({
         containerStyle: `${common} border: none; background-color: ${solidBackground}; border-radius: 10px; color: ${solidText} !important;`,
         bodyStyle: bodyStyle(solidText),
+        bodyContrastRole: 'solid-fill',
         solidBackground,
         solidText,
         contrastPairs: [contrastPair('solid-fill', solidText, solidBackground)]
@@ -409,6 +414,7 @@ export function buildCardPresentation(styleId, tokenInput, options = {}) {
         titleStyle: headingStyle,
         headingStyle,
         bodyStyle: bodyStyle(bodyOnSurface),
+        headingContrastRole: 'capsule-title',
         solidBackground,
         solidText,
         contrastPairs: [
@@ -424,6 +430,7 @@ export function buildCardPresentation(styleId, tokenInput, options = {}) {
         titleStyle: headingStyle,
         headingStyle,
         bodyStyle: bodyStyle(bodyOnSoft),
+        headingContrastRole: 'title-strip',
         solidBackground,
         solidText,
         contrastPairs: [
@@ -444,6 +451,7 @@ export function buildCardPresentation(styleId, tokenInput, options = {}) {
         titleStyle: `display: inline-block; margin: 0 10px 12px 0 !important; padding: 4px 9px; background-color: ${solidBackground} !important; color: ${solidText} !important; border-radius: 6px; font-weight: 700; line-height: 1.4 !important;`,
         headingStyle,
         bodyStyle: bodyStyle(bodyOnSurface),
+        headingContrastRole: 'title',
         decoration: 'number',
         solidBackground,
         solidText,
@@ -557,10 +565,30 @@ function createCardDecoration(doc, kind, text, styleText) {
   return decoration;
 }
 
-function applyBodyStyles(section, bodyStyle) {
+const SAFE_INLINE_TAGS = new Set(['STRONG', 'EM', 'A', 'DEL']);
+
+function applyInlineTextStyles(element, foreground) {
+  Array.from(element.children).forEach((child) => {
+    if (child.tagName === 'SECTION' && child.hasAttribute('data-ogzh-card')) return;
+    if (child.tagName === 'CODE') return;
+    if (SAFE_INLINE_TAGS.has(child.tagName)) {
+      const linkStyle = child.tagName === 'A'
+        ? ' border-color: currentColor !important; text-decoration-color: currentColor !important; -webkit-text-decoration-color: currentColor !important;'
+        : '';
+      applyTrustedStyle(
+        child,
+        `color: ${foreground} !important; -webkit-text-fill-color: ${foreground} !important; -webkit-text-stroke-color: currentColor !important; -webkit-text-stroke-width: 0 !important; background: transparent !important; background-color: transparent !important; background-image: none !important;${linkStyle}`
+      );
+    }
+    applyInlineTextStyles(child, foreground);
+  });
+}
+
+function applyBodyStyles(section, bodyStyle, foreground) {
   Array.from(section.children).forEach((child) => {
     if (!['P', 'UL', 'OL'].includes(child.tagName)) return;
     applyTrustedStyle(child, bodyStyle);
+    applyInlineTextStyles(child, foreground);
     if (child.tagName === 'P') return;
     applyListItemStyles(child, bodyStyle);
   });
@@ -667,6 +695,12 @@ export function applyCardStyles(doc, styleConfig) {
     if (!card) return;
 
     const presentation = buildCardPresentation(styleId, tokens, { nativeDark });
+    const bodyPair = presentation.contrastPairs.find(
+      ({ role }) => role === presentation.bodyContrastRole
+    );
+    const headingPair = presentation.contrastPairs.find(
+      ({ role }) => role === presentation.headingContrastRole
+    );
     applyTrustedStyle(section, presentation.containerStyle);
 
     if (card.slots === 'title-body') {
@@ -675,8 +709,9 @@ export function applyCardStyles(doc, styleConfig) {
       applyTrustedStyle(heading, presentation.bodyStyle);
       applyTrustedStyle(heading, BODY_HEADING_RESET_STYLE);
     }
+    if (heading) applyInlineTextStyles(heading, headingPair.foreground);
 
-    applyBodyStyles(section, presentation.bodyStyle);
+    applyBodyStyles(section, presentation.bodyStyle, bodyPair.foreground);
 
     if (presentation.decoration === 'quote') {
       applyQuoteDecoration(doc, section, presentation);

@@ -625,16 +625,32 @@ describe('card picker editor integration', () => {
       '\n\n      imageStore ='
     );
     const close = sliceBetween(source, 'function closeCardPicker(', 'function formatCardEditFailureReason(');
+    const keydown = sliceBetween(
+      source,
+      'function handleDocumentKeydown(',
+      'function formatCardEditFailureReason('
+    );
 
     expect(outsideClick).toContain('closeCardPicker(false)');
-    expect(outsideClick).toMatch(/addEventListener\(['"]keydown['"]/);
-    expect(outsideClick).toMatch(/event\.key\s*===\s*['"]Escape['"]/);
-    expect(outsideClick).toContain('showCardPicker.value');
-    expect(outsideClick).toContain('event.preventDefault()');
-    expect(outsideClick).toContain('closeCardPicker(true)');
+    expect(outsideClick).toContain("addEventListener('keydown', handleDocumentKeydown)");
+    expect(keydown).toMatch(/event\.key\s*===\s*['"]Escape['"]/);
+    expect(keydown).toContain('showCardPicker.value');
+    expect(keydown).toContain('event.preventDefault()');
+    expect(keydown).toContain('closeCardPicker(true)');
     expect(close).toContain("document.querySelector('.card-picker-trigger')");
     expect(close).toContain('nextTick(');
-    expect(`${outsideClick}\n${close}`).not.toContain('editorSelection.value =');
+    expect(`${outsideClick}\n${close}\n${keydown}`).not.toContain('editorSelection.value =');
+  });
+
+  it('binds and removes the same named card picker keydown handler', () => {
+    const handler = source.match(/function\s+(handleDocumentKeydown)\s*\([^)]*\)\s*\{[\s\S]*?\n\}/)?.[0] || '';
+
+    expect(handler).toMatch(/event\.key\s*===\s*['"]Escape['"]/);
+    expect(handler).toContain('showCardPicker.value');
+    expect(handler).toContain('event.preventDefault()');
+    expect(handler).toContain('closeCardPicker(true)');
+    expect(source.match(/document\.addEventListener\(['"]keydown['"],\s*handleDocumentKeydown\)/g)).toHaveLength(1);
+    expect(source.match(/document\.removeEventListener\(['"]keydown['"],\s*handleDocumentKeydown\)/g)).toHaveLength(1);
   });
 });
 
@@ -701,6 +717,17 @@ describe('card picker UI', () => {
     expect(css).toMatch(/\.card-picker-item:focus-visible/);
     expect(css).toMatch(/\.card-picker-item:disabled\s*\{[^}]*(?:cursor:\s*not-allowed|opacity:)/s);
     expect(css).toMatch(/@media\s*\(max-width:\s*640px\)[\s\S]*\.card-picker-grid\s*\{[^}]*grid-template-columns:\s*1fr/s);
+  });
+
+  it('lets every card preview grow without clipping quote or title content', () => {
+    const css = read('assets/styles/editor.css');
+    const preview = sliceBetween(css, '.card-picker-preview {', '.card-picker-name {');
+
+    expect(preview).toMatch(/display:\s*flow-root/);
+    expect(preview).toMatch(/height:\s*auto/);
+    expect(preview).toMatch(/min-height:\s*180px/);
+    expect(preview).toMatch(/overflow:\s*visible/);
+    expect(preview).not.toMatch(/height:\s*120px|overflow:\s*hidden/);
   });
 
   it('escapes the clipped editor panel as a viewport-bound mobile scroller', () => {
