@@ -321,7 +321,10 @@ export function materializeAnimatedCardDecorations(doc, {
     image.setAttribute('data-ogzh-card-gif', kind);
     image.setAttribute(
       'style',
-      `display:block;width:${gif.width}px;max-width:100%;height:auto;border:0;`
+      mergeStyleText(
+        decoration.getAttribute('style') || '',
+        `width:${gif.width}px;max-width:100%;height:auto;border:0;`
+      )
     );
     decoration.replaceWith(image);
   }
@@ -630,9 +633,10 @@ function containsRenderableMath(node) {
   );
 }
 
-function convertOrderedListsToWechatParagraphs(doc, styleConfig) {
+export function convertOrderedListsToWechatParagraphs(doc, styleConfig) {
   const orderedLists = Array.from(doc.querySelectorAll('ol'));
   orderedLists.forEach((list) => {
+    if (list.closest?.('section[data-ogzh-card="history-document"]')) return;
     const items = Array.from(list.children).filter((child) => child.tagName?.toUpperCase() === 'LI');
     if (items.length === 0) {
       list.remove();

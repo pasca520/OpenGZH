@@ -73,7 +73,7 @@ function drawCardPrimitives(context, width, height, primitives) {
     context.globalAlpha = item.alpha ?? 1;
     context.fillStyle = item.color || 'transparent';
     context.strokeStyle = item.stroke || item.color || 'transparent';
-    context.lineWidth = item.width || 1;
+    context.lineWidth = item.kind === 'line' ? (item.width || 1) : 1;
     if (item.kind === 'circle') {
       context.beginPath();
       context.arc(item.x, item.y, item.radius, 0, Math.PI * 2);

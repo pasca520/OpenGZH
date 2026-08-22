@@ -2085,6 +2085,8 @@ describe('card presentation DOM application', () => {
       (child) => child.hasAttribute('data-ogzh-history-name')
     ));
     expect(list.style.getPropertyValue('clear')).toBe('both');
+    expect(list.style.getPropertyValue('list-style-type')).toBe('none');
+    expect(list.style.getPropertyPriority('list-style-type')).toBe('important');
     expect(decorations(section, 'documents')[0].style.getPropertyValue('float')).toBe('left');
 
     applyCardStyles(doc, STYLES['latepost-depth']);

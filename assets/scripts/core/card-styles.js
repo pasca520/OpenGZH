@@ -831,8 +831,8 @@ export function splitHistoryDocumentItem(value) {
 
 function historyDocumentRowStyles(bodyStyle, tokens, hasMetadata) {
   return {
-    list: `clear: both; margin: 0 !important; padding: 0 !important; border-top: 1px solid ${tokens.line}; list-style: none;`,
-    item: `${bodyStyle} display: block; box-sizing: border-box; min-height: 45px; padding: 10px 0 !important; border-bottom: 1px solid ${tokens.line}; list-style: none; overflow: visible; text-overflow: clip; white-space: normal;`,
+    list: `clear: both; margin: 0 !important; padding: 0 !important; border-top: 1px solid ${tokens.line}; list-style: none !important; list-style-type: none !important;`,
+    item: `${bodyStyle} display: block; box-sizing: border-box; min-height: 45px; padding: 10px 0 !important; border-bottom: 1px solid ${tokens.line}; list-style: none !important; list-style-type: none !important; overflow: visible; text-overflow: clip; white-space: normal;`,
     index: `display: inline-block; box-sizing: border-box; width: 25px; height: 25px; margin: 0 10px 0 0; background-color: ${tokens.soft}; color: ${tokens.accent}; border-radius: 50%; font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 25px; text-align: center; vertical-align: top;`,
     name: `display: inline-block; box-sizing: border-box; width: ${hasMetadata ? 'calc(76% - 35px)' : 'calc(100% - 35px)'}; min-width: 0; overflow-wrap: anywhere; word-break: break-word; white-space: normal; font-weight: 700; vertical-align: top;`,
     metadata: `display: ${hasMetadata ? 'inline-block' : 'none'}; box-sizing: border-box; width: 24%; padding-left: 12px; overflow: hidden; color: ${tokens.muted}; font-size: 12px; text-align: right; text-overflow: ellipsis; white-space: nowrap; vertical-align: top;`

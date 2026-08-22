@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import * as clipboardExporter from '../clipboard-exporter.js';
 import {
   materializeAnimatedCardDecorations,
   materializeClipboardImages,
@@ -152,5 +153,55 @@ describe('materializeAnimatedCardDecorations', () => {
     const doc = makeDecorationDocument(['highlight']);
     materializeAnimatedCardDecorations(doc, { styleConfig: {}, build: () => null });
     expect(doc.replacements).toEqual([]);
+  });
+
+  it('preserves the decoration flow styles when replacing it with a GIF', () => {
+    const replacements = [];
+    const decoration = {
+      getAttribute: (name) => {
+        if (name === 'data-ogzh-card-animation') return 'documents';
+        if (name === 'style') return 'display: block; float: left; margin: 0 10px 15px 0;';
+        return null;
+      },
+      replaceWith: (image) => replacements.push(image)
+    };
+    const doc = {
+      querySelectorAll: () => [decoration],
+      createElement: () => {
+        const attributes = new Map();
+        return {
+          setAttribute: (name, value) => attributes.set(name, String(value)),
+          getAttribute: (name) => attributes.get(name) ?? null
+        };
+      }
+    };
+
+    materializeAnimatedCardDecorations(doc, {
+      styleConfig: {},
+      build: () => ({ dataUrl: 'data:image/gif;base64,documents', width: 32, height: 32 })
+    });
+
+    expect(replacements[0].getAttribute('style')).toContain('float: left');
+    expect(replacements[0].getAttribute('style')).toContain('margin: 0 10px 15px 0');
+  });
+});
+
+describe('convertOrderedListsToWechatParagraphs', () => {
+  it('keeps a historical-document ordered list intact so its links survive', () => {
+    expect(clipboardExporter.convertOrderedListsToWechatParagraphs).toBeTypeOf('function');
+    if (!clipboardExporter.convertOrderedListsToWechatParagraphs) return;
+
+    const remove = vi.fn();
+    const list = {
+      children: [],
+      closest: (selector) => selector === 'section[data-ogzh-card="history-document"]' ? {} : null,
+      remove
+    };
+
+    clipboardExporter.convertOrderedListsToWechatParagraphs({
+      querySelectorAll: (selector) => selector === 'ol' ? [list] : []
+    }, {});
+
+    expect(remove).not.toHaveBeenCalled();
   });
 });

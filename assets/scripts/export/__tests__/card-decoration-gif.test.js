@@ -56,4 +56,25 @@ describe('card decoration GIF layouts', () => {
     expect(gif).toMatchObject({ width: 176, height: 28 });
     expect(gif.dataUrl).toMatch(/^data:image\/gif;base64,R0lGODlh/);
   });
+
+  it('draws document page borders at one pixel instead of using the page width', () => {
+    const canvas = { width: 0, height: 0 };
+    const strokeWidths = [];
+    const context = {
+      lineWidth: 0,
+      beginPath() {}, moveTo() {}, lineTo() {}, quadraticCurveTo() {}, closePath() {},
+      clearRect() {}, fill() {}, save() {}, restore() {}, arc() {},
+      stroke() { strokeWidths.push(this.lineWidth); },
+      getImageData() {
+        return { data: new Uint8ClampedArray(canvas.width * canvas.height * 4) };
+      }
+    };
+    canvas.getContext = () => context;
+    vi.stubGlobal('document', { createElement: () => canvas });
+
+    buildCardDecorationGif({ kind: 'documents', colors, fps: 1 });
+
+    expect(strokeWidths.length).toBeGreaterThan(0);
+    expect(new Set(strokeWidths)).toEqual(new Set([1]));
+  });
 });
