@@ -10,29 +10,33 @@
 [v-cloak] { display: none; }
 
 :root {
-  /* ── Colors (Ink & Jade) ── */
-  --color-text-primary: #1A1714;
-  --color-text-secondary: #4A4541;
-  --color-text-tertiary: #8E8A84;
-  --color-text-inverse: #FBF8F3;
-  --color-surface-base: #F5F1EA;
-  --color-surface-muted: #FBF8F3;
-  --color-surface-raised: #FFFFFF;
-  --color-surface-strong: #1B7A5E;
-  --color-border-default: #E8E4DC;
-  --color-border-strong: #D0CBC2;
+  /* ── Colors (Deep Sea Night) ── */
+  --color-text-primary: #EDF3FF;
+  --color-text-secondary: #B7C3D7;
+  --color-text-tertiary: #91A0B7;
+  --color-text-inverse: #09111F;
+  --color-on-accent: #09111F;
+  --color-surface-base: #0D1420;
+  --color-surface-muted: #111927;
+  --color-surface-raised: #151E2C;
+  --color-surface-strong: #26365E;
+  --color-border-default: #29364B;
+  --color-border-strong: #3A4962;
 
-  /* Legacy aliases (for compatibility) */
-  --color-primary: #1A1714;
-  --color-secondary: #4A4541;
-  --color-tertiary: #8E8A84;
-  --color-accent: #1B7A5E;
-  --color-accent-hover: #166A50;
-  --color-accent-light: rgba(27, 122, 94, 0.08);
-  --color-bg: #F5F1EA;
-  --color-surface: #FBF8F3;
-  --color-border: #E8E4DC;
-  --color-border-light: #E8E4DC;
+  /* Legacy aliases retained for current stylesheets */
+  --color-primary: #EDF3FF;
+  --color-secondary: #B7C3D7;
+  --color-tertiary: #91A0B7;
+  --color-text: #EDF3FF;
+  --color-accent: #7895FF;
+  --color-accent-hover: #8AA4FF;
+  --color-accent-light: rgba(120, 149, 255, 0.16);
+  --color-bg: #0D1420;
+  --color-bg-secondary: #111927;
+  --color-surface: #151E2C;
+  --color-border: #29364B;
+  --color-border-light: #29364B;
+  --color-light-border: #29364B;
 
   /* ── Typography ── */
   --font-size-xs: 10px;
@@ -69,22 +73,16 @@
   --radius-xl: 18px;
   --radius-2xl: 9999px;
 
-  /* ── Shadows (soft, jade-tinted) ── */
-  --shadow-1: 0 1px 2px rgba(26, 23, 20, 0.04);
-  --shadow-2: 0 2px 8px rgba(26, 23, 20, 0.06);
-  --shadow-3: 0 4px 16px rgba(26, 23, 20, 0.08);
-  --shadow-4: 0 8px 28px rgba(26, 23, 20, 0.10);
-
-  /* Jade accent shadow */
-  --shadow-jade: 0 1px 3px rgba(27, 122, 94, 0.24);
-
-  /* Inset shadow (jade button) */
-  --shadow-inset: rgba(255,255,255,0.18) 0px 0.5px 0px 0px inset, rgba(0,0,0,0.12) 0px 0px 0px 0.5px inset, rgba(0,0,0,0.06) 0px 1px 2px 0px;
-
-  /* Legacy shadow aliases */
-  --shadow-sm: 0 1px 2px rgba(26, 23, 20, 0.04);
-  --shadow-md: 0 2px 8px rgba(26, 23, 20, 0.06);
-  --shadow-lg: 0 4px 16px rgba(26, 23, 20, 0.08);
+  /* ── Shadows (dark, neutral) ── */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.24);
+  --shadow-2: 0 2px 8px rgba(0, 0, 0, 0.30);
+  --shadow-3: 0 4px 16px rgba(0, 0, 0, 0.36);
+  --shadow-4: 0 8px 28px rgba(0, 0, 0, 0.42);
+  --shadow-jade: 0 1px 3px rgba(120, 149, 255, 0.32);
+  --shadow-inset: rgba(255,255,255,0.08) 0px 0.5px 0px 0px inset, rgba(0,0,0,0.32) 0px 0px 0px 0.5px inset, rgba(0,0,0,0.24) 0px 1px 2px 0px;
+  --shadow-sm: var(--shadow-1);
+  --shadow-md: var(--shadow-2);
+  --shadow-lg: var(--shadow-3);
 
   /* ── Motion ── */
   --motion-instant: 150ms;
@@ -220,7 +218,7 @@ body {
 
 .header-tab.active {
   background: var(--color-accent);
-  color: white;
+  color: var(--color-on-accent);
   box-shadow: var(--shadow-jade);
   font-weight: 500;
 }
@@ -553,7 +551,7 @@ body {
   text-align: left;
 }
 .sidebar-action-btn:hover { background: var(--color-bg); color: var(--color-primary); transform: translateY(-1px); }
-.sidebar-action-btn.primary { background: var(--color-accent); color: white; font-weight: 500; margin-top: 8px; box-shadow: var(--shadow-jade); }
+.sidebar-action-btn.primary { background: var(--color-accent); color: var(--color-on-accent); font-weight: 500; margin-top: 8px; box-shadow: var(--shadow-jade); }
 .sidebar-action-btn.primary:hover { opacity: 0.8; }
 .sidebar-action-btn:active { transform: translateY(0); }
 .sidebar-action-btn svg { flex-shrink: 0; }
@@ -730,7 +728,7 @@ body {
   box-shadow: var(--shadow-md);
   animation: toastIn .2s ease-out;
 }
-.toast-success { background: var(--color-accent); color: white; }
+.toast-success { background: var(--color-accent); color: var(--color-on-accent); }
 .toast-error   { background: #C4473A; color: white; }
 
 @keyframes toastIn {
@@ -845,7 +843,7 @@ body {
 
 .modal-btn-primary {
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-on-accent);
 }
 
 .modal-btn-primary:hover {
@@ -875,6 +873,16 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--color-tertiary); }
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
 
 /* ══════════════════════════════════════════════════════════════
    Responsive
