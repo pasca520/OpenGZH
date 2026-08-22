@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
 const read = (path) => readFileSync(`${root}${path}`, 'utf8');
 const baseCss = read('assets/styles/base.css');
+const html = read('index.html');
+const mainSource = read('assets/scripts/main.js');
 
 function tokenFromBlock(block, name) {
   const match = block.match(new RegExp(`${name}:\\s*(#[0-9A-Fa-f]{6})\\s*;`));
@@ -134,5 +136,30 @@ describe('application theme palettes', () => {
     for (const selector of ['.xhs-issue', '.xhs-break-remove', '.xhs-cover-clear']) {
       expect(selectorBlock(xhsCss, selector)).toMatch(/color:\s*var\(--color-danger\)/);
     }
+  });
+
+  it('restores the saved theme before application styles load', () => {
+    const bootstrapIndex = html.indexOf("localStorage.getItem('opengzh-app-theme')");
+    const stylesheetIndex = html.indexOf('assets/styles/base.css');
+    expect(bootstrapIndex).toBeGreaterThan(-1);
+    expect(bootstrapIndex).toBeLessThan(stylesheetIndex);
+    expect(html).toContain("let theme = 'light'");
+    expect(html).toContain('document.documentElement.dataset.appTheme = theme');
+  });
+
+  it('keeps app theme and article preview controls distinct', () => {
+    expect(html).toContain('class="app-theme-toggle"');
+    expect(html).toMatch(/:aria-label="appTheme === 'dark' \? '切换到浅色界面' : '切换到深色界面'"/);
+    expect(html).toMatch(/:title="appTheme === 'dark' \? '切换到浅色界面' : '切换到深色界面'"/);
+    expect(html).toMatch(/文章预览切换到浅色/);
+    expect(html).toMatch(/文章预览切换到深色/);
+  });
+
+  it('wires Vue state to the application theme module', () => {
+    expect(mainSource).toMatch(/from '\.\/ui\/app-theme\.js'/);
+    expect(mainSource).toMatch(/const appTheme = ref\(normalizeAppTheme\(document\.documentElement\.dataset\.appTheme\)\)/);
+    expect(mainSource).toMatch(/function switchAppTheme\(\)/);
+    expect(mainSource).toMatch(/applyAppTheme\(toggleAppTheme\(appTheme\.value\)\)/);
+    expect(mainSource).toMatch(/\bappTheme,\s*\n\s*switchAppTheme,/);
   });
 });

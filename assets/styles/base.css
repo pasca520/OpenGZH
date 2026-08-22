@@ -277,6 +277,32 @@ body {
   flex-shrink: 0;
 }
 
+.app-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--motion-instant);
+}
+
+.app-theme-toggle:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: var(--color-accent-light);
+}
+
+.app-theme-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+
 .sidebar-toggle {
   display: flex;
   align-items: center;

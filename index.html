@@ -9,6 +9,19 @@
   <meta name="author" content="OpenGZH">
 
   <link rel="icon" type="image/svg+xml" href="assets/images/logo.svg?v=1">
+  <script>
+    (() => {
+      // ponytail: synchronous two-state bootstrap prevents a saved dark theme from flashing light.
+      // If app themes grow beyond light/dark, replace this with a shared blocking bootstrap file.
+      let theme = 'light';
+      try {
+        theme = localStorage.getItem('opengzh-app-theme') === 'dark' ? 'dark' : 'light';
+      } catch (_error) {
+        // Storage can be unavailable; light remains the product default.
+      }
+      document.documentElement.dataset.appTheme = theme;
+    })();
+  </script>
   <link rel="stylesheet" href="assets/styles/base.css?v=3">
   <link rel="stylesheet" href="assets/styles/editor.css?v=17">
   <link rel="stylesheet" href="assets/styles/panel.css?v=2">
@@ -63,6 +76,15 @@
       </div>
 
       <div class="header-right">
+        <button
+          class="app-theme-toggle"
+          @click="switchAppTheme"
+          :title="appTheme === 'dark' ? '切换到浅色界面' : '切换到深色界面'"
+          :aria-label="appTheme === 'dark' ? '切换到浅色界面' : '切换到深色界面'"
+        >
+          <svg v-if="appTheme === 'light'" class="lucide lucide-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
+          <svg v-else class="lucide lucide-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
+        </button>
       </div>
     </header>
 
@@ -933,7 +955,7 @@
                 </div>
 
                 <!-- 深色/浅色模式切换 -->
-                <button v-if="contentOutputMode === 'text'" class="preview-mode-toggle" :class="{ active: previewDarkMode }" @click="previewDarkMode = !previewDarkMode" :title="previewDarkMode ? '切换到浅色模式' : '切换到深色模式'">
+                <button v-if="contentOutputMode === 'text'" class="preview-mode-toggle" :class="{ active: previewDarkMode }" @click="previewDarkMode = !previewDarkMode" :title="previewDarkMode ? '文章预览切换到浅色' : '文章预览切换到深色'" :aria-label="previewDarkMode ? '文章预览切换到浅色' : '文章预览切换到深色'">
                   <svg v-if="!previewDarkMode" class="lucide lucide-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
                   <svg v-else class="lucide lucide-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
                 </button>

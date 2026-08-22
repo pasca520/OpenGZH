@@ -28,6 +28,7 @@ import {
 } from './core/style-override.js';
 import { copyToWechat } from './export/clipboard-exporter.js';
 import { getCategorizedThemes, getStyleName, isRecommended, getStarredStyles, toggleStarStyle } from './ui/theme-manager.js';
+import { applyAppTheme, normalizeAppTheme, toggleAppTheme } from './ui/app-theme.js';
 import {
   getCodeThemeList,
   FOLLOW_THEME_CODE_STYLE,
@@ -107,7 +108,12 @@ let pendingSupplementalDirectoryResolve = null;
 const showDevicePicker = ref(false);
 const showExportMenu = ref(false);
 const previewDarkMode = ref(false);
+const appTheme = ref(normalizeAppTheme(document.documentElement.dataset.appTheme));
 const selectedDevice = ref('iphone-17-pro');
+
+function switchAppTheme() {
+  appTheme.value = applyAppTheme(toggleAppTheme(appTheme.value));
+}
 
 // ── XHS Image Mode (session-only state; contentOutputMode never persists) ──
 const contentOutputMode = ref('text');
@@ -3574,6 +3580,8 @@ const app = createApp({
       displaySettings,
       showDevicePicker,
       showExportMenu,
+      appTheme,
+      switchAppTheme,
       previewDarkMode,
       selectedDevice,
       deviceGroups,
