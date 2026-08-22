@@ -700,11 +700,12 @@ describe('card picker UI', () => {
     expect(removeButton).toContain('@click="removeSelectedCard"');
   });
 
-  it('has two desktop columns, one mobile column, visible focus, and bounded overflow', () => {
+  it('keeps full-width card previews in one column with visible focus and bounded overflow', () => {
     const css = read('assets/styles/editor.css');
 
     expect(css).toMatch(/\.selection-card-popover\s*\{[^}]*position:\s*fixed[^}]*max-height:[^;}]+[^}]*overflow-y:\s*auto/s);
-    expect(css).toMatch(/\.card-picker-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s);
+    expect(css).toMatch(/\.selection-card-popover \.card-picker-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s);
+    expect(css).not.toMatch(/\.selection-card-popover \.card-picker-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,/s);
     expect(css).toMatch(/\.card-picker-item:focus-visible/);
     expect(css).toMatch(/@media\s*\(max-width:\s*768px\)[\s\S]*\.selection-card-popover \.card-picker-grid\s*\{[^}]*grid-template-columns:\s*1fr/s);
   });

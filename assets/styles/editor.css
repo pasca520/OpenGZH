@@ -208,6 +208,7 @@
 }
 
 .selection-card-popover .card-picker-grid {
+  grid-template-columns: minmax(0, 1fr);
   padding: 12px;
 }
 
