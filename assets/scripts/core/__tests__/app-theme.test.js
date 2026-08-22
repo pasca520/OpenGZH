@@ -33,7 +33,7 @@ function selectorBlock(css, selector) {
   return match[1];
 }
 
-describe('Deep Sea Night application theme', () => {
+describe('Inkstone Coral application theme', () => {
   it('locks the approved semantic palette', () => {
     expect({
       base: token('--color-surface-base'),
@@ -47,16 +47,16 @@ describe('Deep Sea Night application theme', () => {
       accent: token('--color-accent'),
       onAccent: token('--color-on-accent'),
     }).toEqual({
-      base: '#0D1420',
-      muted: '#111927',
-      raised: '#151E2C',
-      border: '#29364B',
-      text: '#EDF3FF',
-      inverse: '#EDF3FF',
-      secondary: '#B7C3D7',
-      tertiary: '#91A0B7',
-      accent: '#7895FF',
-      onAccent: '#09111F',
+      base: '#181512',
+      muted: '#211D19',
+      raised: '#29231E',
+      border: '#4A3D35',
+      text: '#FFF7ED',
+      inverse: '#FFF7ED',
+      secondary: '#D7C7B8',
+      tertiary: '#B9A494',
+      accent: '#FF8A76',
+      onAccent: '#26120F',
     });
   });
 

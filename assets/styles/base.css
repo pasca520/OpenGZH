@@ -10,33 +10,33 @@
 [v-cloak] { display: none; }
 
 :root {
-  /* ── Colors (Deep Sea Night) ── */
-  --color-text-primary: #EDF3FF;
-  --color-text-secondary: #B7C3D7;
-  --color-text-tertiary: #91A0B7;
-  --color-text-inverse: #EDF3FF;
-  --color-on-accent: #09111F;
-  --color-surface-base: #0D1420;
-  --color-surface-muted: #111927;
-  --color-surface-raised: #151E2C;
-  --color-surface-strong: #26365E;
-  --color-border-default: #29364B;
-  --color-border-strong: #3A4962;
+  /* ── Colors (Inkstone Coral) ── */
+  --color-text-primary: #FFF7ED;
+  --color-text-secondary: #D7C7B8;
+  --color-text-tertiary: #B9A494;
+  --color-text-inverse: #FFF7ED;
+  --color-on-accent: #26120F;
+  --color-surface-base: #181512;
+  --color-surface-muted: #211D19;
+  --color-surface-raised: #29231E;
+  --color-surface-strong: #3A2E28;
+  --color-border-default: #4A3D35;
+  --color-border-strong: #655246;
 
   /* Legacy aliases retained for current stylesheets */
-  --color-primary: #EDF3FF;
-  --color-secondary: #B7C3D7;
-  --color-tertiary: #91A0B7;
-  --color-text: #EDF3FF;
-  --color-accent: #7895FF;
-  --color-accent-hover: #8AA4FF;
-  --color-accent-light: rgba(120, 149, 255, 0.16);
-  --color-bg: #0D1420;
-  --color-bg-secondary: #111927;
-  --color-surface: #151E2C;
-  --color-border: #29364B;
-  --color-border-light: #29364B;
-  --color-light-border: #29364B;
+  --color-primary: #FFF7ED;
+  --color-secondary: #D7C7B8;
+  --color-tertiary: #B9A494;
+  --color-text: #FFF7ED;
+  --color-accent: #FF8A76;
+  --color-accent-hover: #FF9B89;
+  --color-accent-light: rgba(255, 138, 118, 0.16);
+  --color-bg: #181512;
+  --color-bg-secondary: #211D19;
+  --color-surface: #29231E;
+  --color-border: #4A3D35;
+  --color-border-light: #4A3D35;
+  --color-light-border: #4A3D35;
 
   /* ── Typography ── */
   --font-size-xs: 10px;
@@ -78,7 +78,7 @@
   --shadow-2: 0 2px 8px rgba(0, 0, 0, 0.30);
   --shadow-3: 0 4px 16px rgba(0, 0, 0, 0.36);
   --shadow-4: 0 8px 28px rgba(0, 0, 0, 0.42);
-  --shadow-jade: 0 1px 3px rgba(120, 149, 255, 0.32);
+  --shadow-jade: 0 1px 3px rgba(255, 138, 118, 0.32);
   --shadow-inset: rgba(255,255,255,0.08) 0px 0.5px 0px 0px inset, rgba(0,0,0,0.32) 0px 0px 0px 0.5px inset, rgba(0,0,0,0.24) 0px 1px 2px 0px;
   --shadow-sm: var(--shadow-1);
   --shadow-md: var(--shadow-2);
