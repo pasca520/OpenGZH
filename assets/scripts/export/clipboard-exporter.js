@@ -6,6 +6,8 @@
 import { convertMathForWechat, stripFormulaExportMetadata } from './math-exporter.js';
 import { applyCodeHighlighting, serializeHighlightedCodeHtml } from '../core/code-highlight.js';
 import { buildEndDividerGif, END_DIVIDER_META } from './end-divider-gif.js';
+import { buildCardDecorationGif } from './card-decoration-gif.js';
+import { resolveCardTokens } from '../core/card-styles.js';
 import { buildTableImageAlt, renderTableToPng } from './table-image-renderer.js';
 
 function extractBackgroundColor(styleString) {
@@ -300,6 +302,31 @@ export async function materializeMarkdownTables(tables, {
   }
 }
 
+export function materializeAnimatedCardDecorations(doc, {
+  styleConfig,
+  build = buildCardDecorationGif
+} = {}) {
+  const colors = resolveCardTokens(styleConfig);
+  const cache = new Map();
+  for (const decoration of doc.querySelectorAll('[data-ogzh-card-animation]')) {
+    const kind = decoration.getAttribute('data-ogzh-card-animation');
+    const cacheKey = `${kind}:${colors.accent}:${colors.line}:${colors.soft}:${colors.surface}`;
+    if (!cache.has(cacheKey)) cache.set(cacheKey, build({ kind, colors }));
+    const gif = cache.get(cacheKey);
+    if (!gif) continue;
+    const image = doc.createElement('img');
+    image.setAttribute('src', gif.dataUrl);
+    image.setAttribute('alt', '');
+    image.setAttribute('aria-hidden', 'true');
+    image.setAttribute('data-ogzh-card-gif', kind);
+    image.setAttribute(
+      'style',
+      `display:block;width:${gif.width}px;max-width:100%;height:auto;border:0;`
+    );
+    decoration.replaceWith(image);
+  }
+}
+
 function convertGridToTable(doc) {
   const imageGrids = doc.querySelectorAll('.image-grid');
   imageGrids.forEach((grid) => {
@@ -583,6 +610,7 @@ function toWechatCodeHTML(codeText) {
 
 function flattenListItems(doc) {
   doc.querySelectorAll('li').forEach((item) => {
+    if (item.closest?.('section[data-ogzh-card="history-document"]')) return;
     if (containsRenderableMath(item)) {
       return;
     }
@@ -708,6 +736,7 @@ function normalizeListTypographyForWechat(doc, styleConfig) {
   const typographyStyle = buildTypographyStyle({ fontSize, lineHeight, letterSpacing, color, fontFamily });
 
   doc.querySelectorAll('ol, ul').forEach((list) => {
+    if (list.closest?.('section[data-ogzh-card="history-document"]')) return;
     const currentStyle = list.getAttribute('style') || '';
     list.setAttribute(
       'style',
@@ -716,6 +745,7 @@ function normalizeListTypographyForWechat(doc, styleConfig) {
   });
 
   doc.querySelectorAll('li').forEach((item) => {
+    if (item.closest?.('section[data-ogzh-card="history-document"]')) return;
     const currentStyle = item.getAttribute('style') || '';
     item.setAttribute(
       'style',
@@ -982,6 +1012,7 @@ export async function copyToWechat({ renderedHTML, styleConfig, imageStore, show
     wrapSectionIfNeeded(doc, effectiveStyleConfig);
 
     maybeReplaceAnimatedEndWithGif(doc, { styleConfig, displaySettings });
+    materializeAnimatedCardDecorations(doc, { styleConfig: effectiveStyleConfig });
 
     const text = buildClipboardPlainText(doc);
     const tableBackground = extractBackgroundColor(effectiveStyleConfig.styles.container) || '#ffffff';
