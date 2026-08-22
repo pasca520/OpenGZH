@@ -28,7 +28,7 @@ function contrast(foreground, background) {
 
 function selectorBlock(css, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = css.match(new RegExp(`${escaped}\\s*\\{([^}]+)\\}`));
+  const match = css.match(new RegExp(`(?:^|\\n)\\s*${escaped}\\s*\\{([^}]+)\\}`));
   if (!match) throw new Error(`Missing selector: ${selector}`);
   return match[1];
 }
@@ -41,6 +41,7 @@ describe('Deep Sea Night application theme', () => {
       raised: token('--color-surface-raised'),
       border: token('--color-border-default'),
       text: token('--color-text-primary'),
+      inverse: token('--color-text-inverse'),
       secondary: token('--color-text-secondary'),
       tertiary: token('--color-text-tertiary'),
       accent: token('--color-accent'),
@@ -51,6 +52,7 @@ describe('Deep Sea Night application theme', () => {
       raised: '#151E2C',
       border: '#29364B',
       text: '#EDF3FF',
+      inverse: '#EDF3FF',
       secondary: '#B7C3D7',
       tertiary: '#91A0B7',
       accent: '#7895FF',
@@ -60,6 +62,7 @@ describe('Deep Sea Night application theme', () => {
 
   it('keeps normal text and filled actions at WCAG AA contrast', () => {
     expect(contrast(token('--color-text-primary'), token('--color-surface-raised'))).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(token('--color-text-inverse'), token('--color-surface-base'))).toBeGreaterThanOrEqual(4.5);
     expect(contrast(token('--color-text-tertiary'), token('--color-surface-raised'))).toBeGreaterThanOrEqual(4.5);
     expect(contrast(token('--color-accent'), token('--color-surface-base'))).toBeGreaterThanOrEqual(4.5);
     expect(contrast(token('--color-on-accent'), token('--color-accent'))).toBeGreaterThanOrEqual(4.5);
@@ -68,6 +71,22 @@ describe('Deep Sea Night application theme', () => {
   it('uses the on-accent token for shared filled actions', () => {
     for (const selector of ['.header-tab.active', '.sidebar-action-btn.primary', '.toast-success', '.modal-btn-primary']) {
       expect(selectorBlock(baseCss, selector)).toMatch(/color:\s*var\(--color-on-accent\)/);
+    }
+  });
+
+  it('uses the on-accent token for workspace filled actions', () => {
+    const contracts = [
+      ['assets/styles/editor.css', ['.copy-btn', '.cover-header-export-btn']],
+      ['assets/styles/panel.css', ['.theme-card-badge']],
+      ['assets/styles/cover.css', ['.cover-export-btn', '.cover-illust-cat-btn.active']],
+      ['assets/styles/xhs.css', ['.xhs-download-btn']],
+    ];
+
+    for (const [path, selectors] of contracts) {
+      const css = read(path);
+      for (const selector of selectors) {
+        expect(selectorBlock(css, selector)).toMatch(/color:\s*var\(--color-on-accent\)/);
+      }
     }
   });
 });

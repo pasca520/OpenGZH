@@ -14,7 +14,7 @@
   --color-text-primary: #EDF3FF;
   --color-text-secondary: #B7C3D7;
   --color-text-tertiary: #91A0B7;
-  --color-text-inverse: #09111F;
+  --color-text-inverse: #EDF3FF;
   --color-on-accent: #09111F;
   --color-surface-base: #0D1420;
   --color-surface-muted: #111927;
@@ -675,7 +675,7 @@ body {
 }
 
 .sidebar-icon-btn.danger:hover {
-  color: #C4473A;
+  color: #FF9A9A;
 }
 
 .sidebar-icon-btn:active { transform: translateY(0); }
@@ -715,7 +715,7 @@ body {
 .status-item { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
 .status-saved, .status-saved svg { color: var(--color-accent); }
 .status-saving { color: var(--color-accent); }
-.status-error { color: #C4473A; }
+.status-error { color: #FF9A9A; }
 
 /* ── Toast ── */
 .toast-container { position: fixed; bottom: var(--space-lg); right: var(--space-lg); z-index: 2000; }
