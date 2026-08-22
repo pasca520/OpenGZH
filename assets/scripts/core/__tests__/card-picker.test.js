@@ -605,6 +605,19 @@ describe('card picker editor integration', () => {
     expect(open).not.toContain('.focus(');
   });
 
+  it('suppresses the native select event caused by restoring a successful edit', () => {
+    const selection = sliceBetween(source, 'function handleEditorSelectionChange(', 'function handleDocumentKeydown(');
+    const apply = sliceBetween(source, 'async function applySelectedCard(', 'async function removeSelectedCard(');
+    const remove = sliceBetween(source, 'async function removeSelectedCard(', 'function getCardPreviewHtml(');
+
+    expect(selection).toContain('suppressCardPopoverEvents');
+    for (const action of [apply, remove]) {
+      expect(action).toContain('suppressCardPopoverEvents = true');
+      expect(action).toContain('await restoreEditorSelection(');
+      expect(action).toContain('releaseCardPopoverSuppression()');
+    }
+  });
+
   it('keeps the textarea and popover inside one outside-click boundary', () => {
     const outsideClick = sliceBetween(
       source,

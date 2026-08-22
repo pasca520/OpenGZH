@@ -155,6 +155,7 @@ const isMobileCardPopover = ref(window.innerWidth <= 768);
 let cardPopoverResizeObserver = null;
 let cardPopoverPositionFrame = 0;
 let cardPopoverWindowResizeHandler = null;
+let suppressCardPopoverEvents = false;
 
 // ── Style Override (样式覆盖层，见 docs/STYLE-OVERRIDE-DESIGN.md) ──
 const styleBrushMode = ref(false);
@@ -2340,8 +2341,15 @@ function closeCardPicker(restoreEditorFocus = false) {
   });
 }
 
+function releaseCardPopoverSuppression() {
+  window.requestAnimationFrame(() => {
+    suppressCardPopoverEvents = false;
+  });
+}
+
 function handleEditorSelectionChange(event) {
   syncEditorSelection(event);
+  if (suppressCardPopoverEvents) return;
   if (editorSelection.value.start === editorSelection.value.end) {
     closeCardPicker(false);
     return;
@@ -2400,8 +2408,10 @@ async function applySelectedCard(styleId) {
   markdownInput.value = result.markdown;
   cardTargetState.value = { ok: true, existing: result.kind === 'replace', reason: '' };
   toast.show('已应用卡片样式', 'success');
+  suppressCardPopoverEvents = true;
   await restoreEditorSelection(result.selectionStart, result.selectionEnd);
   closeCardPicker();
+  releaseCardPopoverSuppression();
   return true;
 }
 
@@ -2421,8 +2431,10 @@ async function removeSelectedCard() {
   markdownInput.value = result.markdown;
   cardTargetState.value = { ok: true, existing: false, reason: '' };
   toast.show('已移除卡片样式', 'success');
+  suppressCardPopoverEvents = true;
   await restoreEditorSelection(result.selectionStart, result.selectionEnd);
   closeCardPicker();
+  releaseCardPopoverSuppression();
   return true;
 }
 
