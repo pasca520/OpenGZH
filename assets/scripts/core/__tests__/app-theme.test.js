@@ -89,4 +89,12 @@ describe('Inkstone Coral application theme', () => {
       }
     }
   });
+
+  it('themes browser-focusable picker scroll regions', () => {
+    const editorCss = read('assets/styles/editor.css');
+    for (const selector of ['.template-dropdown-scroll:focus-visible', '.typo-dropdown-scroll:focus-visible']) {
+      expect(selectorBlock(editorCss, selector))
+        .toMatch(/outline:\s*2px solid var\(--color-accent\)/);
+    }
+  });
 });
