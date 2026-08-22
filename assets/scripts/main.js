@@ -78,6 +78,10 @@ import {
   removeCardEdit,
   renderCardPreviewHtml
 } from './core/card-styles.js';
+import {
+  measureTextareaSelectionFocus,
+  placeSelectionPopover
+} from './ui/selection-popover-position.js';
 
 const { createApp, ref, reactive, watch, nextTick, onMounted, onBeforeUnmount, computed } = window.Vue;
 
@@ -142,10 +146,16 @@ const activeTab = ref('editor');
 const showTemplatePicker = ref(false);
 const showTypoPicker = ref(false);
 const showXhsSettings = ref(false);
-const CARD_PICKER_BOUNDARY_SELECTOR = '.card-picker-anchor';
+const CARD_PICKER_BOUNDARY_SELECTOR = '.selection-card-popover, .markdown-input';
 const showCardPicker = ref(false);
 const cardTargetState = ref({ ok: true, existing: false, reason: '' });
-let cardPickerToolbarObserver = null;
+const cardStyleFilter = ref('all');
+const cardPopoverPosition = ref({ left: 0, top: 0, side: 'right' });
+const isMobileCardPopover = ref(window.innerWidth <= 768);
+let cardPopoverResizeObserver = null;
+let cardPopoverPositionFrame = 0;
+let cardPopoverWindowResizeHandler = null;
+let suppressCardPopoverEvents = false;
 
 // ── Style Override (样式覆盖层，见 docs/STYLE-OVERRIDE-DESIGN.md) ──
 const styleBrushMode = ref(false);
@@ -326,7 +336,34 @@ const rightPanelWidth = ref(null);
 const syncScrollEnabled = ref(true);
 const codeBlockSettings = ref(getDefaultCodeBlockSettings());
 const displaySettings = ref(getDefaultDisplaySettings());
-const editorSelection = ref({ start: 0, end: 0 });
+const editorSelection = ref({ start: 0, end: 0, direction: 'none' });
+const selectedCardTextLength = computed(() => Math.max(
+  0,
+  editorSelection.value.end - editorSelection.value.start
+));
+const filteredCardStyles = computed(() => CARD_STYLES.filter((card) => (
+  cardStyleFilter.value === 'all'
+  || (cardStyleFilter.value === 'animated') === Boolean(card.animated)
+)));
+const cardStyleFilters = computed(() => [
+  { value: 'all', label: '全部', count: CARD_STYLES.length },
+  {
+    value: 'static',
+    label: '静态',
+    count: CARD_STYLES.filter(({ animated }) => !animated).length
+  },
+  {
+    value: 'animated',
+    label: '动效',
+    count: CARD_STYLES.filter(({ animated }) => animated).length
+  }
+]);
+const cardPopoverStyle = computed(() => isMobileCardPopover.value
+  ? { left: '12px', right: '12px', bottom: '12px' }
+  : {
+      left: `${cardPopoverPosition.value.left}px`,
+      top: `${cardPopoverPosition.value.top}px`
+    });
 
 const categorizedThemes = ref(getCategorizedThemes());
 const codeThemeList = getCodeThemeList();
@@ -2179,7 +2216,8 @@ function syncEditorSelection(event) {
 
   editorSelection.value = {
     start: textarea.selectionStart ?? 0,
-    end: textarea.selectionEnd ?? 0
+    end: textarea.selectionEnd ?? 0,
+    direction: textarea.selectionDirection || 'none'
   };
 }
 
@@ -2187,7 +2225,8 @@ function getEditorSelection(textarea = getTextarea()) {
   if (!textarea) {
     return {
       start: editorSelection.value.start ?? 0,
-      end: editorSelection.value.end ?? 0
+      end: editorSelection.value.end ?? 0,
+      direction: editorSelection.value.direction || 'none'
     };
   }
 
@@ -2197,7 +2236,8 @@ function getEditorSelection(textarea = getTextarea()) {
 
   return {
     start: editorSelection.value.start ?? 0,
-    end: editorSelection.value.end ?? 0
+    end: editorSelection.value.end ?? 0,
+    direction: editorSelection.value.direction || 'none'
   };
 }
 
@@ -2249,42 +2289,72 @@ function analyzeCardTarget() {
   return cardTargetState.value;
 }
 
-function constrainCardPickerHeight() {
-  if (window.innerWidth <= 768) return;
+function positionCardPopover() {
+  if (!showCardPicker.value || isMobileCardPopover.value) return;
+  const textarea = getTextarea();
+  const popover = document.querySelector('.selection-card-popover');
+  if (!textarea || !popover) return;
 
-  const picker = document.querySelector('.card-picker');
-  const editorPanel = picker?.closest('.editor-panel');
-  if (!picker || !editorPanel) return;
-
-  const margin = 12;
-  const pickerTop = picker.getBoundingClientRect().top;
-  const panelBottom = editorPanel.getBoundingClientRect().bottom;
-  const maxHeight = Math.max(0, Math.floor(panelBottom - pickerTop - margin));
-  picker.style.setProperty('--card-picker-max-height', `${maxHeight}px`);
+  const viewport = window.visualViewport;
+  const viewportLeft = viewport?.offsetLeft || 0;
+  const viewportTop = viewport?.offsetTop || 0;
+  const viewportRight = viewportLeft + (viewport?.width || window.innerWidth);
+  const viewportBottom = viewportTop + (viewport?.height || window.innerHeight);
+  const panelRect = textarea.closest('.editor-panel')?.getBoundingClientRect();
+  const bounds = {
+    left: Math.max(viewportLeft, panelRect?.left ?? viewportLeft),
+    right: Math.min(viewportRight, panelRect?.right ?? viewportRight),
+    top: Math.max(viewportTop, panelRect?.top ?? viewportTop),
+    bottom: Math.min(viewportBottom, panelRect?.bottom ?? viewportBottom)
+  };
+  const rect = popover.getBoundingClientRect();
+  const anchor = measureTextareaSelectionFocus(textarea);
+  cardPopoverPosition.value = placeSelectionPopover(
+    anchor,
+    { width: rect.width || 376, height: rect.height || 520 },
+    bounds
+  );
 }
 
-function focusCardPicker() {
-  const focusTarget = document.querySelector('.card-picker-item:not(:disabled)')
-    || document.querySelector('.card-picker');
-  if (focusTarget) focusTarget.focus();
+function scheduleCardPopoverPosition() {
+  if (cardPopoverPositionFrame) return;
+  cardPopoverPositionFrame = window.requestAnimationFrame(() => {
+    cardPopoverPositionFrame = 0;
+    positionCardPopover();
+  });
 }
 
 async function openCardPicker() {
   analyzeCardTarget();
   showCardPicker.value = true;
   await nextTick();
-  constrainCardPickerHeight();
-  focusCardPicker();
+  scheduleCardPopoverPosition();
 }
 
-function closeCardPicker(restoreTriggerFocus = false) {
+function closeCardPicker(restoreEditorFocus = false) {
   const wasOpen = showCardPicker.value;
   showCardPicker.value = false;
-  if (!restoreTriggerFocus || !wasOpen) return;
+  if (!restoreEditorFocus || !wasOpen) return;
 
   nextTick(() => {
-    document.querySelector('.card-picker-trigger')?.focus();
+    getTextarea()?.focus({ preventScroll: true });
   });
+}
+
+function releaseCardPopoverSuppression() {
+  window.requestAnimationFrame(() => {
+    suppressCardPopoverEvents = false;
+  });
+}
+
+function handleEditorSelectionChange(event) {
+  syncEditorSelection(event);
+  if (suppressCardPopoverEvents) return;
+  if (editorSelection.value.start === editorSelection.value.end) {
+    closeCardPicker(false);
+    return;
+  }
+  openCardPicker();
 }
 
 function handleDocumentKeydown(event) {
@@ -2336,10 +2406,12 @@ async function applySelectedCard(styleId) {
   }
 
   markdownInput.value = result.markdown;
-  closeCardPicker();
   cardTargetState.value = { ok: true, existing: result.kind === 'replace', reason: '' };
   toast.show('已应用卡片样式', 'success');
+  suppressCardPopoverEvents = true;
   await restoreEditorSelection(result.selectionStart, result.selectionEnd);
+  closeCardPicker();
+  releaseCardPopoverSuppression();
   return true;
 }
 
@@ -2357,10 +2429,12 @@ async function removeSelectedCard() {
   }
 
   markdownInput.value = result.markdown;
-  closeCardPicker();
   cardTargetState.value = { ok: true, existing: false, reason: '' };
   toast.show('已移除卡片样式', 'success');
+  suppressCardPopoverEvents = true;
   await restoreEditorSelection(result.selectionStart, result.selectionEnd);
+  closeCardPicker();
+  releaseCardPopoverSuppression();
   return true;
 }
 
@@ -3288,19 +3362,23 @@ const app = createApp({
         }
       }
       watch([showTemplatePicker, showTypoPicker, showXhsSettings], () => nextTick(alignPickerDropdown));
-      window.addEventListener('resize', () => {
+      cardPopoverWindowResizeHandler = () => {
         if (showTemplatePicker.value || showTypoPicker.value) alignPickerDropdown();
-        if (showCardPicker.value) constrainCardPickerHeight();
-      });
+        isMobileCardPopover.value = window.innerWidth <= 768;
+        if (showCardPicker.value) scheduleCardPopoverPosition();
+      };
+      window.addEventListener('resize', cardPopoverWindowResizeHandler);
 
-      const cardPickerToolbar = document.querySelector('.editor-toolbar');
-      if (cardPickerToolbar && typeof ResizeObserver !== 'undefined') {
-        cardPickerToolbarObserver = new ResizeObserver(() => {
+      const cardPopoverSurface = document.querySelector('.markdown-input-container');
+      if (cardPopoverSurface && typeof ResizeObserver !== 'undefined') {
+        cardPopoverResizeObserver = new ResizeObserver(() => {
           if (!showCardPicker.value) return;
-          nextTick(constrainCardPickerHeight);
+          scheduleCardPopoverPosition();
         });
-        cardPickerToolbarObserver.observe(cardPickerToolbar);
+        cardPopoverResizeObserver.observe(cardPopoverSurface);
       }
+      window.visualViewport?.addEventListener('resize', scheduleCardPopoverPosition);
+      window.visualViewport?.addEventListener('scroll', scheduleCardPopoverPosition);
 
       // 点击外部关闭下拉菜单
       document.addEventListener('click', (event) => {
@@ -3359,9 +3437,18 @@ const app = createApp({
 
     onBeforeUnmount(() => {
       document.removeEventListener('keydown', handleDocumentKeydown);
-      if (!cardPickerToolbarObserver) return;
-      cardPickerToolbarObserver.disconnect();
-      cardPickerToolbarObserver = null;
+      if (cardPopoverWindowResizeHandler) {
+        window.removeEventListener('resize', cardPopoverWindowResizeHandler);
+        cardPopoverWindowResizeHandler = null;
+      }
+      window.visualViewport?.removeEventListener('resize', scheduleCardPopoverPosition);
+      window.visualViewport?.removeEventListener('scroll', scheduleCardPopoverPosition);
+      if (cardPopoverPositionFrame) {
+        window.cancelAnimationFrame(cardPopoverPositionFrame);
+        cardPopoverPositionFrame = 0;
+      }
+      cardPopoverResizeObserver?.disconnect();
+      cardPopoverResizeObserver = null;
     });
 
     return {
@@ -3371,11 +3458,20 @@ const app = createApp({
       showTypoPicker,
       showXhsSettings,
       cardStyles: CARD_STYLES,
+      cardStyleFilter,
+      cardStyleFilters,
+      filteredCardStyles,
       showCardPicker,
       cardTargetState,
+      cardPopoverPosition,
+      cardPopoverStyle,
+      isMobileCardPopover,
+      selectedCardTextLength,
       analyzeCardTarget,
       openCardPicker,
       closeCardPicker,
+      handleEditorSelectionChange,
+      scheduleCardPopoverPosition,
       applySelectedCard,
       removeSelectedCard,
       getCardPreviewHtml,

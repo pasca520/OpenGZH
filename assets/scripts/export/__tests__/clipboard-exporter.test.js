@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  materializeAnimatedCardDecorations,
   materializeClipboardImages,
   materializeMarkdownTables,
 } from '../clipboard-exporter.js';
@@ -98,5 +99,58 @@ describe('materializeMarkdownTables', () => {
       renderTable: async () => { throw new Error('canvas'); },
       toDataURL: async () => '',
     })).rejects.toMatchObject({ tableIndex: 1, message: '第 1 个表格转换失败：canvas' });
+  });
+});
+
+describe('materializeAnimatedCardDecorations', () => {
+  function makeDecorationDocument(kinds) {
+    const replacements = [];
+    const decorations = kinds.map((kind) => ({
+      getAttribute: (name) => name === 'data-ogzh-card-animation' ? kind : null,
+      replaceWith: (image) => replacements.push({ kind, image })
+    }));
+    return {
+      replacements,
+      querySelectorAll: () => decorations,
+      createElement: () => {
+        const attributes = new Map();
+        return {
+          setAttribute: (name, value) => attributes.set(name, String(value)),
+          getAttribute: (name) => attributes.get(name) ?? null,
+          attributes
+        };
+      }
+    };
+  }
+
+  it('replaces five animation kinds with cached transparent GIF images', () => {
+    const doc = makeDecorationDocument([
+      'highlight', 'steps', 'relationship', 'bookmark', 'documents', 'highlight'
+    ]);
+    const build = vi.fn(({ kind }) => ({
+      dataUrl: `data:image/gif;base64,${kind}`,
+      width: 32,
+      height: 24
+    }));
+
+    materializeAnimatedCardDecorations(doc, {
+      styleConfig: { gzh: { accent: '#315b4d', line: '#a69c89', soft: '#faf8f1' } },
+      build
+    });
+
+    expect(build).toHaveBeenCalledTimes(5);
+    expect(doc.replacements).toHaveLength(6);
+    for (const { kind, image } of doc.replacements) {
+      expect(image.getAttribute('data-ogzh-card-gif')).toBe(kind);
+      expect(image.getAttribute('src')).toContain('data:image/gif;base64,');
+      expect(image.getAttribute('alt')).toBe('');
+      expect(image.getAttribute('aria-hidden')).toBe('true');
+    }
+  });
+
+  it('keeps the static DOM fallback when GIF generation fails', () => {
+    const doc = makeDecorationDocument(['highlight']);
+    materializeAnimatedCardDecorations(doc, { styleConfig: {}, build: () => null });
+    expect(doc.replacements).toEqual([]);
   });
 });

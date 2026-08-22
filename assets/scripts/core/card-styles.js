@@ -1,4 +1,9 @@
 const BODY_PLACEHOLDER = '在这里输入卡片内容';
+const HISTORY_DOCUMENT_BODY = [
+  '- 第一版方案 ｜ 2026.08.12',
+  '- 第二版方案 ｜ 2026.08.18',
+  '- 当前版本 ｜ 2026.08.22'
+].join('\n');
 const CARD_OPENER_PATTERN = /^:::ogzh-card\s+([a-z0-9-]+)\s*$/;
 const CARD_CLOSER_PATTERN = /^:::\s*$/;
 const FORBIDDEN_TOKEN_REASONS = Object.freeze({
@@ -14,13 +19,13 @@ const FORBIDDEN_TOKEN_REASONS = Object.freeze({
   hr: '选区包含分割线，请选择分割线两侧的内容。'
 });
 
+const defineCard = (item) => Object.freeze({ animated: false, ...item });
+
 export const CARD_STYLES = Object.freeze([
-  { id: 'accent-bar', name: '左线强调卡', slots: 'body', preview: '重点内容' },
   { id: 'minimal-outline', name: '极简框线卡', slots: 'body', preview: '清晰陈述' },
   { id: 'soft-fill', name: '柔和底色卡', slots: 'body', preview: '温和提示' },
   { id: 'quote-frame', name: '引号金句卡', slots: 'body', preview: '一句值得记住的话' },
   { id: 'top-rule', name: '顶线观点卡', slots: 'body', preview: '核心观点' },
-  { id: 'double-frame', name: '双层框线卡', slots: 'body', preview: '重点信息' },
   { id: 'solid-contrast', name: '实色反差卡', slots: 'body', preview: '强提醒' },
   {
     id: 'capsule-title',
@@ -30,22 +35,82 @@ export const CARD_STYLES = Object.freeze([
     preview: '标题与正文'
   },
   {
-    id: 'label-title',
-    name: '标签标题卡',
-    slots: 'title-body',
-    defaultTitle: '核心观点',
-    preview: '标签与正文'
-  },
-  {
     id: 'numbered-conclusion',
     name: '编号结论卡',
     slots: 'title-body',
     defaultTitle: '01 阶段结论',
     preview: '01 阶段结论'
+  },
+  { id: 'soft-halo', name: '柔光晕染卡', slots: 'body', preview: '让结论先被看见' },
+  { id: 'paper-grid', name: '细格纸纹卡', slots: 'body', preview: '拆成可以验证的步骤' },
+  { id: 'diagonal-note', name: '斜纹注释卡', slots: 'body', preview: '这里有一个重要边界' },
+  { id: 'folded-note', name: '折角便签卡', slots: 'body', preview: '记住这一件事' },
+  { id: 'bracket-focus', name: '括号观点卡', slots: 'body', preview: '产品不是功能的集合' },
+  {
+    id: 'split-index',
+    name: '双色索引卡',
+    slots: 'title-body',
+    defaultTitle: '01 阶段复盘',
+    preview: '阶段摘要'
+  },
+  {
+    id: 'highlight-sweep',
+    name: '高光摘录卡',
+    slots: 'title-body',
+    defaultTitle: '关键结论',
+    preview: '先定义问题，再讨论答案',
+    animated: true
+  },
+  {
+    id: 'step-relay',
+    name: '步骤接力卡',
+    slots: 'title-body',
+    defaultTitle: '三步完成',
+    preview: '从洞察走到验证',
+    animated: true
+  },
+  {
+    id: 'relationship-weave',
+    name: '关系编织卡',
+    slots: 'title-body',
+    defaultTitle: '系统关系',
+    preview: '真正的价值来自系统协同',
+    animated: true
+  },
+  {
+    id: 'bookmark-reminder',
+    name: '书签提醒卡',
+    slots: 'title-body',
+    defaultTitle: '请注意',
+    preview: '请先确认这个前置条件',
+    animated: true
+  },
+  {
+    id: 'history-document',
+    name: '历史文档卡',
+    slots: 'title-list',
+    defaultTitle: '历史文档',
+    preview: '第一版方案 ｜ 2026.08.12',
+    animated: true
   }
-].map((item) => Object.freeze(item)));
+].map(defineCard));
 
-const CARD_STYLE_BY_ID = new Map(CARD_STYLES.map((item) => [item.id, item]));
+const LEGACY_CARD_STYLES = Object.freeze([
+  { id: 'accent-bar', name: '左线强调卡', slots: 'body', preview: '重点内容', legacy: true },
+  { id: 'double-frame', name: '双层框线卡', slots: 'body', preview: '重点信息', legacy: true },
+  {
+    id: 'label-title',
+    name: '标签标题卡',
+    slots: 'title-body',
+    defaultTitle: '核心观点',
+    preview: '标签与正文',
+    legacy: true
+  }
+].map(defineCard));
+
+const CARD_STYLE_BY_ID = new Map(
+  [...CARD_STYLES, ...LEGACY_CARD_STYLES].map((item) => [item.id, item])
+);
 
 const DEFAULT_CARD_TOKENS = Object.freeze({
   accent: '#576b95',
@@ -350,6 +415,8 @@ export function buildCardPresentation(styleId, tokenInput, options = {}) {
     `margin: 0 !important; color: ${foreground} !important; line-height: 1.75 !important; text-align: left; overflow-wrap: break-word;`;
   const bodyPair = (foreground, background) =>
     contrastPair('body', foreground, background);
+  const headingStyle = (foreground, margin = '0 0 12px') =>
+    `display: block; margin: ${margin} !important; padding: 0 !important; background: transparent !important; background-color: transparent !important; color: ${foreground} !important; border: none !important; border-top: none !important; border-right: none !important; border-bottom: none !important; border-left: none !important; border-radius: 0 !important; font-size: 16px; line-height: 1.5 !important;`;
 
   switch (styleId) {
     case 'accent-bar':
@@ -462,6 +529,124 @@ export function buildCardPresentation(styleId, tokenInput, options = {}) {
         ]
       });
     }
+    case 'soft-halo':
+      return presentationResult({
+        containerStyle: `${common} border: 1px solid ${tokens.line}; background-color: ${tokens.soft}; border-radius: 20px 6px 20px 6px; color: ${bodyOnSoft} !important;`,
+        bodyStyle: bodyStyle(bodyOnSoft),
+        decoration: 'soft-halo',
+        contrastPairs: [bodyPair(bodyOnSoft, tokens.soft)]
+      });
+    case 'paper-grid':
+      return presentationResult({
+        containerStyle: `${common} border: 1px solid ${tokens.line}; background-color: ${tokens.surface}; border-radius: 10px; color: ${bodyOnSurface} !important; box-shadow: inset 0 0 0 4px ${tokens.soft};`,
+        bodyStyle: bodyStyle(bodyOnSurface),
+        decoration: 'paper-grid',
+        contrastPairs: [bodyPair(bodyOnSurface, tokens.surface)]
+      });
+    case 'diagonal-note':
+      return presentationResult({
+        containerStyle: `${common} border-left: 7px solid ${tokens.accent}; border-top: 1px solid ${tokens.line}; border-right: 1px solid ${tokens.line}; border-bottom: 1px solid ${tokens.line}; background-color: ${tokens.soft}; border-radius: 3px 14px 14px 3px; color: ${bodyOnSoft} !important;`,
+        bodyStyle: bodyStyle(bodyOnSoft),
+        decoration: 'diagonal-note',
+        contrastPairs: [bodyPair(bodyOnSoft, tokens.soft)]
+      });
+    case 'folded-note':
+      return presentationResult({
+        containerStyle: `${common} border: 1px solid ${tokens.line}; background-color: ${tokens.soft}; border-radius: 6px; color: ${bodyOnSoft} !important; box-shadow: 4px 5px 0 ${tokens.line};`,
+        bodyStyle: bodyStyle(bodyOnSoft),
+        decoration: 'folded-note',
+        contrastPairs: [bodyPair(bodyOnSoft, tokens.soft)]
+      });
+    case 'bracket-focus':
+      return presentationResult({
+        containerStyle: `${common} padding-left: 30px; padding-right: 30px; border: none; background-color: ${tokens.surface}; color: ${bodyOnSurface} !important;`,
+        bodyStyle: bodyStyle(bodyOnSurface),
+        decoration: 'bracket-focus',
+        contrastPairs: [bodyPair(bodyOnSurface, tokens.surface)]
+      });
+    case 'split-index': {
+      const titleText = readableForeground(tokens.body, tokens.surface, includePreview);
+      const title = headingStyle(titleText, '0 0 14px');
+      return presentationResult({
+        containerStyle: `${common} border: 1px solid ${tokens.line}; background-color: ${tokens.surface}; border-radius: 13px; color: ${bodyOnSurface} !important;`,
+        titleStyle: title,
+        headingStyle: title,
+        bodyStyle: bodyStyle(bodyOnSurface),
+        headingContrastRole: 'split-title',
+        decoration: 'split-index',
+        solidBackground,
+        solidText,
+        contrastPairs: [
+          bodyPair(bodyOnSurface, tokens.surface),
+          contrastPair('split-title', titleText, tokens.surface)
+        ]
+      });
+    }
+    case 'highlight-sweep': {
+      const titleText = readableForeground(tokens.body, tokens.surface, includePreview);
+      const title = headingStyle(titleText);
+      return presentationResult({
+        containerStyle: `${common} border: 1px solid ${tokens.line}; background-color: ${tokens.surface}; border-radius: 12px; color: ${bodyOnSurface} !important;`,
+        titleStyle: title,
+        headingStyle: title,
+        bodyStyle: bodyStyle(bodyOnSurface),
+        headingContrastRole: 'title',
+        decoration: 'highlight',
+        contrastPairs: [bodyPair(bodyOnSurface, tokens.surface), contrastPair('title', titleText, tokens.surface)]
+      });
+    }
+    case 'step-relay': {
+      const titleText = readableForeground(tokens.body, tokens.soft, includePreview);
+      const title = headingStyle(titleText);
+      return presentationResult({
+        containerStyle: `${common} padding-left: 88px; border: none; background-color: ${tokens.soft}; border-radius: 13px; color: ${bodyOnSoft} !important;`,
+        titleStyle: title,
+        headingStyle: title,
+        bodyStyle: bodyStyle(bodyOnSoft),
+        headingContrastRole: 'title',
+        decoration: 'steps',
+        contrastPairs: [bodyPair(bodyOnSoft, tokens.soft), contrastPair('title', titleText, tokens.soft)]
+      });
+    }
+    case 'relationship-weave': {
+      const titleText = readableForeground(tokens.body, tokens.soft, includePreview);
+      const title = headingStyle(titleText);
+      return presentationResult({
+        containerStyle: `${common} padding-right: 148px; border: 1px solid ${tokens.line}; background-color: ${tokens.soft}; border-radius: 7px 22px 7px 7px; color: ${bodyOnSoft} !important;`,
+        titleStyle: title,
+        headingStyle: title,
+        bodyStyle: bodyStyle(bodyOnSoft),
+        headingContrastRole: 'title',
+        decoration: 'relationship',
+        contrastPairs: [bodyPair(bodyOnSoft, tokens.soft), contrastPair('title', titleText, tokens.soft)]
+      });
+    }
+    case 'bookmark-reminder': {
+      const titleText = readableForeground(tokens.body, tokens.surface, includePreview);
+      const title = headingStyle(titleText);
+      return presentationResult({
+        containerStyle: `${common} padding-right: 84px; border: 1px solid ${tokens.line}; background-color: ${tokens.surface}; border-radius: 12px; color: ${bodyOnSurface} !important;`,
+        titleStyle: title,
+        headingStyle: title,
+        bodyStyle: bodyStyle(bodyOnSurface),
+        headingContrastRole: 'title',
+        decoration: 'bookmark',
+        contrastPairs: [bodyPair(bodyOnSurface, tokens.surface), contrastPair('title', titleText, tokens.surface)]
+      });
+    }
+    case 'history-document': {
+      const titleText = readableForeground(tokens.body, tokens.surface, includePreview);
+      const title = headingStyle(titleText, '0 0 14px');
+      return presentationResult({
+        containerStyle: `${common} border: 1px solid ${tokens.line}; background-color: ${tokens.surface}; border-radius: 4px 14px 4px 4px; color: ${bodyOnSurface} !important; box-shadow: 4px 5px 0 ${tokens.line};`,
+        titleStyle: title,
+        headingStyle: title,
+        bodyStyle: bodyStyle(bodyOnSurface),
+        headingContrastRole: 'title',
+        decoration: 'documents',
+        contrastPairs: [bodyPair(bodyOnSurface, tokens.surface), contrastPair('title', titleText, tokens.surface)]
+      });
+    }
     default:
       return null;
   }
@@ -487,12 +672,106 @@ function quoteDecorationStyles(presentation) {
   };
 }
 
+const ANIMATION_CHILDREN = Object.freeze({
+  highlight: ['highlight'],
+  steps: ['step-1', 'step-2', 'step-3'],
+  relationship: ['node-1', 'line-1', 'node-2', 'line-2', 'node-3', 'line-3'],
+  bookmark: ['bookmark'],
+  documents: ['page-back', 'page-front']
+});
+
+function cardDecorationSpec(kind, tokens, presentation) {
+  const solidBackground = presentation.solidBackground || tokens.accent;
+  const solidText = presentation.solidText || readableForeground(tokens.surface, solidBackground, false);
+  const specs = {
+    'soft-halo': {
+      style: 'display: block; height: 8px; margin: 0 0 14px; line-height: 0;',
+      parts: [0.24, 0.5, 0.82].map((opacity, index) => ({
+        name: `halo-${index + 1}`,
+        style: `display: inline-block; width: ${index === 1 ? 22 : 12}px; height: ${index === 1 ? 8 : 6}px; margin-right: 5px; background-color: ${tokens.accent}; border-radius: 999px; opacity: ${opacity};`
+      }))
+    },
+    'paper-grid': {
+      style: 'display: block; width: 54px; height: 20px; margin: 0 0 13px; line-height: 0;',
+      parts: Array.from({ length: 8 }, (_, index) => ({
+        name: `cell-${index + 1}`,
+        style: `display: inline-block; box-sizing: border-box; width: 10px; height: 8px; margin: 0 3px 3px 0; border: 1px solid ${index === 5 ? tokens.accent : tokens.line}; border-radius: 2px;`
+      }))
+    },
+    'diagonal-note': {
+      style: `display: block; margin: 0 0 12px; color: ${tokens.accent}; font-size: 13px; font-weight: 700; letter-spacing: 3px; line-height: 1;`,
+      text: '╱╱╱'
+    },
+    'folded-note': {
+      style: 'display: block; float: right; width: 24px; height: 24px; margin: -18px -20px 8px 12px; line-height: 0;',
+      parts: [{
+        name: 'fold',
+        style: `display: block; width: 24px; height: 24px; background-color: ${tokens.accent}; border-radius: 0 5px 0 18px; opacity: 0.22;`
+      }]
+    },
+    'bracket-focus': {
+      style: `display: block; width: 56px; height: 12px; margin: 0 0 13px; border-left: 3px solid ${tokens.accent}; border-right: 3px solid ${tokens.accent}; border-radius: 3px; opacity: 0.72;`
+    },
+    'split-index': {
+      style: `display: block; float: left; box-sizing: border-box; width: 56px; min-height: 56px; margin: 0 14px 8px 0; padding: 16px 8px; background-color: ${solidBackground}; color: ${solidText}; border-radius: 9px 3px 9px 3px; font-size: 15px; font-weight: 700; line-height: 24px; text-align: center;`,
+      text: '01'
+    },
+    highlight: {
+      style: `display: block; width: 176px; max-width: 70%; height: 8px; margin: -3px 0 13px; overflow: hidden; background-color: ${tokens.soft}; border-radius: 999px; line-height: 0;`,
+      parts: [{ name: 'highlight', style: `display: block; width: 100%; height: 8px; background-color: ${tokens.accent}; border-radius: 999px; opacity: 0.4;` }]
+    },
+    steps: {
+      style: 'display: block; float: left; width: 40px; height: 96px; margin: 0 0 0 -68px; line-height: 0;',
+      parts: [1, 2, 3].map((step) => ({
+        name: `step-${step}`,
+        style: `display: block; box-sizing: border-box; width: 15px; height: 15px; margin: ${step === 1 ? 2 : 16}px auto 0; background-color: ${step === 1 ? tokens.accent : tokens.surface}; border: 2px solid ${tokens.accent}; border-radius: 999px;`
+      }))
+    },
+    relationship: {
+      style: `display: block; float: right; width: 110px; min-height: 82px; margin: 0 -128px 0 16px; color: ${tokens.accent}; font-size: 17px; letter-spacing: 1px; line-height: 1.55; text-align: center;`,
+      parts: [
+        { name: 'node-1', text: '●', style: 'display: inline;' },
+        { name: 'line-1', text: '──', style: `display: inline; color: ${tokens.line};` },
+        { name: 'node-2', text: '●', style: 'display: inline;' },
+        { name: 'line-2', text: '\n╲    ╱\n', style: `display: inline; white-space: pre; color: ${tokens.line};` },
+        { name: 'node-3', text: '●', style: 'display: inline;' },
+        { name: 'line-3', text: '', style: 'display: inline;' }
+      ]
+    },
+    bookmark: {
+      style: 'display: block; float: right; width: 34px; height: 72px; margin: -18px -64px 0 16px; line-height: 0;',
+      parts: [{ name: 'bookmark', text: '⌄', style: `display: block; box-sizing: border-box; width: 32px; height: 66px; padding-top: 34px; background-color: ${tokens.accent}; color: ${solidText}; border-radius: 0 0 10px 10px; font-size: 22px; line-height: 24px; text-align: center;` }]
+    },
+    documents: {
+      style: 'display: block; float: right; width: 34px; height: 34px; margin: -2px 0 5px 12px; line-height: 0;',
+      parts: [
+        { name: 'page-back', style: `display: inline-block; box-sizing: border-box; width: 21px; height: 26px; margin: 0 0 0 10px; background-color: ${tokens.soft}; border: 1px solid ${tokens.line}; border-radius: 3px;` },
+        { name: 'page-front', style: `display: inline-block; box-sizing: border-box; width: 21px; height: 26px; margin: -20px 0 0 1px; background-color: ${tokens.surface}; border: 1px solid ${tokens.accent}; border-radius: 3px;` }
+      ]
+    }
+  };
+  return specs[kind] || null;
+}
+
+function renderCardDecorationHtml(kind, tokens, presentation) {
+  const spec = cardDecorationSpec(kind, tokens, presentation);
+  if (!spec) return '';
+  const animation = ANIMATION_CHILDREN[kind]
+    ? ` data-ogzh-card-animation="${escapeHtml(kind)}"`
+    : '';
+  const parts = (spec.parts || []).map((part) =>
+    `<i data-ogzh-card-animation-part="${escapeHtml(part.name)}" style="${escapeHtml(part.style)}">${escapeHtml(part.text || '')}</i>`
+  ).join('');
+  return `<span data-ogzh-card-decoration="${escapeHtml(kind)}"${animation} aria-hidden="true" style="${escapeHtml(spec.style)}">${escapeHtml(spec.text || '')}${parts}</span>`;
+}
+
 export function renderCardPreviewHtml(styleId, styleConfig) {
   const card = getCardStyle(styleId);
   if (!card) return '';
+  const tokens = resolveCardTokens(styleConfig);
   const presentation = buildCardPresentation(
     styleId,
-    resolveCardTokens(styleConfig),
+    tokens,
     { nativeDark: Boolean(normalizeColor(styleConfig?.gzh?.bg)) }
   );
   const containerStyle = escapeHtml(presentation.containerStyle);
@@ -510,10 +789,14 @@ export function renderCardPreviewHtml(styleId, styleConfig) {
     const visibleTitle = titleParts?.[2] || title;
     const preview = card.preview === card.defaultTitle ? BODY_PLACEHOLDER : card.preview;
     content = `<span data-ogzh-card-decoration="number" aria-hidden="true" style="${escapeHtml(presentation.titleStyle)}">${escapeHtml(badge)}</span><h4 aria-label="${escapeHtml(title)}" style="${headingStyle}">${escapeHtml(visibleTitle)}</h4><p style="${bodyStyle}">${escapeHtml(preview)}</p>`;
-  } else if (card.slots === 'title-body') {
+  } else if (cardHasTitle(card)) {
     content = `<h4 style="${headingStyle}">${escapeHtml(card.defaultTitle)}</h4><p style="${bodyStyle}">${escapeHtml(card.preview)}</p>`;
   } else {
     content = `<p style="${bodyStyle}">${escapeHtml(card.preview)}</p>`;
+  }
+
+  if (!['none', 'quote', 'number'].includes(presentation.decoration)) {
+    content = `${renderCardDecorationHtml(presentation.decoration, tokens, presentation)}${content}`;
   }
 
   return `<section data-ogzh-card-preview="${escapeHtml(card.id)}" style="${containerStyle}">${content}</section>`;
@@ -523,9 +806,24 @@ export function getCardStyle(styleId) {
   return CARD_STYLE_BY_ID.get(styleId) || null;
 }
 
+function cardHasTitle(card) {
+  return card?.slots === 'title-body' || card?.slots === 'title-list';
+}
+
+export function splitHistoryDocumentItem(value) {
+  const source = String(value || '').trim();
+  const separator = Math.max(source.lastIndexOf('｜'), source.lastIndexOf('|'));
+  if (separator < 0) return { name: source, meta: '' };
+  return {
+    name: source.slice(0, separator).trim(),
+    meta: source.slice(separator + 1).trim()
+  };
+}
+
 const BODY_HEADING_RESET_STYLE = 'display: block !important; background: transparent !important; background-color: transparent !important; padding: 0 !important; border: none !important; border-top: none !important; border-right: none !important; border-bottom: none !important; border-left: none !important; border-radius: 0 !important; font-size: inherit !important; font-weight: inherit !important; font-style: normal !important; font-family: inherit !important; font-variant: inherit !important; letter-spacing: inherit !important; text-transform: none !important; text-align: left !important; text-decoration: none !important; text-indent: 0 !important; word-break: normal !important;';
 const OWNED_DECORATIONS = new WeakSet();
 const NUMBERED_HEADING_STATES = new WeakMap();
+const HISTORY_ROW_STATES = new WeakMap();
 
 function applyTrustedStyle(element, styleText) {
   String(styleText || '').split(';').forEach((declaration) => {
@@ -563,6 +861,88 @@ function createCardDecoration(doc, kind, text, styleText) {
   applyTrustedStyle(decoration, styleText);
   OWNED_DECORATIONS.add(decoration);
   return decoration;
+}
+
+function applyVisualDecoration(doc, section, kind, tokens, presentation) {
+  const spec = cardDecorationSpec(kind, tokens, presentation);
+  if (!spec) return;
+  const decoration = createCardDecoration(doc, kind, spec.text || '', spec.style);
+  if (ANIMATION_CHILDREN[kind]) {
+    decoration.setAttribute('data-ogzh-card-animation', kind);
+  }
+  (spec.parts || []).forEach((part) => {
+    const child = doc.createElement('i');
+    child.setAttribute('data-ogzh-card-animation-part', part.name);
+    child.textContent = part.text || '';
+    applyTrustedStyle(child, part.style);
+    decoration.appendChild(child);
+  });
+  section.insertBefore(decoration, section.firstChild);
+}
+
+function textNodesWithin(element) {
+  const nodes = [];
+  const visit = (node) => {
+    for (const child of Array.from(node.childNodes || [])) {
+      if (child.nodeType === 3) nodes.push(child);
+      else if (!(child.tagName === 'SECTION' && child.hasAttribute('data-ogzh-card'))) visit(child);
+    }
+  };
+  visit(element);
+  return nodes;
+}
+
+function restoreHistoryDocumentRows(section) {
+  Array.from(section.children).forEach((list) => {
+    if (!['UL', 'OL'].includes(list.tagName)) return;
+    Array.from(list.children).forEach((item) => {
+      const state = HISTORY_ROW_STATES.get(item);
+      if (!state) return;
+      state.textNodes.forEach(({ node, value }) => { node.nodeValue = value; });
+      state.index.remove();
+      state.metadata.remove();
+      HISTORY_ROW_STATES.delete(item);
+    });
+  });
+}
+
+function applyHistoryDocumentRows(doc, section, bodyStyle, tokens) {
+  const list = Array.from(section.children).find((child) => ['UL', 'OL'].includes(child.tagName));
+  if (!list) return;
+  applyTrustedStyle(list, 'margin: 0 !important; padding: 0 !important; list-style: none;');
+  Array.from(list.children).forEach((item, itemIndex) => {
+    const raw = String(item.textContent || '');
+    const trimmedEnd = raw.trimEnd();
+    const separator = Math.max(trimmedEnd.lastIndexOf('｜'), trimmedEnd.lastIndexOf('|'));
+    const { meta } = splitHistoryDocumentItem(raw);
+    const changedTextNodes = [];
+    if (separator >= 0 && meta) {
+      let suffixStart = separator;
+      while (suffixStart > 0 && /\s/.test(raw[suffixStart - 1])) suffixStart -= 1;
+      let remaining = raw.length - suffixStart;
+      for (const node of textNodesWithin(item).reverse()) {
+        if (remaining <= 0) break;
+        const value = node.nodeValue || '';
+        const removed = Math.min(remaining, value.length);
+        if (removed > 0) changedTextNodes.push({ node, value });
+        node.nodeValue = value.slice(0, value.length - removed);
+        remaining -= removed;
+      }
+    }
+    const index = doc.createElement('span');
+    index.setAttribute('aria-hidden', 'true');
+    index.setAttribute('data-ogzh-history-index', 'true');
+    index.textContent = String(itemIndex + 1).padStart(2, '0');
+    applyTrustedStyle(index, `display: inline-block; min-width: 28px; margin-right: 10px; color: ${tokens.accent}; font-variant-numeric: tabular-nums;`);
+    const metadata = doc.createElement('span');
+    metadata.setAttribute('data-ogzh-history-meta', 'true');
+    metadata.textContent = meta;
+    applyTrustedStyle(metadata, `display: inline-block; float: right; max-width: 42%; margin-left: 12px; overflow: hidden; color: ${tokens.muted}; text-align: right; text-overflow: ellipsis;`);
+    item.insertBefore(index, item.firstChild);
+    item.appendChild(metadata);
+    applyTrustedStyle(item, `${bodyStyle} list-style: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 1px solid ${tokens.line}; padding: 9px 0 !important;`);
+    HISTORY_ROW_STATES.set(item, { textNodes: changedTextNodes, index, metadata });
+  });
 }
 
 const SAFE_INLINE_TAGS = new Set(['STRONG', 'EM', 'A', 'DEL']);
@@ -694,6 +1074,7 @@ export function applyCardStyles(doc, styleConfig) {
   doc.querySelectorAll('section[data-ogzh-card]').forEach((section) => {
     const heading = directHeading(section);
     restoreNumberedHeading(heading);
+    restoreHistoryDocumentRows(section);
     removeCardDecorations(section);
 
     const styleId = section.getAttribute('data-ogzh-card');
@@ -709,7 +1090,7 @@ export function applyCardStyles(doc, styleConfig) {
     );
     applyTrustedStyle(section, presentation.containerStyle);
 
-    if (card.slots === 'title-body') {
+    if (cardHasTitle(card)) {
       if (heading) applyTrustedStyle(heading, presentation.headingStyle);
     } else if (heading) {
       applyTrustedStyle(heading, presentation.bodyStyle);
@@ -723,6 +1104,11 @@ export function applyCardStyles(doc, styleConfig) {
       applyQuoteDecoration(doc, section, presentation);
     } else if (presentation.decoration === 'number') {
       applyNumberDecoration(doc, section, heading, presentation);
+    } else if (presentation.decoration !== 'none') {
+      applyVisualDecoration(doc, section, presentation.decoration, tokens, presentation);
+    }
+    if (styleId === 'history-document') {
+      applyHistoryDocumentRows(doc, section, presentation.bodyStyle, tokens);
     }
   });
 }
@@ -904,14 +1290,16 @@ export function registerCardDirective(md) {
 }
 
 function buildCardSnippetForStyle(card, selectedBody, lineEnding) {
-  const body = selectedBody || BODY_PLACEHOLDER;
+  const body = selectedBody || (
+    card.id === 'history-document' ? HISTORY_DOCUMENT_BODY : BODY_PLACEHOLDER
+  );
   const opener = `:::ogzh-card ${card.id}${lineEnding}`;
-  const titleLine = card.slots === 'title-body'
+  const titleLine = cardHasTitle(card)
     ? `#### ${card.defaultTitle}${lineEnding}${lineEnding}`
     : '';
   const markdown = `${opener}${titleLine}${body}${lineEnding}:::`;
-  const focusedText = card.slots === 'title-body' ? card.defaultTitle : body;
-  const focusStart = opener.length + (card.slots === 'title-body' ? '#### '.length : 0);
+  const focusedText = cardHasTitle(card) ? card.defaultTitle : body;
+  const focusStart = opener.length + (cardHasTitle(card) ? '#### '.length : 0);
   return {
     markdown,
     focusStart,
@@ -1004,8 +1392,8 @@ export function replaceCardStyleEdit(source, selectionStart, selectionEnd, nextS
 
   const currentContent = source.slice(range.contentStart, range.contentEnd);
   if (
-    currentStyle?.slots !== 'title-body' &&
-    nextStyle.slots === 'title-body' &&
+    !cardHasTitle(currentStyle) &&
+    cardHasTitle(nextStyle) &&
     !startsWithH4Block(currentContent)
   ) {
     const idLengthDelta = nextStyleId.length - range.styleId.length;

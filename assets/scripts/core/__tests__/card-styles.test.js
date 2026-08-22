@@ -15,7 +15,8 @@ import {
   renderCardPreviewHtml,
   replaceCardStyleEdit,
   resolveCardTokens,
-  scanCardRanges
+  scanCardRanges,
+  splitHistoryDocumentItem
 } from '../card-styles.js';
 
 class FakeStyle {
@@ -760,42 +761,37 @@ describe('unified card edits', () => {
 });
 
 describe('card style registry', () => {
-  it('contains exactly the approved 7 body and 3 title-body cards', () => {
-    expect(CARD_STYLES).toEqual([
-      { id: 'accent-bar', name: '左线强调卡', slots: 'body', preview: '重点内容' },
-      { id: 'minimal-outline', name: '极简框线卡', slots: 'body', preview: '清晰陈述' },
-      { id: 'soft-fill', name: '柔和底色卡', slots: 'body', preview: '温和提示' },
-      { id: 'quote-frame', name: '引号金句卡', slots: 'body', preview: '一句值得记住的话' },
-      { id: 'top-rule', name: '顶线观点卡', slots: 'body', preview: '核心观点' },
-      { id: 'double-frame', name: '双层框线卡', slots: 'body', preview: '重点信息' },
-      { id: 'solid-contrast', name: '实色反差卡', slots: 'body', preview: '强提醒' },
-      {
-        id: 'capsule-title',
-        name: '胶囊标题卡',
-        slots: 'title-body',
-        defaultTitle: '核心观点',
-        preview: '标题与正文'
-      },
-      {
-        id: 'label-title',
-        name: '标签标题卡',
-        slots: 'title-body',
-        defaultTitle: '核心观点',
-        preview: '标签与正文'
-      },
-      {
-        id: 'numbered-conclusion',
-        name: '编号结论卡',
-        slots: 'title-body',
-        defaultTitle: '01 阶段结论',
-        preview: '01 阶段结论'
-      }
-    ]);
+  it('publishes 18 cards while retaining three removed ids for old documents', () => {
+    expect(CARD_STYLES).toHaveLength(18);
+    expect(new Set(CARD_STYLES.map(({ id }) => id)).size).toBe(18);
+    expect(CARD_STYLES.filter(({ animated }) => animated)).toHaveLength(5);
+    expect(CARD_STYLES.filter(({ animated }) => !animated)).toHaveLength(13);
+
+    for (const legacyId of ['accent-bar', 'double-frame', 'label-title']) {
+      expect(CARD_STYLES.some(({ id }) => id === legacyId)).toBe(false);
+      expect(getCardStyle(legacyId)).toMatchObject({ id: legacyId, legacy: true });
+    }
+  });
+
+  it('contains the confirmed eleven new ids and Chinese names', () => {
+    expect(CARD_STYLES.map(({ id, name }) => [id, name])).toEqual(expect.arrayContaining([
+      ['soft-halo', '柔光晕染卡'],
+      ['paper-grid', '细格纸纹卡'],
+      ['diagonal-note', '斜纹注释卡'],
+      ['folded-note', '折角便签卡'],
+      ['bracket-focus', '括号观点卡'],
+      ['split-index', '双色索引卡'],
+      ['highlight-sweep', '高光摘录卡'],
+      ['step-relay', '步骤接力卡'],
+      ['relationship-weave', '关系编织卡'],
+      ['bookmark-reminder', '书签提醒卡'],
+      ['history-document', '历史文档卡']
+    ]));
   });
 
   it('is frozen and has unique ids', () => {
     expect(Object.isFrozen(CARD_STYLES)).toBe(true);
-    expect(new Set(CARD_STYLES.map((item) => item.id)).size).toBe(10);
+    expect(new Set(CARD_STYLES.map((item) => item.id)).size).toBe(18);
   });
 
   it('freezes every registry entry', () => {
@@ -803,7 +799,7 @@ describe('card style registry', () => {
   });
 
   it('returns the registered style and rejects unknown ids', () => {
-    expect(getCardStyle('accent-bar')).toBe(CARD_STYLES[0]);
+    expect(getCardStyle('minimal-outline')).toBe(CARD_STYLES[0]);
     expect(getCardStyle('user-css')).toBeNull();
   });
 
@@ -832,6 +828,31 @@ describe('card style registry', () => {
       '01 阶段结论'
     );
     expect(result.markdown.slice(result.focusStart - 5, result.focusStart)).toBe('#### ');
+  });
+
+  it('builds the historical-document default snippet without English or note text', () => {
+    const result = buildCardSnippet('history-document');
+
+    expect(result.markdown).toBe([
+      ':::ogzh-card history-document',
+      '#### 历史文档',
+      '',
+      '- 第一版方案 ｜ 2026.08.12',
+      '- 第二版方案 ｜ 2026.08.18',
+      '- 当前版本 ｜ 2026.08.22',
+      ':::'
+    ].join('\n'));
+    expect(result.markdown).not.toMatch(/DOCUMENT ARCHIVE|#### HISTORY|版本说明/);
+    expect(result.markdown.slice(result.focusStart, result.focusEnd)).toBe('历史文档');
+  });
+
+  it.each([
+    ['第一版方案 ｜ 2026.08.12', { name: '第一版方案', meta: '2026.08.12' }],
+    ['设计规范 | 设计团队', { name: '设计规范', meta: '设计团队' }],
+    ['没有元信息', { name: '没有元信息', meta: '' }],
+    ['名称 | 中间 | 作者', { name: '名称 | 中间', meta: '作者' }]
+  ])('splits one historical-document row: %s', (source, expected) => {
+    expect(splitHistoryDocumentItem(source)).toEqual(expected);
   });
 
   it('preserves selected body bytes and keeps a title-body focus on the title', () => {
@@ -1284,14 +1305,47 @@ describe('card presentation recipes', () => {
     expect(contrastRatio('#ffffff', 'url(javascript:1)')).toBe(0);
   });
 
-  it('builds ten structurally distinct, static-flow presentations', () => {
+  it('builds distinct presentations for the eleven new cards', () => {
+    const ids = [
+      'soft-halo',
+      'paper-grid',
+      'diagonal-note',
+      'folded-note',
+      'bracket-focus',
+      'split-index',
+      'highlight-sweep',
+      'step-relay',
+      'relationship-weave',
+      'bookmark-reminder',
+      'history-document'
+    ];
+    const presentations = ids.map((id) => buildCardPresentation(id, tokens));
+
+    expect(presentations.every(Boolean)).toBe(true);
+    expect(new Set(presentations.map(({ containerStyle }) => containerStyle)).size).toBe(11);
+    expect(presentations.map(({ decoration }) => decoration)).toEqual([
+      'soft-halo',
+      'paper-grid',
+      'diagonal-note',
+      'folded-note',
+      'bracket-focus',
+      'split-index',
+      'highlight',
+      'steps',
+      'relationship',
+      'bookmark',
+      'documents'
+    ]);
+  });
+
+  it('builds eighteen structurally distinct, static-flow presentations', () => {
     const presentations = CARD_STYLES.map((card) =>
       buildCardPresentation(card.id, tokens)
     );
     const serialized = JSON.stringify(presentations);
 
-    expect(presentations).toHaveLength(10);
-    expect(new Set(presentations.map((item) => item.containerStyle)).size).toBe(10);
+    expect(presentations).toHaveLength(18);
+    expect(new Set(presentations.map((item) => item.containerStyle)).size).toBe(18);
     expect(presentations.every((item) => (
       typeof item.containerStyle === 'string' &&
       typeof item.titleStyle === 'string' &&
@@ -1300,12 +1354,14 @@ describe('card presentation recipes', () => {
       Array.isArray(item.contrastPairs)
     ))).toBe(true);
     expect(presentations.map((item) => item.decoration)).toEqual([
-      'none', 'none', 'none', 'quote', 'none', 'none', 'none', 'none', 'none', 'number'
+      'none', 'none', 'quote', 'none', 'none', 'none', 'number',
+      'soft-halo', 'paper-grid', 'diagonal-note', 'folded-note', 'bracket-focus',
+      'split-index', 'highlight', 'steps', 'relationship', 'bookmark', 'documents'
     ]);
     expect(serialized).not.toMatch(/display\s*:\s*(?:flex|grid)|position\s*:|::(?:before|after)|<table/i);
   });
 
-  it('uses the ten approved container and title recipes', () => {
+  it('uses the approved selectable recipes and keeps legacy recipes renderable', () => {
     const presentation = Object.fromEntries(CARD_STYLES.map(({ id }) => [
       id,
       buildCardPresentation(id, tokens)
@@ -1313,17 +1369,18 @@ describe('card presentation recipes', () => {
     const common = /margin:\s*20px 0.*padding:\s*18px 20px.*box-sizing:\s*border-box.*max-width:\s*100%.*overflow-wrap:\s*break-word/;
 
     expect(Object.values(presentation).every((item) => common.test(item.containerStyle))).toBe(true);
-    expect(presentation['accent-bar'].containerStyle).toMatch(/border-left:\s*4px solid #1a73e8.*background-color:\s*#eef4fb.*border-radius:\s*6px/);
     expect(presentation['minimal-outline'].containerStyle).toMatch(/border:\s*1px solid #ccd6dd.*background-color:\s*transparent.*border-radius:\s*6px/);
     expect(presentation['soft-fill'].containerStyle).toMatch(/border:\s*none.*background-color:\s*#eef4fb.*border-radius:\s*14px/);
     expect(presentation['quote-frame'].containerStyle).toMatch(/border:\s*1px solid #ccd6dd.*border-radius:\s*10px/);
     expect(presentation['top-rule'].containerStyle).toMatch(/border-top:\s*4px solid #1a73e8.*background-color:\s*#eef4fb.*border-radius:\s*0 0 8px 8px/);
-    expect(presentation['double-frame'].containerStyle).toMatch(/border:\s*3px double #ccd6dd.*background-color:\s*#ffffff.*border-radius:\s*8px/);
     expect(presentation['solid-contrast'].containerStyle).toMatch(/background-color:\s*#1a73e8.*border-radius:\s*10px/);
     expect(presentation['capsule-title'].titleStyle).toMatch(/display:\s*inline-block.*border-radius:\s*999px/);
-    expect(presentation['label-title'].titleStyle).toMatch(/display:\s*block.*background-color:\s*#1a73e8/);
     expect(presentation['numbered-conclusion'].titleStyle).toMatch(/display:\s*inline-block/);
     expect(presentation['numbered-conclusion'].containerStyle).not.toMatch(/table/i);
+
+    expect(buildCardPresentation('accent-bar', tokens).containerStyle).toMatch(/border-left:\s*4px solid #1a73e8.*background-color:\s*#eef4fb.*border-radius:\s*6px/);
+    expect(buildCardPresentation('double-frame', tokens).containerStyle).toMatch(/border:\s*3px double #ccd6dd.*background-color:\s*#ffffff.*border-radius:\s*8px/);
+    expect(buildCardPresentation('label-title', tokens).titleStyle).toMatch(/display:\s*block.*background-color:\s*#1a73e8/);
   });
 
   it('keeps transparent minimal-outline text contrasted against the parent surface', () => {
@@ -1391,9 +1448,8 @@ describe('card presentation recipes', () => {
     expect(presentations['capsule-title'].headingStyle).toBe(
       presentations['capsule-title'].titleStyle
     );
-    expect(presentations['label-title'].headingStyle).toBe(
-      presentations['label-title'].titleStyle
-    );
+    const legacyLabel = buildCardPresentation('label-title', tokens);
+    expect(legacyLabel.headingStyle).toBe(legacyLabel.titleStyle);
     expect(presentations['numbered-conclusion'].headingStyle).not.toBe(
       presentations['numbered-conclusion'].titleStyle
     );
@@ -1967,6 +2023,58 @@ describe('card presentation DOM application', () => {
     expect(decorations(section, 'number')).toHaveLength(0);
   });
 
+  it.each([
+    ['soft-halo', 'soft-halo'],
+    ['paper-grid', 'paper-grid'],
+    ['diagonal-note', 'diagonal-note'],
+    ['folded-note', 'folded-note'],
+    ['bracket-focus', 'bracket-focus'],
+    ['split-index', 'split-index'],
+    ['highlight-sweep', 'highlight'],
+    ['step-relay', 'steps'],
+    ['relationship-weave', 'relationship'],
+    ['bookmark-reminder', 'bookmark'],
+    ['history-document', 'documents']
+  ])('creates one real, idempotent %s decoration', (styleId, kind) => {
+    const doc = new FakeDocument();
+    const heading = appendElement(doc, doc.createElement('div'), 'h4', '标题');
+    const paragraph = appendElement(doc, doc.createElement('div'), 'p', '正文');
+    const section = createCard(doc, styleId, [heading, paragraph]);
+
+    applyCardStyles(doc, STYLES['latepost-depth']);
+    applyCardStyles(doc, STYLES['latepost-depth']);
+
+    expect(decorations(section, kind)).toHaveLength(1);
+  });
+
+  it('renders historical documents as indexed single-line rows with right metadata', () => {
+    const doc = new FakeDocument();
+    const heading = appendElement(doc, doc.createElement('div'), 'h4', '历史文档');
+    const list = doc.createElement('ul');
+    const first = appendElement(doc, list, 'li', '第一版方案 ｜ 2026.08.12');
+    const second = appendElement(doc, list, 'li', '设计规范 | 设计团队');
+    createCard(doc, 'history-document', [heading, list]);
+
+    applyCardStyles(doc, STYLES['latepost-depth']);
+
+    for (const [item, index, name, meta] of [
+      [first, '01', '第一版方案', '2026.08.12'],
+      [second, '02', '设计规范', '设计团队']
+    ]) {
+      const indexNode = item.children.find((child) => child.hasAttribute('data-ogzh-history-index'));
+      const metaNode = item.children.find((child) => child.hasAttribute('data-ogzh-history-meta'));
+      expect(indexNode?.textContent).toBe(index);
+      expect(metaNode?.textContent).toBe(meta);
+      expect(item.textContent).toBe(`${index}${name}${meta}`);
+      expect(item.style.getPropertyValue('white-space')).toBe('nowrap');
+      expect(metaNode.style.getPropertyValue('float')).toBe('right');
+    }
+
+    applyCardStyles(doc, STYLES['latepost-depth']);
+    expect(first.children.filter((child) => child.hasAttribute('data-ogzh-history-index'))).toHaveLength(1);
+    expect(first.children.filter((child) => child.hasAttribute('data-ogzh-history-meta'))).toHaveLength(1);
+  });
+
   it('styles direct lists and items without replacing standard inline content', () => {
     const doc = new FakeDocument();
     const presentation = buildCardPresentation(
@@ -2081,7 +2189,7 @@ describe('card presentation DOM application', () => {
         });
         const children = [];
         let headingInline = [];
-        if (card.slots === 'title-body') {
+        if (card.slots !== 'body') {
           const heading = doc.createElement('h4');
           headingInline = ['strong', 'em', 'a', 'del'].map((tagName) => {
             const element = appendElement(doc, heading, tagName, tagName);
@@ -2126,7 +2234,7 @@ describe('card presentation DOM application', () => {
     expect(failures, failures.join('\n')).toEqual([]);
     expect(checked).toBe(
       Object.keys(STYLES).length *
-      (CARD_STYLES.length * 4 + CARD_STYLES.filter(({ slots }) => slots === 'title-body').length * 4)
+      (CARD_STYLES.length * 4 + CARD_STYLES.filter(({ slots }) => slots !== 'body').length * 4)
     );
   });
 });
@@ -2158,6 +2266,18 @@ describe('card preview HTML', () => {
     expect(renderCardPreviewHtml('numbered-conclusion', theme)).toMatch(
       /<span[^>]+data-ogzh-card-decoration="number"[^>]*>/
     );
+  });
+
+  it.each([
+    ['highlight-sweep', 'highlight'],
+    ['step-relay', 'steps'],
+    ['relationship-weave', 'relationship'],
+    ['bookmark-reminder', 'bookmark'],
+    ['history-document', 'documents']
+  ])('renders an accessible animation hook for %s', (styleId, kind) => {
+    const html = renderCardPreviewHtml(styleId, STYLES['latepost-depth']);
+    expect(html).toContain(`data-ogzh-card-animation="${kind}"`);
+    expect(html).toContain('aria-hidden="true"');
   });
 
   it('renders quote preview with exactly two styled decorations around the body', () => {
