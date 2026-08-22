@@ -636,9 +636,9 @@ export function buildCardPresentation(styleId, tokenInput, options = {}) {
     }
     case 'history-document': {
       const titleText = readableForeground(tokens.body, tokens.surface, includePreview);
-      const title = headingStyle(titleText, '0 0 14px');
+      const title = `${headingStyle(titleText, '0 0 17px')} min-height: 31px; padding-top: 3px !important;`;
       return presentationResult({
-        containerStyle: `${common} border: 1px solid ${tokens.line}; background-color: ${tokens.surface}; border-radius: 4px 14px 4px 4px; color: ${bodyOnSurface} !important; box-shadow: 4px 5px 0 ${tokens.line};`,
+        containerStyle: `${common} padding: 29px 25px 22px; border: 1px solid ${tokens.line}; background-color: ${tokens.surface}; background-image: linear-gradient(90deg, ${tokens.accent} 0, ${tokens.accent} 112px, transparent 112px); background-repeat: no-repeat; background-size: 100% 9px; border-radius: 4px 14px 4px 4px; color: ${bodyOnSurface} !important; box-shadow: 4px 5px 0 ${tokens.line};`,
         titleStyle: title,
         headingStyle: title,
         bodyStyle: bodyStyle(bodyOnSurface),
@@ -743,10 +743,10 @@ function cardDecorationSpec(kind, tokens, presentation) {
       parts: [{ name: 'bookmark', text: '⌄', style: `display: block; box-sizing: border-box; width: 32px; height: 66px; padding-top: 34px; background-color: ${tokens.accent}; color: ${solidText}; border-radius: 0 0 10px 10px; font-size: 22px; line-height: 24px; text-align: center;` }]
     },
     documents: {
-      style: 'display: block; float: right; width: 34px; height: 34px; margin: -2px 0 5px 12px; line-height: 0;',
+      style: 'display: block; float: left; width: 31px; height: 31px; margin: 0 10px 15px 0; line-height: 0;',
       parts: [
-        { name: 'page-back', style: `display: inline-block; box-sizing: border-box; width: 21px; height: 26px; margin: 0 0 0 10px; background-color: ${tokens.soft}; border: 1px solid ${tokens.line}; border-radius: 3px;` },
-        { name: 'page-front', style: `display: inline-block; box-sizing: border-box; width: 21px; height: 26px; margin: -20px 0 0 1px; background-color: ${tokens.surface}; border: 1px solid ${tokens.accent}; border-radius: 3px;` }
+        { name: 'page-back', style: `display: block; float: right; box-sizing: border-box; width: 20px; height: 24px; margin: 2px 1px 0 0; background-color: ${tokens.soft}; border: 1px solid ${tokens.line}; border-radius: 3px;` },
+        { name: 'page-front', style: `display: block; float: left; box-sizing: border-box; width: 20px; height: 24px; margin: -20px 0 0 2px; background-color: ${tokens.surface}; border: 1px solid ${tokens.accent}; border-radius: 3px; box-shadow: 2px 2px 0 ${tokens.soft};` }
       ]
     }
   };
@@ -789,6 +789,15 @@ export function renderCardPreviewHtml(styleId, styleConfig) {
     const visibleTitle = titleParts?.[2] || title;
     const preview = card.preview === card.defaultTitle ? BODY_PLACEHOLDER : card.preview;
     content = `<span data-ogzh-card-decoration="number" aria-hidden="true" style="${escapeHtml(presentation.titleStyle)}">${escapeHtml(badge)}</span><h4 aria-label="${escapeHtml(title)}" style="${headingStyle}">${escapeHtml(visibleTitle)}</h4><p style="${bodyStyle}">${escapeHtml(preview)}</p>`;
+  } else if (styleId === 'history-document') {
+    const { name, meta } = splitHistoryDocumentItem(card.preview);
+    const rowStyles = historyDocumentRowStyles(presentation.bodyStyle, tokens, Boolean(meta));
+    content = `<h4 style="${headingStyle}">${escapeHtml(card.defaultTitle)}</h4>` +
+      `<p aria-label="${escapeHtml(card.preview)}" style="${escapeHtml(`${rowStyles.item} clear: both; border-top: 1px solid ${tokens.line};`)}">` +
+      `<span data-ogzh-history-index="true" aria-hidden="true" style="${escapeHtml(rowStyles.index)}">01</span>` +
+      `<span data-ogzh-history-name="true" style="${escapeHtml(rowStyles.name)}">${escapeHtml(name)}</span>` +
+      `<span data-ogzh-history-meta="true" style="${escapeHtml(rowStyles.metadata)}">${escapeHtml(meta)}</span>` +
+      '</p>';
   } else if (cardHasTitle(card)) {
     content = `<h4 style="${headingStyle}">${escapeHtml(card.defaultTitle)}</h4><p style="${bodyStyle}">${escapeHtml(card.preview)}</p>`;
   } else {
@@ -817,6 +826,16 @@ export function splitHistoryDocumentItem(value) {
   return {
     name: source.slice(0, separator).trim(),
     meta: source.slice(separator + 1).trim()
+  };
+}
+
+function historyDocumentRowStyles(bodyStyle, tokens, hasMetadata) {
+  return {
+    list: `clear: both; margin: 0 !important; padding: 0 !important; border-top: 1px solid ${tokens.line}; list-style: none;`,
+    item: `${bodyStyle} display: block; box-sizing: border-box; min-height: 45px; padding: 10px 0 !important; border-bottom: 1px solid ${tokens.line}; list-style: none; overflow: visible; text-overflow: clip; white-space: normal;`,
+    index: `display: inline-block; box-sizing: border-box; width: 25px; height: 25px; margin: 0 10px 0 0; background-color: ${tokens.soft}; color: ${tokens.accent}; border-radius: 50%; font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 25px; text-align: center; vertical-align: top;`,
+    name: `display: inline-block; box-sizing: border-box; width: ${hasMetadata ? 'calc(76% - 35px)' : 'calc(100% - 35px)'}; min-width: 0; overflow-wrap: anywhere; word-break: break-word; white-space: normal; font-weight: 700; vertical-align: top;`,
+    metadata: `display: ${hasMetadata ? 'inline-block' : 'none'}; box-sizing: border-box; width: 24%; padding-left: 12px; overflow: hidden; color: ${tokens.muted}; font-size: 12px; text-align: right; text-overflow: ellipsis; white-space: nowrap; vertical-align: top;`
   };
 }
 
@@ -899,7 +918,9 @@ function restoreHistoryDocumentRows(section) {
       const state = HISTORY_ROW_STATES.get(item);
       if (!state) return;
       state.textNodes.forEach(({ node, value }) => { node.nodeValue = value; });
+      while (state.name.firstChild) item.insertBefore(state.name.firstChild, state.name);
       state.index.remove();
+      state.name.remove();
       state.metadata.remove();
       HISTORY_ROW_STATES.delete(item);
     });
@@ -909,7 +930,6 @@ function restoreHistoryDocumentRows(section) {
 function applyHistoryDocumentRows(doc, section, bodyStyle, tokens) {
   const list = Array.from(section.children).find((child) => ['UL', 'OL'].includes(child.tagName));
   if (!list) return;
-  applyTrustedStyle(list, 'margin: 0 !important; padding: 0 !important; list-style: none;');
   Array.from(list.children).forEach((item, itemIndex) => {
     const raw = String(item.textContent || '');
     const trimmedEnd = raw.trimEnd();
@@ -933,16 +953,23 @@ function applyHistoryDocumentRows(doc, section, bodyStyle, tokens) {
     index.setAttribute('aria-hidden', 'true');
     index.setAttribute('data-ogzh-history-index', 'true');
     index.textContent = String(itemIndex + 1).padStart(2, '0');
-    applyTrustedStyle(index, `display: inline-block; min-width: 28px; margin-right: 10px; color: ${tokens.accent}; font-variant-numeric: tabular-nums;`);
+    const name = doc.createElement('span');
+    name.setAttribute('data-ogzh-history-name', 'true');
+    while (item.firstChild) name.appendChild(item.firstChild);
     const metadata = doc.createElement('span');
     metadata.setAttribute('data-ogzh-history-meta', 'true');
     metadata.textContent = meta;
-    applyTrustedStyle(metadata, `display: inline-block; float: right; max-width: 42%; margin-left: 12px; overflow: hidden; color: ${tokens.muted}; text-align: right; text-overflow: ellipsis;`);
-    item.insertBefore(index, item.firstChild);
+    const rowStyles = historyDocumentRowStyles(bodyStyle, tokens, Boolean(meta));
+    applyTrustedStyle(index, rowStyles.index);
+    applyTrustedStyle(name, rowStyles.name);
+    applyTrustedStyle(metadata, rowStyles.metadata);
+    item.appendChild(index);
+    item.appendChild(name);
     item.appendChild(metadata);
-    applyTrustedStyle(item, `${bodyStyle} list-style: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 1px solid ${tokens.line}; padding: 9px 0 !important;`);
-    HISTORY_ROW_STATES.set(item, { textNodes: changedTextNodes, index, metadata });
+    applyTrustedStyle(item, rowStyles.item);
+    HISTORY_ROW_STATES.set(item, { textNodes: changedTextNodes, index, name, metadata });
   });
+  applyTrustedStyle(list, historyDocumentRowStyles(bodyStyle, tokens, true).list);
 }
 
 const SAFE_INLINE_TAGS = new Set(['STRONG', 'EM', 'A', 'DEL']);

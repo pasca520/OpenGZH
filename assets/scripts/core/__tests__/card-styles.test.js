@@ -2047,32 +2047,57 @@ describe('card presentation DOM application', () => {
     expect(decorations(section, kind)).toHaveLength(1);
   });
 
-  it('renders historical documents as indexed single-line rows with right metadata', () => {
+  it('wraps historical document names while preserving right metadata and inline links', () => {
     const doc = new FakeDocument();
     const heading = appendElement(doc, doc.createElement('div'), 'h4', '历史文档');
     const list = doc.createElement('ul');
-    const first = appendElement(doc, list, 'li', '第一版方案 ｜ 2026.08.12');
+    const first = doc.createElement('li');
+    const firstLink = appendElement(
+      doc,
+      first,
+      'a',
+      '一个项目管理软件的诞生（一）：从项目管理思想到产品模型 ｜ 2026.08.12'
+    );
+    list.appendChild(first);
     const second = appendElement(doc, list, 'li', '设计规范 | 设计团队');
-    createCard(doc, 'history-document', [heading, list]);
+    const section = createCard(doc, 'history-document', [heading, list]);
 
     applyCardStyles(doc, STYLES['latepost-depth']);
 
     for (const [item, index, name, meta] of [
-      [first, '01', '第一版方案', '2026.08.12'],
+      [first, '01', '一个项目管理软件的诞生（一）：从项目管理思想到产品模型', '2026.08.12'],
       [second, '02', '设计规范', '设计团队']
     ]) {
       const indexNode = item.children.find((child) => child.hasAttribute('data-ogzh-history-index'));
+      const nameNode = item.children.find((child) => child.hasAttribute('data-ogzh-history-name'));
       const metaNode = item.children.find((child) => child.hasAttribute('data-ogzh-history-meta'));
       expect(indexNode?.textContent).toBe(index);
+      expect(nameNode?.textContent.trim()).toBe(name);
       expect(metaNode?.textContent).toBe(meta);
       expect(item.textContent).toBe(`${index}${name}${meta}`);
-      expect(item.style.getPropertyValue('white-space')).toBe('nowrap');
-      expect(metaNode.style.getPropertyValue('float')).toBe('right');
+      expect(item.style.getPropertyValue('white-space')).toBe('normal');
+      expect(indexNode.style.getPropertyValue('border-radius')).toBe('50%');
+      expect(nameNode.style.getPropertyValue('white-space')).toBe('normal');
+      expect(nameNode.style.getPropertyValue('overflow-wrap')).toBe('anywhere');
+      expect(metaNode.style.getPropertyValue('white-space')).toBe('nowrap');
     }
+    expect(firstLink.parentNode).toBe(first.children.find(
+      (child) => child.hasAttribute('data-ogzh-history-name')
+    ));
+    expect(list.style.getPropertyValue('clear')).toBe('both');
+    expect(decorations(section, 'documents')[0].style.getPropertyValue('float')).toBe('left');
 
     applyCardStyles(doc, STYLES['latepost-depth']);
     expect(first.children.filter((child) => child.hasAttribute('data-ogzh-history-index'))).toHaveLength(1);
+    expect(first.children.filter((child) => child.hasAttribute('data-ogzh-history-name'))).toHaveLength(1);
     expect(first.children.filter((child) => child.hasAttribute('data-ogzh-history-meta'))).toHaveLength(1);
+
+    section.setAttribute('data-ogzh-card', 'minimal-outline');
+    applyCardStyles(doc, STYLES['latepost-depth']);
+    expect(first.textContent).toBe(
+      '一个项目管理软件的诞生（一）：从项目管理思想到产品模型 ｜ 2026.08.12'
+    );
+    expect(firstLink.parentNode).toBe(first);
   });
 
   it('styles direct lists and items without replacing standard inline content', () => {
@@ -2278,6 +2303,20 @@ describe('card preview HTML', () => {
     const html = renderCardPreviewHtml(styleId, STYLES['latepost-depth']);
     expect(html).toContain(`data-ogzh-card-animation="${kind}"`);
     expect(html).toContain('aria-hidden="true"');
+  });
+
+  it('previews the historical document card with the confirmed row hierarchy', () => {
+    const html = renderCardPreviewHtml('history-document', STYLES['latepost-depth']);
+
+    expect(html).toContain('data-ogzh-history-index="true"');
+    expect(html).toContain('data-ogzh-history-name="true"');
+    expect(html).toContain('data-ogzh-history-meta="true"');
+    expect(html).toContain('white-space: normal');
+    expect(html).toContain('border-radius: 50%');
+    expect(html).toContain('float: left');
+    expect(html.indexOf('data-ogzh-card-decoration="documents"')).toBeLessThan(
+      html.indexOf('<h4')
+    );
   });
 
   it('renders quote preview with exactly two styled decorations around the body', () => {
