@@ -178,7 +178,7 @@ Extend the existing contract so it reads tokens from a selector block, then asse
 const lightPalette = {
   base: '#F7F1E8', muted: '#EFE6DB', raised: '#FFFDF8', border: '#D8C8B8',
   text: '#332821', inverse: '#FFF7ED', secondary: '#6F5E52', tertiary: '#766354',
-  accent: '#B94E3C', onAccent: '#FFF7ED', danger: '#B33D30', warning: '#8A5700',
+  accent: '#B64B39', onAccent: '#FFF7ED', danger: '#B33D30', warning: '#8A5700',
 };
 
 const darkPalette = {
@@ -217,9 +217,9 @@ Use the approved light values, including:
   --color-surface-strong: #E7D8CA;
   --color-border-default: #D8C8B8;
   --color-border-strong: #BDA896;
-  --color-accent: #B94E3C;
+  --color-accent: #B64B39;
   --color-accent-hover: #A94333;
-  --color-accent-light: rgba(185, 78, 60, 0.12);
+  --color-accent-light: rgba(182, 75, 57, 0.12);
   --color-danger: #B33D30;
   --color-warning: #8A5700;
 ```

@@ -10,33 +10,37 @@
 [v-cloak] { display: none; }
 
 :root {
-  /* ── Colors (Inkstone Coral) ── */
-  --color-text-primary: #FFF7ED;
-  --color-text-secondary: #D7C7B8;
-  --color-text-tertiary: #B9A494;
+  color-scheme: light;
+
+  /* ── Colors (Paper Ivory) ── */
+  --color-text-primary: #332821;
+  --color-text-secondary: #6F5E52;
+  --color-text-tertiary: #766354;
   --color-text-inverse: #FFF7ED;
-  --color-on-accent: #26120F;
-  --color-surface-base: #181512;
-  --color-surface-muted: #211D19;
-  --color-surface-raised: #29231E;
-  --color-surface-strong: #3A2E28;
-  --color-border-default: #4A3D35;
-  --color-border-strong: #655246;
+  --color-on-accent: #FFF7ED;
+  --color-surface-base: #F7F1E8;
+  --color-surface-muted: #EFE6DB;
+  --color-surface-raised: #FFFDF8;
+  --color-surface-strong: #E7D8CA;
+  --color-border-default: #D8C8B8;
+  --color-border-strong: #BDA896;
+  --color-danger: #B33D30;
+  --color-warning: #8A5700;
 
   /* Legacy aliases retained for current stylesheets */
-  --color-primary: #FFF7ED;
-  --color-secondary: #D7C7B8;
-  --color-tertiary: #B9A494;
-  --color-text: #FFF7ED;
-  --color-accent: #FF8A76;
-  --color-accent-hover: #FF9B89;
-  --color-accent-light: rgba(255, 138, 118, 0.16);
-  --color-bg: #181512;
-  --color-bg-secondary: #211D19;
-  --color-surface: #29231E;
-  --color-border: #4A3D35;
-  --color-border-light: #4A3D35;
-  --color-light-border: #4A3D35;
+  --color-primary: #332821;
+  --color-secondary: #6F5E52;
+  --color-tertiary: #766354;
+  --color-text: #332821;
+  --color-accent: #B64B39;
+  --color-accent-hover: #A94333;
+  --color-accent-light: rgba(182, 75, 57, 0.12);
+  --color-bg: #F7F1E8;
+  --color-bg-secondary: #EFE6DB;
+  --color-surface: #FFFDF8;
+  --color-border: #D8C8B8;
+  --color-border-light: #D8C8B8;
+  --color-light-border: #D8C8B8;
 
   /* ── Typography ── */
   --font-size-xs: 10px;
@@ -73,13 +77,13 @@
   --radius-xl: 18px;
   --radius-2xl: 9999px;
 
-  /* ── Shadows (dark, neutral) ── */
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.24);
-  --shadow-2: 0 2px 8px rgba(0, 0, 0, 0.30);
-  --shadow-3: 0 4px 16px rgba(0, 0, 0, 0.36);
-  --shadow-4: 0 8px 28px rgba(0, 0, 0, 0.42);
-  --shadow-jade: 0 1px 3px rgba(255, 138, 118, 0.32);
-  --shadow-inset: rgba(255,255,255,0.08) 0px 0.5px 0px 0px inset, rgba(0,0,0,0.32) 0px 0px 0px 0.5px inset, rgba(0,0,0,0.24) 0px 1px 2px 0px;
+  /* ── Shadows (warm, light) ── */
+  --shadow-1: 0 1px 2px rgba(70, 48, 32, 0.08);
+  --shadow-2: 0 2px 8px rgba(70, 48, 32, 0.10);
+  --shadow-3: 0 4px 16px rgba(70, 48, 32, 0.12);
+  --shadow-4: 0 8px 28px rgba(70, 48, 32, 0.16);
+  --shadow-jade: 0 1px 3px rgba(182, 75, 57, 0.20);
+  --shadow-inset: rgba(255,255,255,0.72) 0px 0.5px 0px 0px inset, rgba(85,60,40,0.10) 0px 0px 0px 0.5px inset, rgba(70,48,32,0.08) 0px 1px 2px 0px;
   --shadow-sm: var(--shadow-1);
   --shadow-md: var(--shadow-2);
   --shadow-lg: var(--shadow-3);
@@ -110,6 +114,44 @@
   --preview-width-mobile: 402px;
   --preview-width-tablet: 750px;
   --preview-width-desktop: 100%;
+}
+
+:root[data-app-theme="dark"] {
+  color-scheme: dark;
+  --color-text-primary: #FFF7ED;
+  --color-text-secondary: #D7C7B8;
+  --color-text-tertiary: #B9A494;
+  --color-text-inverse: #FFF7ED;
+  --color-on-accent: #26120F;
+  --color-surface-base: #181512;
+  --color-surface-muted: #211D19;
+  --color-surface-raised: #29231E;
+  --color-surface-strong: #3A2E28;
+  --color-border-default: #4A3D35;
+  --color-border-strong: #655246;
+  --color-danger: #FF9A9A;
+  --color-warning: #FBBF70;
+
+  --color-primary: #FFF7ED;
+  --color-secondary: #D7C7B8;
+  --color-tertiary: #B9A494;
+  --color-text: #FFF7ED;
+  --color-accent: #FF8A76;
+  --color-accent-hover: #FF9B89;
+  --color-accent-light: rgba(255, 138, 118, 0.16);
+  --color-bg: #181512;
+  --color-bg-secondary: #211D19;
+  --color-surface: #29231E;
+  --color-border: #4A3D35;
+  --color-border-light: #4A3D35;
+  --color-light-border: #4A3D35;
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.24);
+  --shadow-2: 0 2px 8px rgba(0, 0, 0, 0.30);
+  --shadow-3: 0 4px 16px rgba(0, 0, 0, 0.36);
+  --shadow-4: 0 8px 28px rgba(0, 0, 0, 0.42);
+  --shadow-jade: 0 1px 3px rgba(255, 138, 118, 0.32);
+  --shadow-inset: rgba(255,255,255,0.08) 0px 0.5px 0px 0px inset, rgba(0,0,0,0.32) 0px 0px 0px 0.5px inset, rgba(0,0,0,0.24) 0px 1px 2px 0px;
 }
 
 /* ── Reset ── */
@@ -675,7 +717,7 @@ body {
 }
 
 .sidebar-icon-btn.danger:hover {
-  color: #FF9A9A;
+  color: var(--color-danger);
 }
 
 .sidebar-icon-btn:active { transform: translateY(0); }
@@ -715,7 +757,7 @@ body {
 .status-item { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
 .status-saved, .status-saved svg { color: var(--color-accent); }
 .status-saving { color: var(--color-accent); }
-.status-error { color: #FF9A9A; }
+.status-error { color: var(--color-danger); }
 
 /* ── Toast ── */
 .toast-container { position: fixed; bottom: var(--space-lg); right: var(--space-lg); z-index: 2000; }

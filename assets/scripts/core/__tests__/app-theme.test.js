@@ -6,8 +6,8 @@ const root = fileURLToPath(new URL('../../../../', import.meta.url));
 const read = (path) => readFileSync(`${root}${path}`, 'utf8');
 const baseCss = read('assets/styles/base.css');
 
-function token(name) {
-  const match = baseCss.match(new RegExp(`${name}:\\s*(#[0-9A-Fa-f]{6})\\s*;`));
+function tokenFromBlock(block, name) {
+  const match = block.match(new RegExp(`${name}:\\s*(#[0-9A-Fa-f]{6})\\s*;`));
   if (!match) throw new Error(`Missing hex token: ${name}`);
   return match[1].toUpperCase();
 }
@@ -33,20 +33,42 @@ function selectorBlock(css, selector) {
   return match[1];
 }
 
-describe('Inkstone Coral application theme', () => {
-  it('locks the approved semantic palette', () => {
-    expect({
-      base: token('--color-surface-base'),
-      muted: token('--color-surface-muted'),
-      raised: token('--color-surface-raised'),
-      border: token('--color-border-default'),
-      text: token('--color-text-primary'),
-      inverse: token('--color-text-inverse'),
-      secondary: token('--color-text-secondary'),
-      tertiary: token('--color-text-tertiary'),
-      accent: token('--color-accent'),
-      onAccent: token('--color-on-accent'),
-    }).toEqual({
+function palette(selector) {
+  const block = selectorBlock(baseCss, selector);
+  return {
+    base: tokenFromBlock(block, '--color-surface-base'),
+    muted: tokenFromBlock(block, '--color-surface-muted'),
+    raised: tokenFromBlock(block, '--color-surface-raised'),
+    border: tokenFromBlock(block, '--color-border-default'),
+    text: tokenFromBlock(block, '--color-text-primary'),
+    inverse: tokenFromBlock(block, '--color-text-inverse'),
+    secondary: tokenFromBlock(block, '--color-text-secondary'),
+    tertiary: tokenFromBlock(block, '--color-text-tertiary'),
+    accent: tokenFromBlock(block, '--color-accent'),
+    onAccent: tokenFromBlock(block, '--color-on-accent'),
+    danger: tokenFromBlock(block, '--color-danger'),
+    warning: tokenFromBlock(block, '--color-warning'),
+  };
+}
+
+describe('application theme palettes', () => {
+  it('locks the approved light default and dark override palettes', () => {
+    expect(palette(':root')).toEqual({
+      base: '#F7F1E8',
+      muted: '#EFE6DB',
+      raised: '#FFFDF8',
+      border: '#D8C8B8',
+      text: '#332821',
+      inverse: '#FFF7ED',
+      secondary: '#6F5E52',
+      tertiary: '#766354',
+      accent: '#B64B39',
+      onAccent: '#FFF7ED',
+      danger: '#B33D30',
+      warning: '#8A5700',
+    });
+
+    expect(palette(':root[data-app-theme="dark"]')).toEqual({
       base: '#181512',
       muted: '#211D19',
       raised: '#29231E',
@@ -57,15 +79,21 @@ describe('Inkstone Coral application theme', () => {
       tertiary: '#B9A494',
       accent: '#FF8A76',
       onAccent: '#26120F',
+      danger: '#FF9A9A',
+      warning: '#FBBF70',
     });
   });
 
-  it('keeps normal text and filled actions at WCAG AA contrast', () => {
-    expect(contrast(token('--color-text-primary'), token('--color-surface-raised'))).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(token('--color-text-inverse'), token('--color-surface-base'))).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(token('--color-text-tertiary'), token('--color-surface-raised'))).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(token('--color-accent'), token('--color-surface-base'))).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(token('--color-on-accent'), token('--color-accent'))).toBeGreaterThanOrEqual(4.5);
+  it('keeps text, semantic states, and filled actions at WCAG AA contrast', () => {
+    for (const selector of [':root', ':root[data-app-theme="dark"]']) {
+      const colors = palette(selector);
+      expect(contrast(colors.text, colors.raised)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(colors.tertiary, colors.raised)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(colors.accent, colors.base)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(colors.onAccent, colors.accent)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(colors.danger, colors.raised)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(colors.warning, colors.raised)).toBeGreaterThanOrEqual(4.5);
+    }
   });
 
   it('uses the on-accent token for shared filled actions', () => {
@@ -95,6 +123,16 @@ describe('Inkstone Coral application theme', () => {
     for (const selector of ['.template-dropdown-scroll:focus-visible', '.typo-dropdown-scroll:focus-visible']) {
       expect(selectorBlock(editorCss, selector))
         .toMatch(/outline:\s*2px solid var\(--color-accent\)/);
+    }
+  });
+
+  it('uses theme-aware semantic colors in application chrome', () => {
+    const xhsCss = read('assets/styles/xhs.css');
+    expect(selectorBlock(baseCss, '.sidebar-icon-btn.danger:hover')).toMatch(/color:\s*var\(--color-danger\)/);
+    expect(selectorBlock(baseCss, '.status-error')).toMatch(/color:\s*var\(--color-danger\)/);
+    expect(selectorBlock(xhsCss, '.xhs-warning')).toMatch(/color:\s*var\(--color-warning\)/);
+    for (const selector of ['.xhs-issue', '.xhs-break-remove', '.xhs-cover-clear']) {
+      expect(selectorBlock(xhsCss, selector)).toMatch(/color:\s*var\(--color-danger\)/);
     }
   });
 });
