@@ -21,52 +21,82 @@ const FORBIDDEN_TOKEN_REASONS = Object.freeze({
 
 const defineCard = (item) => Object.freeze({ animated: false, ...item });
 
+/**
+ * 卡片场景分类（选择器分组 tab）。
+ * 分类越细，用户在 24 张卡片里定位越准；全部卡片必须归属一个分类。
+ */
+export const CARD_CATEGORIES = Object.freeze([
+  { id: 'callout', name: '重点提示' },
+  { id: 'quote', name: '金句摘录' },
+  { id: 'summary', name: '结论复盘' },
+  { id: 'process', name: '步骤流程' },
+  { id: 'list', name: '清单记录' },
+  { id: 'heading', name: '标题正文' }
+]);
+
 export const CARD_STYLES = Object.freeze([
-  { id: 'minimal-outline', name: '极简框线卡', slots: 'body', preview: '清晰陈述' },
-  { id: 'soft-fill', name: '柔和底色卡', slots: 'body', preview: '温和提示' },
-  { id: 'quote-frame', name: '引号金句卡', slots: 'body', preview: '一句值得记住的话' },
-  { id: 'top-rule', name: '顶线观点卡', slots: 'body', preview: '核心观点' },
-  { id: 'solid-contrast', name: '实色反差卡', slots: 'body', preview: '强提醒' },
+  // ── 重点提示 ──────────────────────────────────────────
+  { id: 'minimal-outline', name: '极简框线卡', slots: 'body', preview: '清晰陈述', category: 'callout' },
+  { id: 'soft-fill', name: '柔和底色卡', slots: 'body', preview: '温和提示', category: 'callout' },
+  { id: 'top-rule', name: '顶线观点卡', slots: 'body', preview: '核心观点', category: 'callout' },
+  { id: 'folded-note', name: '折角便签卡', slots: 'body', preview: '记住这一件事', category: 'callout' },
+  { id: 'soft-halo', name: '柔光晕染卡', slots: 'body', preview: '让结论先被看见', category: 'callout' },
   {
-    id: 'capsule-title',
-    name: '胶囊标题卡',
-    slots: 'title-body',
-    defaultTitle: '核心观点',
-    preview: '标题与正文'
+    id: 'warning-alert',
+    name: '警示注意卡',
+    slots: 'body',
+    preview: '这里存在需要注意的边界或风险',
+    category: 'callout'
   },
   {
-    id: 'numbered-conclusion',
-    name: '编号结论卡',
+    id: 'corner-badge',
+    name: '角标提醒卡',
     slots: 'title-body',
-    defaultTitle: '01 阶段结论',
-    preview: '01 阶段结论'
+    defaultTitle: '特别推荐',
+    preview: '这里有一条值得注意的内容',
+    category: 'callout'
   },
-  { id: 'soft-halo', name: '柔光晕染卡', slots: 'body', preview: '让结论先被看见' },
-  { id: 'paper-grid', name: '细格纸纹卡', slots: 'body', preview: '拆成可以验证的步骤' },
-  { id: 'diagonal-note', name: '斜纹注释卡', slots: 'body', preview: '这里有一个重要边界' },
-  { id: 'folded-note', name: '折角便签卡', slots: 'body', preview: '记住这一件事' },
-  { id: 'bracket-focus', name: '括号观点卡', slots: 'body', preview: '产品不是功能的集合' },
-  {
-    id: 'split-index',
-    name: '双色索引卡',
-    slots: 'title-body',
-    defaultTitle: '01 阶段复盘',
-    preview: '阶段摘要'
-  },
+  // ── 金句摘录 ──────────────────────────────────────────
+  { id: 'quote-frame', name: '引号金句卡', slots: 'body', preview: '一句值得记住的话', category: 'quote' },
+  { id: 'diagonal-note', name: '斜纹注释卡', slots: 'body', preview: '这里有一个重要边界', category: 'quote' },
+  { id: 'bracket-focus', name: '括号观点卡', slots: 'body', preview: '产品不是功能的集合', category: 'quote' },
   {
     id: 'highlight-sweep',
     name: '高光摘录卡',
     slots: 'title-body',
     defaultTitle: '关键结论',
     preview: '先定义问题，再讨论答案',
+    category: 'quote',
     animated: true
   },
+  // ── 结论复盘 ──────────────────────────────────────────
+  { id: 'solid-contrast', name: '实色反差卡', slots: 'body', preview: '强提醒', category: 'summary' },
+  {
+    id: 'numbered-conclusion',
+    name: '编号结论卡',
+    slots: 'title-body',
+    defaultTitle: '01 阶段结论',
+    preview: '01 阶段结论',
+    category: 'summary'
+  },
+  {
+    id: 'split-index',
+    name: '双色索引卡',
+    slots: 'title-body',
+    defaultTitle: '01 阶段复盘',
+    preview: '阶段摘要',
+    category: 'summary'
+  },
+  { id: 'dark-contrast', name: '深色反差卡', slots: 'body', preview: '在深色里强调关键信息', category: 'summary' },
+  // ── 步骤流程 ──────────────────────────────────────────
+  { id: 'paper-grid', name: '细格纸纹卡', slots: 'body', preview: '拆成可以验证的步骤', category: 'process' },
   {
     id: 'step-relay',
     name: '步骤接力卡',
     slots: 'title-body',
     defaultTitle: '三步完成',
     preview: '从洞察走到验证',
+    category: 'process',
     animated: true
   },
   {
@@ -75,7 +105,51 @@ export const CARD_STYLES = Object.freeze([
     slots: 'title-body',
     defaultTitle: '系统关系',
     preview: '真正的价值来自系统协同',
+    category: 'process',
     animated: true
+  },
+  // ── 清单记录 ──────────────────────────────────────────
+  {
+    id: 'history-document',
+    name: '历史文档卡',
+    slots: 'title-list',
+    defaultTitle: '历史文档',
+    preview: '第一版方案 ｜ 2026.08.12',
+    category: 'list',
+    animated: true
+  },
+  {
+    id: 'check-list',
+    name: '圆点清单卡',
+    slots: 'title-list',
+    defaultTitle: '要点清单',
+    preview: '第一项要点',
+    category: 'list'
+  },
+  {
+    id: 'timeline',
+    name: '时间轴卡',
+    slots: 'title-list',
+    defaultTitle: '时间轴',
+    preview: '阶段一：从零到一',
+    category: 'list'
+  },
+  {
+    id: 'index-badge',
+    name: '序号徽章卡',
+    slots: 'title-list',
+    defaultTitle: '执行清单',
+    preview: '第一步：确认目标',
+    category: 'list'
+  },
+  // ── 标题正文 ──────────────────────────────────────────
+  {
+    id: 'capsule-title',
+    name: '胶囊标题卡',
+    slots: 'title-body',
+    defaultTitle: '核心观点',
+    preview: '标题与正文',
+    category: 'heading'
   },
   {
     id: 'bookmark-reminder',
@@ -83,14 +157,7 @@ export const CARD_STYLES = Object.freeze([
     slots: 'title-body',
     defaultTitle: '请注意',
     preview: '请先确认这个前置条件',
-    animated: true
-  },
-  {
-    id: 'history-document',
-    name: '历史文档卡',
-    slots: 'title-list',
-    defaultTitle: '历史文档',
-    preview: '第一版方案 ｜ 2026.08.12',
+    category: 'heading',
     animated: true
   }
 ].map(defineCard));
@@ -382,6 +449,7 @@ function presentationResult({
   bodyContrastRole = 'body',
   headingContrastRole = bodyContrastRole,
   decoration = 'none',
+  rows = null,
   solidBackground = null,
   solidText = null,
   contrastPairs
@@ -394,6 +462,7 @@ function presentationResult({
     bodyContrastRole,
     headingContrastRole,
     decoration,
+    rows,
     solidBackground,
     solidText,
     contrastPairs
@@ -634,6 +703,77 @@ export function buildCardPresentation(styleId, tokenInput, options = {}) {
         contrastPairs: [bodyPair(bodyOnSurface, tokens.surface), contrastPair('title', titleText, tokens.surface)]
       });
     }
+    case 'warning-alert':
+      return presentationResult({
+        containerStyle: `${common} border-left: 5px solid ${tokens.accent}; border-top: 1px solid ${tokens.line}; border-right: 1px solid ${tokens.line}; border-bottom: 1px solid ${tokens.line}; background-color: ${tokens.soft}; border-radius: 3px 12px 12px 3px; color: ${bodyOnSoft} !important;`,
+        bodyStyle: bodyStyle(bodyOnSoft),
+        decoration: 'alert',
+        contrastPairs: [bodyPair(bodyOnSoft, tokens.soft)]
+      });
+    case 'dark-contrast': {
+      const darkBackground = '#26292f';
+      const darkText = '#f2f3f5';
+      return presentationResult({
+        containerStyle: `${common} border: 1px solid rgba(255,255,255,0.14); border-left: 4px solid ${tokens.accent}; background-color: ${darkBackground}; border-radius: 10px; color: ${darkText} !important;`,
+        bodyStyle: bodyStyle(darkText),
+        contrastPairs: [bodyPair(darkText, darkBackground)]
+      });
+    }
+    case 'corner-badge': {
+      const titleText = readableForeground(tokens.body, tokens.surface, includePreview);
+      const title = headingStyle(titleText);
+      return presentationResult({
+        containerStyle: `${common} padding-right: 64px; border: 1px solid ${tokens.line}; background-color: ${tokens.surface}; border-radius: 12px; color: ${bodyOnSurface} !important;`,
+        titleStyle: title,
+        headingStyle: title,
+        bodyStyle: bodyStyle(bodyOnSurface),
+        headingContrastRole: 'title',
+        decoration: 'corner',
+        contrastPairs: [bodyPair(bodyOnSurface, tokens.surface), contrastPair('title', titleText, tokens.surface)]
+      });
+    }
+    case 'check-list': {
+      const titleText = readableForeground(tokens.body, tokens.soft, includePreview);
+      const title = headingStyle(titleText);
+      return presentationResult({
+        containerStyle: `${common} border: 1px solid ${tokens.line}; background-color: ${tokens.soft}; border-radius: 12px; color: ${bodyOnSoft} !important;`,
+        titleStyle: title,
+        headingStyle: title,
+        bodyStyle: bodyStyle(bodyOnSoft),
+        headingContrastRole: 'title',
+        decoration: 'check',
+        rows: 'check',
+        contrastPairs: [bodyPair(bodyOnSoft, tokens.soft), contrastPair('title', titleText, tokens.soft)]
+      });
+    }
+    case 'timeline': {
+      const titleText = readableForeground(tokens.body, tokens.surface, includePreview);
+      const title = headingStyle(titleText);
+      return presentationResult({
+        containerStyle: `${common} border-top: 2px solid ${tokens.accent}; border-right: 1px solid ${tokens.line}; border-bottom: 1px solid ${tokens.line}; border-left: 1px solid ${tokens.line}; background-color: ${tokens.surface}; border-radius: 6px 6px 10px 10px; color: ${bodyOnSurface} !important;`,
+        titleStyle: title,
+        headingStyle: title,
+        bodyStyle: bodyStyle(bodyOnSurface),
+        headingContrastRole: 'title',
+        decoration: 'none',
+        rows: 'timeline',
+        contrastPairs: [bodyPair(bodyOnSurface, tokens.surface), contrastPair('title', titleText, tokens.surface)]
+      });
+    }
+    case 'index-badge': {
+      const titleText = readableForeground(tokens.body, tokens.surface, includePreview);
+      const title = headingStyle(titleText);
+      return presentationResult({
+        containerStyle: `${common} border: 1px solid ${tokens.line}; background-color: ${tokens.surface}; border-radius: 14px; color: ${bodyOnSurface} !important;`,
+        titleStyle: title,
+        headingStyle: title,
+        bodyStyle: bodyStyle(bodyOnSurface),
+        headingContrastRole: 'title',
+        decoration: 'none',
+        rows: 'index',
+        contrastPairs: [bodyPair(bodyOnSurface, tokens.surface), contrastPair('title', titleText, tokens.surface)]
+      });
+    }
     case 'history-document': {
       const titleText = readableForeground(tokens.body, tokens.surface, includePreview);
       const title = `${headingStyle(titleText, '0 0 17px')} min-height: 31px; padding-top: 3px !important;`;
@@ -684,6 +824,29 @@ function cardDecorationSpec(kind, tokens, presentation) {
   const solidBackground = presentation.solidBackground || tokens.accent;
   const solidText = presentation.solidText || readableForeground(tokens.surface, solidBackground, false);
   const specs = {
+    alert: {
+      style: 'display: block; margin: 0 0 12px; line-height: 0;',
+      parts: [{
+        name: 'alert-badge',
+        text: '注意',
+        style: `display: inline-block; box-sizing: border-box; min-width: 56px; padding: 2px 10px; background-color: ${solidBackground}; color: ${solidText}; border-radius: 999px; font-size: 12px; font-weight: 700; line-height: 20px; text-align: center;`
+      }]
+    },
+    corner: {
+      style: 'display: block; float: right; width: 26px; height: 26px; margin: -18px -64px 0 16px; line-height: 0;',
+      parts: [{
+        name: 'corner-badge',
+        text: '荐',
+        style: `display: block; box-sizing: border-box; width: 26px; height: 26px; padding-top: 3px; background-color: ${solidBackground}; color: ${solidText}; border-radius: 8px; font-size: 13px; font-weight: 700; line-height: 20px; text-align: center;`
+      }]
+    },
+    check: {
+      style: 'display: block; height: 8px; margin: 0 0 13px; line-height: 0;',
+      parts: Array.from({ length: 3 }, (_, index) => ({
+        name: `check-dot-${index + 1}`,
+        style: `display: inline-block; width: 8px; height: 8px; margin-right: 6px; background-color: ${index === 0 ? tokens.accent : tokens.line}; border-radius: 50%;`
+      }))
+    },
     'soft-halo': {
       style: 'display: block; height: 8px; margin: 0 0 14px; line-height: 0;',
       parts: [0.24, 0.5, 0.82].map((opacity, index) => ({
@@ -799,6 +962,12 @@ export function renderCardPreviewHtml(styleId, styleConfig) {
       `<span data-ogzh-history-name="true" style="${escapeHtml(rowStyles.name)}">${escapeHtml(name)}</span>` +
       `<span data-ogzh-history-meta="true" style="${escapeHtml(rowStyles.metadata)}">${escapeHtml(meta)}</span>` +
       '</p>';
+  } else if (presentation.rows) {
+    const spec = rowMarkerSpec(presentation.rows, tokens, presentation);
+    content = `<h4 style="${headingStyle}">${escapeHtml(card.defaultTitle)}</h4>` +
+      `<p aria-label="${escapeHtml(card.preview)}" style="${escapeHtml(spec.item)}">` +
+      `<span data-ogzh-row-marker="true" aria-hidden="true" style="${escapeHtml(spec.marker)}">${escapeHtml(spec.markerText(0))}</span>` +
+      `${escapeHtml(card.preview)}</p>`;
   } else if (cardHasTitle(card)) {
     content = `<h4 style="${headingStyle}">${escapeHtml(card.defaultTitle)}</h4><p style="${bodyStyle}">${escapeHtml(card.preview)}</p>`;
   } else {
@@ -832,6 +1001,83 @@ export function splitHistoryDocumentItem(value) {
 
 function historyDocumentBarStyle(tokens) {
   return `display: block; height: 9px; margin: -29px -25px 20px; border-radius: 4px 14px 0 0; background-color: ${tokens.accent}; background-image: linear-gradient(90deg, ${tokens.accent} 0, ${tokens.accent} 112px, transparent 112px); background-repeat: no-repeat; background-size: 100% 9px;`;
+}
+
+/**
+ * 行内标记列表的视觉规格（圆点清单 / 时间轴 / 序号徽章）。
+ * 只在行首插入 span 标记，不拆分 li 文本，微信复制安全。
+ */
+function rowMarkerSpec(kind, tokens, presentation = {}) {
+  const solidBackground = presentation.solidBackground || tokens.accent;
+  const solidText = presentation.solidText
+    || readableForeground(tokens.surface, solidBackground, false);
+  const common = `${presentation.bodyStyle || ''} display: block; box-sizing: border-box; list-style: none !important; list-style-type: none !important; white-space: normal; overflow-wrap: anywhere;`;
+  switch (kind) {
+    case 'check':
+      return {
+        list: 'margin: 0 !important; padding: 0 !important; list-style: none !important; list-style-type: none !important;',
+        item: `${common} padding: 8px 0 !important; border-bottom: 1px solid ${tokens.line};`,
+        marker: `display: inline-block; width: 12px; height: 12px; margin: 0 10px 0 0; background-color: ${tokens.accent}; border-radius: 999px; vertical-align: middle;`,
+        markerText: () => ''
+      };
+    case 'timeline':
+      return {
+        list: 'margin: 0 0 0 5px !important; padding: 0 0 0 2px !important; list-style: none !important; list-style-type: none !important;',
+        item: `${common} padding: 4px 0 14px 24px !important; border-left: 2px solid ${tokens.line};`,
+        marker: `display: inline-block; width: 10px; height: 10px; margin: 5px 10px 0 -29px; background-color: ${tokens.accent}; border-radius: 999px;`,
+        markerText: () => ''
+      };
+    case 'index':
+      return {
+        list: 'margin: 0 !important; padding: 0 !important; list-style: none !important; list-style-type: none !important;',
+        item: `${common} padding: 9px 0 !important; border-bottom: 1px solid ${tokens.line};`,
+        marker: `display: inline-block; box-sizing: border-box; width: 22px; height: 22px; margin: 0 10px 0 0; background-color: ${solidBackground}; color: ${solidText}; border-radius: 6px; font-size: 11px; font-weight: 700; line-height: 22px; text-align: center; vertical-align: middle;`,
+        markerText: (index) => String(index + 1).padStart(2, '0')
+      };
+    default:
+      return null;
+  }
+}
+
+function restoreRowMarkers(section) {
+  Array.from(section.children).forEach((list) => {
+    if (!['UL', 'OL'].includes(list.tagName)) return;
+    Array.from(list.children).forEach((item) => {
+      if (!item.querySelectorAll) return;
+      item.querySelectorAll('[data-ogzh-row-marker]').forEach((marker) => marker.remove());
+      ['border-left', 'border-bottom', 'padding-left', 'padding-right'].forEach((property) => {
+        if (item.style?.removeProperty) item.style.removeProperty(property);
+      });
+    });
+    if (list.style?.removeProperty) {
+      ['margin-left', 'padding-left', 'padding-right'].forEach((property) => {
+        list.style.removeProperty(property);
+      });
+    }
+  });
+}
+
+function applyRowMarkerList(doc, section, presentation, tokens) {
+  const kind = presentation.rows;
+  const spec = rowMarkerSpec(kind, tokens, presentation);
+  if (!spec) return;
+
+  const list = Array.from(section.children).find((child) => ['UL', 'OL'].includes(child.tagName));
+  if (!list) return;
+
+  const items = Array.from(list.children).filter((child) => child.tagName === 'LI');
+  items.forEach((item, index) => {
+    item.querySelectorAll('[data-ogzh-row-marker]').forEach((marker) => marker.remove());
+    const marker = doc.createElement('span');
+    marker.setAttribute('data-ogzh-row-marker', 'true');
+    marker.setAttribute('aria-hidden', 'true');
+    marker.textContent = spec.markerText(index);
+    applyTrustedStyle(marker, spec.marker);
+    item.insertBefore(marker, item.firstChild);
+    const last = index === items.length - 1;
+    applyTrustedStyle(item, last ? spec.item.replace(/border-bottom:[^;]+;\s*/i, '') : spec.item);
+  });
+  applyTrustedStyle(list, spec.list);
 }
 
 function historyDocumentRowStyles(bodyStyle, tokens, hasMetadata) {
@@ -1107,6 +1353,7 @@ export function applyCardStyles(doc, styleConfig) {
     const heading = directHeading(section);
     restoreNumberedHeading(heading);
     restoreHistoryDocumentRows(section);
+    restoreRowMarkers(section);
     removeCardDecorations(section);
 
     const styleId = section.getAttribute('data-ogzh-card');
@@ -1142,6 +1389,8 @@ export function applyCardStyles(doc, styleConfig) {
     if (styleId === 'history-document') {
       applyHistoryDocumentRows(doc, section, presentation.bodyStyle, tokens);
       applyHistoryDocumentBar(doc, section, tokens);
+    } else if (presentation.rows) {
+      applyRowMarkerList(doc, section, presentation, tokens);
     }
   });
 }

@@ -617,9 +617,20 @@ function toWechatCodeHTML(codeText) {
     .join('<br>');
 }
 
+/**
+ * 保留行式结构的卡片：列表行由源码渲染（marker 行、元信息行），
+ * 复制时不能展平或被改写成普通段落，否则行首标记与编号会丢失。
+ */
+const PRESERVED_LIST_CARD_SELECTOR = [
+  'history-document',
+  'check-list',
+  'timeline',
+  'index-badge'
+].map((id) => `section[data-ogzh-card="${id}"]`).join(', ');
+
 function flattenListItems(doc) {
   doc.querySelectorAll('li').forEach((item) => {
-    if (item.closest?.('section[data-ogzh-card="history-document"]')) return;
+    if (item.closest?.(PRESERVED_LIST_CARD_SELECTOR)) return;
     if (containsRenderableMath(item)) {
       return;
     }
@@ -642,7 +653,7 @@ function containsRenderableMath(node) {
 export function convertOrderedListsToWechatParagraphs(doc, styleConfig) {
   const orderedLists = Array.from(doc.querySelectorAll('ol'));
   orderedLists.forEach((list) => {
-    if (list.closest?.('section[data-ogzh-card="history-document"]')) return;
+    if (list.closest?.(PRESERVED_LIST_CARD_SELECTOR)) return;
     const items = Array.from(list.children).filter((child) => child.tagName?.toUpperCase() === 'LI');
     if (items.length === 0) {
       list.remove();
@@ -746,7 +757,7 @@ function normalizeListTypographyForWechat(doc, styleConfig) {
   const typographyStyle = buildTypographyStyle({ fontSize, lineHeight, letterSpacing, color, fontFamily });
 
   doc.querySelectorAll('ol, ul').forEach((list) => {
-    if (list.closest?.('section[data-ogzh-card="history-document"]')) return;
+    if (list.closest?.(PRESERVED_LIST_CARD_SELECTOR)) return;
     const currentStyle = list.getAttribute('style') || '';
     list.setAttribute(
       'style',
@@ -755,7 +766,7 @@ function normalizeListTypographyForWechat(doc, styleConfig) {
   });
 
   doc.querySelectorAll('li').forEach((item) => {
-    if (item.closest?.('section[data-ogzh-card="history-document"]')) return;
+    if (item.closest?.(PRESERVED_LIST_CARD_SELECTOR)) return;
     const currentStyle = item.getAttribute('style') || '';
     item.setAttribute(
       'style',

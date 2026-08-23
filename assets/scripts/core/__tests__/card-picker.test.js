@@ -440,11 +440,15 @@ describe('card picker editor integration', () => {
     expect(source).toContain('handleEditorSelectionChange');
   });
 
-  it('derives all filter totals and visible cards from the registry', () => {
-    expect(source).toContain("const cardStyleFilter = ref('all')");
+  it('derives all category and motion filter totals and visible cards from the registry', () => {
+    expect(source).toContain("const cardCategoryFilter = ref('all')");
+    expect(source).toContain("const cardMotionFilter = ref('all')");
     expect(source).toContain('filteredCardStyles');
-    expect(source).toContain('cardStyleFilters');
+    expect(source).toContain('cardCategoryFilters');
+    expect(source).toContain('cardMotionFilters');
+    expect(source).toContain('CARD_CATEGORIES');
     expect(source).not.toContain("label: '全部 18'");
+    expect(source).not.toContain('cardStyleFilter');
   });
 
   it('imports the shared card catalog and edit helpers and exposes picker state', () => {
@@ -458,6 +462,7 @@ describe('card picker editor integration', () => {
     );
     expect(importedNames).toEqual(new Set([
       'CARD_STYLES',
+      'CARD_CATEGORIES',
       'applyCardEdit',
       'findCardAtSelection',
       'inspectCardTarget',
@@ -687,7 +692,8 @@ describe('card picker UI', () => {
 
     expect(html).toContain('v-if="!cardTargetState.ok" class="card-picker-reason" role="status"');
     expect(html).toContain('{{ cardTargetState.reason }}');
-    expect(html).toContain('v-for="filter in cardStyleFilters"');
+    expect(html).toContain('v-for="filter in cardCategoryFilters"');
+    expect(html).toContain('v-for="filter in cardMotionFilters"');
     expect(html).toContain('{{ filter.label }} {{ filter.count }}');
     expect(itemButton).toContain('v-for="card in filteredCardStyles"');
     expect(itemButton).toContain(':key="card.id"');

@@ -73,6 +73,7 @@ import {
 } from './core/markdown-image-resolver.js';
 import {
   CARD_STYLES,
+  CARD_CATEGORIES,
   applyCardEdit,
   findCardAtSelection,
   inspectCardTarget,
@@ -155,7 +156,8 @@ const showXhsSettings = ref(false);
 const CARD_PICKER_BOUNDARY_SELECTOR = '.selection-card-popover, .markdown-input';
 const showCardPicker = ref(false);
 const cardTargetState = ref({ ok: true, existing: false, reason: '' });
-const cardStyleFilter = ref('all');
+const cardCategoryFilter = ref('all');
+const cardMotionFilter = ref('all');
 const cardPopoverPosition = ref({ left: 0, top: 0, side: 'right' });
 const isMobileCardPopover = ref(window.innerWidth <= 768);
 let cardPopoverResizeObserver = null;
@@ -347,11 +349,22 @@ const selectedCardTextLength = computed(() => Math.max(
   0,
   editorSelection.value.end - editorSelection.value.start
 ));
+const cardCategoryFilter = ref('all');
+const cardMotionFilter = ref('all');
 const filteredCardStyles = computed(() => CARD_STYLES.filter((card) => (
-  cardStyleFilter.value === 'all'
-  || (cardStyleFilter.value === 'animated') === Boolean(card.animated)
+  (cardCategoryFilter.value === 'all' || card.category === cardCategoryFilter.value)
+  && (cardMotionFilter.value === 'all'
+    || (cardMotionFilter.value === 'animated') === Boolean(card.animated))
 )));
-const cardStyleFilters = computed(() => [
+const cardCategoryFilters = computed(() => [
+  { value: 'all', label: '全部', count: CARD_STYLES.length },
+  ...CARD_CATEGORIES.map((category) => ({
+    value: category.id,
+    label: category.name,
+    count: CARD_STYLES.filter(({ category: categoryId }) => categoryId === category.id).length
+  }))
+]);
+const cardMotionFilters = computed(() => [
   { value: 'all', label: '全部', count: CARD_STYLES.length },
   {
     value: 'static',
@@ -3464,8 +3477,11 @@ const app = createApp({
       showTypoPicker,
       showXhsSettings,
       cardStyles: CARD_STYLES,
-      cardStyleFilter,
-      cardStyleFilters,
+      cardCategories: CARD_CATEGORIES,
+      cardCategoryFilter,
+      cardCategoryFilters,
+      cardMotionFilter,
+      cardMotionFilters,
       filteredCardStyles,
       showCardPicker,
       cardTargetState,

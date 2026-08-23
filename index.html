@@ -578,14 +578,24 @@
             {{ cardTargetState.reason }}
           </p>
           <template v-else>
-            <div class="selection-card-filters" role="tablist" aria-label="卡片类型">
+            <div class="selection-card-filters" role="tablist" aria-label="卡片分类">
               <button
-                v-for="filter in cardStyleFilters"
+                v-for="filter in cardCategoryFilters"
                 :key="filter.value"
                 type="button"
-                :class="{ active: cardStyleFilter === filter.value }"
-                :aria-pressed="cardStyleFilter === filter.value"
-                @click="cardStyleFilter = filter.value"
+                :class="{ active: cardCategoryFilter === filter.value }"
+                :aria-pressed="cardCategoryFilter === filter.value"
+                @click="cardCategoryFilter = filter.value"
+              >{{ filter.label }} {{ filter.count }}</button>
+            </div>
+            <div class="selection-card-motion-filters" role="group" aria-label="卡片动效筛选">
+              <button
+                v-for="filter in cardMotionFilters"
+                :key="filter.value"
+                type="button"
+                :class="{ active: cardMotionFilter === filter.value }"
+                :aria-pressed="cardMotionFilter === filter.value"
+                @click="cardMotionFilter = filter.value"
               >{{ filter.label }} {{ filter.count }}</button>
             </div>
             <div class="card-picker-grid">

@@ -157,6 +157,26 @@ class FakeElement {
     this.parentNode?.removeChild(this);
   }
 
+  querySelectorAll(selector) {
+    const attributePattern = /^\[data-([\w-]+)(?:="([^"]*)")?\]$/;
+    const match = attributePattern.exec(selector);
+    if (!match) throw new Error(`Unsupported fake selector: ${selector}`);
+    const attributeName = `data-${match[1]}`;
+    const attributeValue = match[2];
+    const matches = [];
+    const visit = (element) => {
+      element.children.forEach((child) => {
+        if (child.hasAttribute(attributeName)
+          && (attributeValue === undefined || child.getAttribute(attributeName) === attributeValue)) {
+          matches.push(child);
+        }
+        visit(child);
+      });
+    };
+    visit(this);
+    return matches;
+  }
+
   get firstChild() {
     return this.childNodes[0] || null;
   }
@@ -761,11 +781,13 @@ describe('unified card edits', () => {
 });
 
 describe('card style registry', () => {
-  it('publishes 18 cards while retaining three removed ids for old documents', () => {
-    expect(CARD_STYLES).toHaveLength(18);
-    expect(new Set(CARD_STYLES.map(({ id }) => id)).size).toBe(18);
+  it('publishes 24 cards across six categories while retaining three removed ids for old documents', () => {
+    expect(CARD_STYLES).toHaveLength(24);
+    expect(new Set(CARD_STYLES.map(({ id }) => id)).size).toBe(24);
     expect(CARD_STYLES.filter(({ animated }) => animated)).toHaveLength(5);
-    expect(CARD_STYLES.filter(({ animated }) => !animated)).toHaveLength(13);
+    expect(CARD_STYLES.filter(({ animated }) => !animated)).toHaveLength(19);
+    expect(CARD_STYLES.every(({ category }) => category)).toBe(true);
+    expect(new Set(CARD_STYLES.map(({ category }) => category)).size).toBe(6);
 
     for (const legacyId of ['accent-bar', 'double-frame', 'label-title']) {
       expect(CARD_STYLES.some(({ id }) => id === legacyId)).toBe(false);
@@ -789,9 +811,22 @@ describe('card style registry', () => {
     ]));
   });
 
+  it('adds the six new card ids with Chinese names and categories', () => {
+    expect(CARD_STYLES.map(({ id, name, category }) => [id, name, category])).toEqual(expect.arrayContaining([
+      ['warning-alert', '警示注意卡', 'callout'],
+      ['corner-badge', '角标提醒卡', 'callout'],
+      ['dark-contrast', '深色反差卡', 'summary'],
+      ['check-list', '圆点清单卡', 'list'],
+      ['timeline', '时间轴卡', 'list'],
+      ['index-badge', '序号徽章卡', 'list']
+    ]));
+    expect(CARD_STYLES.filter(({ id }) => id === 'check-list' || id === 'timeline' || id === 'index-badge'))
+      .toHaveLength(3);
+  });
+
   it('is frozen and has unique ids', () => {
     expect(Object.isFrozen(CARD_STYLES)).toBe(true);
-    expect(new Set(CARD_STYLES.map((item) => item.id)).size).toBe(18);
+    expect(new Set(CARD_STYLES.map((item) => item.id)).size).toBe(24);
   });
 
   it('freezes every registry entry', () => {
@@ -1338,14 +1373,14 @@ describe('card presentation recipes', () => {
     ]);
   });
 
-  it('builds eighteen structurally distinct, static-flow presentations', () => {
+  it('builds twenty-four structurally distinct, static-flow presentations', () => {
     const presentations = CARD_STYLES.map((card) =>
       buildCardPresentation(card.id, tokens)
     );
     const serialized = JSON.stringify(presentations);
 
-    expect(presentations).toHaveLength(18);
-    expect(new Set(presentations.map((item) => item.containerStyle)).size).toBe(18);
+    expect(presentations).toHaveLength(24);
+    expect(new Set(presentations.map((item) => item.containerStyle)).size).toBe(24);
     expect(presentations.every((item) => (
       typeof item.containerStyle === 'string' &&
       typeof item.titleStyle === 'string' &&
@@ -1354,9 +1389,12 @@ describe('card presentation recipes', () => {
       Array.isArray(item.contrastPairs)
     ))).toBe(true);
     expect(presentations.map((item) => item.decoration)).toEqual([
-      'none', 'none', 'quote', 'none', 'none', 'none', 'number',
-      'soft-halo', 'paper-grid', 'diagonal-note', 'folded-note', 'bracket-focus',
-      'split-index', 'highlight', 'steps', 'relationship', 'bookmark', 'documents'
+      'none', 'none', 'none', 'folded-note', 'soft-halo', 'alert', 'corner',
+      'quote', 'diagonal-note', 'bracket-focus', 'highlight',
+      'none', 'number', 'split-index', 'none',
+      'paper-grid', 'steps', 'relationship',
+      'documents', 'check', 'none', 'none',
+      'none', 'bookmark'
     ]);
     expect(serialized).not.toMatch(/display\s*:\s*(?:flex|grid)|position\s*:|::(?:before|after)|<table/i);
   });
@@ -2113,7 +2151,68 @@ describe('card presentation DOM application', () => {
     expect(firstLink.parentNode).toBe(first);
   });
 
-  it('styles direct lists and items without replacing standard inline content', () => {
+  it.each([
+  ['check-list', 'check'],
+  ['timeline', 'timeline'],
+  ['index-badge', 'index']
+])('renders an idempotent %s row marker list and restores rows on card switch', (styleId, kind) => {
+  const doc = new FakeDocument();
+  const heading = appendElement(doc, doc.createElement('div'), 'h4', '标题');
+  const list = doc.createElement('ul');
+  const first = appendElement(doc, list, 'li', '第一项内容');
+  const second = appendElement(doc, list, 'li', '第二项内容');
+  const section = createCard(doc, styleId, [heading, list]);
+
+  applyCardStyles(doc, STYLES['latepost-depth']);
+  applyCardStyles(doc, STYLES['latepost-depth']);
+
+  const markers = Array.from(first.children)
+    .filter((child) => child.hasAttribute('data-ogzh-row-marker'));
+  expect(markers).toHaveLength(1);
+  expect(markers[0].getAttribute('aria-hidden')).toBe('true');
+  expect(markers[0].style.getPropertyValue('display')).toBe('inline-block');
+  expect(list.style.getPropertyValue('list-style-type')).toBe('none');
+  expect(list.style.getPropertyPriority('list-style-type')).toBe('important');
+  // 最后一行不绘制底部分隔线
+  expect(second.style.getPropertyValue('border-bottom')).toBeFalsy();
+  if (kind === 'index') {
+    expect(markers[0].textContent).toBe('01');
+    expect(second.children.filter((child) => child.hasAttribute('data-ogzh-row-marker'))[0].textContent).toBe('02');
+  }
+  if (kind === 'timeline') {
+    expect(first.style.getPropertyValue('border-left')).toBeTruthy();
+  }
+
+  // 换卡后 marker 与行级布局属性被清理，不污染其他卡片
+  section.setAttribute('data-ogzh-card', 'minimal-outline');
+  applyCardStyles(doc, STYLES['latepost-depth']);
+  expect(first.children.filter((child) => child.hasAttribute('data-ogzh-row-marker'))).toHaveLength(0);
+  expect(first.style.getPropertyValue('border-bottom')).toBeFalsy();
+  expect(first.textContent).toBe('第一项内容');
+});
+
+it('shows row markers in previews for the three list cards', () => {
+  for (const styleId of ['check-list', 'timeline', 'index-badge']) {
+    const html = renderCardPreviewHtml(styleId, STYLES['latepost-depth']);
+    expect(html, styleId).toContain('data-ogzh-row-marker="true"');
+    expect(html, styleId).toContain('<h4');
+  }
+  expect(renderCardPreviewHtml('check-list', STYLES['latepost-depth']))
+    .toContain('data-ogzh-card-decoration="check"');
+});
+
+it('renders the new static decoration cards in previews with aria-hidden decorations', () => {
+  for (const [styleId, kind, text] of [
+    ['warning-alert', 'alert', '注意'],
+    ['corner-badge', 'corner', '']
+  ]) {
+    const html = renderCardPreviewHtml(styleId, STYLES['latepost-depth']);
+    expect(html, styleId).toContain(`data-ogzh-card-decoration="${kind}"`);
+    expect(html, styleId).toContain('aria-hidden="true"');
+  }
+});
+
+it('styles direct lists and items without replacing standard inline content', () => {
     const doc = new FakeDocument();
     const presentation = buildCardPresentation(
       'accent-bar',

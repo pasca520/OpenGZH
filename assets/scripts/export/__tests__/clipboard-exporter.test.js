@@ -222,14 +222,19 @@ describe('materializeAnimatedCardDecorations', () => {
 });
 
 describe('convertOrderedListsToWechatParagraphs', () => {
-  it('keeps a historical-document ordered list intact so its links survive', () => {
+  it.each([
+    'history-document',
+    'check-list',
+    'timeline',
+    'index-badge'
+  ])('keeps a %s list intact so its row markers and links survive', (styleId) => {
     expect(clipboardExporter.convertOrderedListsToWechatParagraphs).toBeTypeOf('function');
     if (!clipboardExporter.convertOrderedListsToWechatParagraphs) return;
 
     const remove = vi.fn();
     const list = {
       children: [],
-      closest: (selector) => selector === 'section[data-ogzh-card="history-document"]' ? {} : null,
+      closest: (selector) => selector.includes(`"${styleId}"`) ? {} : null,
       remove
     };
 
