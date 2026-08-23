@@ -1,11 +1,19 @@
 /**
- * User preference persistence.
- * Keeps legacy keys for backward compatibility.
+ * User preference persistence (IndexedDB-backed).
+ *
+ * 文档与偏好自 ISSUE-002 起迁移至 IndexedDB（document-store）：
+ * - 单文档粒度 put，不再全量 JSON.stringify；
+ * - meta（activeDocumentId / currentStyle 等）单独一条记录；
+ * - 首次启动时从旧 localStorage 键一次性导入，成功后保留原键作只读备份。
+ *
+ * 兼容说明：loadPreferences 现在返回 Promise；savePreferences 变为 async。
+ * 旧 localStorage 键名与数据结构不变，仅作为迁移源与崩溃恢复兜底。
  * @module preferences
  */
 
 import { normalizeXhsSettings } from '../xhs/constants.js';
 import { normalizeStyleOverride } from '../core/style-override.js';
+import { DocumentStore, migrateFromLocalStorage } from './document-store.js';
 
 const KEY_STYLE = 'currentStyle';
 const KEY_CONTENT = 'markdownInput';
@@ -14,9 +22,6 @@ const KEY_ACTIVE_DOCUMENT_ID = 'activeDocumentId';
 const KEY_CODE_BLOCK_SETTINGS = 'codeBlockSettings';
 const KEY_TOC_VISIBLE = 'tocVisible';
 const KEY_DISPLAY_SETTINGS = 'displaySettings';
-const KEY_APP_VERSION = 'appVersion';
-
-const APP_VERSION = 1;
 
 const DEFAULT_CODE_BLOCK_SETTINGS = {
   showLanguageLabel: true,
@@ -72,7 +77,11 @@ const DEFAULT_DISPLAY_SETTINGS = {
   imageShadowOpacity: 0.18
 };
 
+/** @type {DocumentStore|null} 共享的文档存储实例 */
+let documentStore = null;
 let saveTimer = null;
+/** 上次已落盘文档快照（id → updatedAt+content 摘要），用于脏检查只 put 有变化的文档 */
+const lastSavedSnapshots = new Map();
 
 function parseJSON(value, fallback) {
   if (!value) return fallback;
@@ -84,7 +93,7 @@ function parseJSON(value, fallback) {
   }
 }
 
-function normalizeDocument(doc, index = 0) {
+export function normalizeDocument(doc, index = 0) {
   if (!doc || typeof doc !== 'object') return null;
   if (typeof doc.id !== 'string' || typeof doc.content !== 'string') return null;
 
@@ -195,61 +204,162 @@ function normalizeDisplaySettings(settings) {
   };
 }
 
-export function loadPreferences() {
-  const storedVersion = parseInt(localStorage.getItem(KEY_APP_VERSION), 10) || 0;
-  const needsMigration = storedVersion < APP_VERSION;
-
-  try {
-    const prefs = {
-      currentStyle: localStorage.getItem(KEY_STYLE) || 'wechat-default',
-      content: needsMigration ? null : localStorage.getItem(KEY_CONTENT),
-      documents: needsMigration ? [] : normalizeDocuments(parseJSON(localStorage.getItem(KEY_DOCUMENTS), [])),
-      activeDocumentId: needsMigration ? null : localStorage.getItem(KEY_ACTIVE_DOCUMENT_ID),
-      codeBlockSettings: normalizeCodeBlockSettings(parseJSON(localStorage.getItem(KEY_CODE_BLOCK_SETTINGS), null)),
-      tocVisible: localStorage.getItem(KEY_TOC_VISIBLE) === 'true',
-      displaySettings: normalizeDisplaySettings(parseJSON(localStorage.getItem(KEY_DISPLAY_SETTINGS), null))
-    };
-    if (needsMigration) {
-      localStorage.setItem(KEY_APP_VERSION, String(APP_VERSION));
-    }
-    return prefs;
-  } catch (_error) {
-    return {
-      currentStyle: 'wechat-default',
-      content: null,
-      documents: [],
-      activeDocumentId: null,
-      codeBlockSettings: { ...DEFAULT_CODE_BLOCK_SETTINGS },
-      tocVisible: false,
-      displaySettings: { ...DEFAULT_DISPLAY_SETTINGS }
-    };
+/**
+ * 获取共享的 DocumentStore 实例（懒初始化）。
+ * @param {Object} [options] 注入选项（测试用）
+ * @returns {DocumentStore}
+ */
+export function getDocumentStore(options = {}) {
+  if (!documentStore || options.indexedDB) {
+    documentStore = new DocumentStore(options);
   }
+  return documentStore;
 }
 
-export function savePreferences(currentStyle, content, documents = null, activeDocumentId = null, codeBlockSettings = null, tocVisible = false, displaySettings = null) {
+/** 测试钩子：重置模块级单例状态 */
+export function _resetPreferencesState() {
+  documentStore = null;
+  saveTimer = null;
+  lastSavedSnapshots.clear();
+}
+
+/**
+ * 初始化存储并加载偏好设置。
+ *
+ * 流程：init IndexedDB → （IndexedDB 为空且 localStorage 有旧数据时）迁移导入 → 读出全部文档与 meta。
+ * 迁移失败或 IndexedDB 不可用时回退读 localStorage（不丢弃用户数据）。
+ *
+ * @param {Object} [options] 测试注入：indexedDB 工厂 / storage 实现
+ * @returns {Promise<Object>} 与旧同步版 loadPreferences 相同结构的偏好对象
+ */
+export async function initPreferences(options = {}) {
+  const storage = options.storage
+    || (typeof localStorage !== 'undefined' ? localStorage : null);
+
+  const emptyPrefs = {
+    currentStyle: 'wechat-default',
+    content: null,
+    documents: [],
+    activeDocumentId: null,
+    codeBlockSettings: { ...DEFAULT_CODE_BLOCK_SETTINGS },
+    tocVisible: false,
+    displaySettings: { ...DEFAULT_DISPLAY_SETTINGS }
+  };
+
   try {
-    localStorage.setItem(KEY_APP_VERSION, String(APP_VERSION));
-    localStorage.setItem(KEY_STYLE, currentStyle);
-    localStorage.setItem(KEY_CONTENT, content);
-    localStorage.setItem(KEY_TOC_VISIBLE, tocVisible ? 'true' : 'false');
+    getDocumentStore(options);
+    await migrateFromLocalStorage(documentStore, storage, { normalizeDocument });
+  } catch (_error) {
+    // IndexedDB 不可用/打开失败：整体回退到 localStorage 只读模式
+    documentStore = null;
+  }
 
-    if (Array.isArray(documents)) {
-      localStorage.setItem(KEY_DOCUMENTS, JSON.stringify(documents));
+  let meta = null;
+  let documents = [];
+  try {
+    if (documentStore) {
+      [meta, documents] = await Promise.all([
+        documentStore.getMeta(),
+        documentStore.getAllDocuments()
+      ]);
+    }
+  } catch (_error) {
+    meta = null;
+    documents = [];
+  }
+
+  // IndexedDB 读不到任何文档时回退 localStorage（迁移失败兜底）
+  if ((!documents || documents.length === 0) && storage) {
+    try {
+      const fallbackDocs = parseJSON(storage.getItem(KEY_DOCUMENTS), []);
+      if (Array.isArray(fallbackDocs) && fallbackDocs.length > 0) {
+        documents = fallbackDocs;
+      }
+    } catch (_error) {
+      // ignore
+    }
+  }
+
+  documents = normalizeDocuments(documents);
+
+  // 初始化已落盘快照：保存时靠它做脏检查与删除检测
+  documents.forEach((doc, index) => {
+    lastSavedSnapshots.set(doc.id, snapshotOf(doc));
+    doc.sortOrder = typeof doc.sortOrder === 'number' ? doc.sortOrder : index;
+  });
+
+  return {
+    currentStyle: (meta && meta.currentStyle)
+      || (storage ? storage.getItem(KEY_STYLE) || 'wechat-default' : 'wechat-default'),
+    content: (meta && typeof meta.content === 'string' ? meta.content : null)
+      ?? (storage ? storage.getItem(KEY_CONTENT) : null),
+    documents,
+    activeDocumentId: (meta && meta.activeDocumentId) || (storage ? storage.getItem(KEY_ACTIVE_DOCUMENT_ID) : null),
+    codeBlockSettings: normalizeCodeBlockSettings(
+      (meta && meta.codeBlockSettings)
+      || parseJSON(storage ? storage.getItem(KEY_CODE_BLOCK_SETTINGS) : null, null)
+    ),
+    tocVisible: (meta && typeof meta.tocVisible === 'boolean')
+      ? meta.tocVisible
+      : Boolean(storage && storage.getItem(KEY_TOC_VISIBLE) === 'true'),
+    displaySettings: normalizeDisplaySettings(
+      (meta && meta.displaySettings)
+      || parseJSON(storage ? storage.getItem(KEY_DISPLAY_SETTINGS) : null, null)
+    )
+  };
+}
+
+/**
+ * 向后兼容入口：等价于 initPreferences()。返回 Promise。
+ * @returns {Promise<Object>}
+ */
+export function loadPreferences(options = {}) {
+  return initPreferences(options);
+}
+
+function snapshotOf(doc) {
+  return `${doc.updatedAt}:${doc.content.length}:${doc.manualTitle}:${doc.sortOrder}:${doc.title}`;
+}
+
+/**
+ * 异步保存偏好：单文档粒度写入 IndexedDB（仅 put 有变化的文档），meta 单独保存。
+ *
+ * @returns {Promise<boolean>} 是否成功
+ */
+export async function savePreferences(currentStyle, content, documents = null, activeDocumentId = null, codeBlockSettings = null, tocVisible = false, displaySettings = null) {
+  try {
+    const store = getDocumentStore();
+    await store.init();
+
+    const normalizedDocs = normalizeDocuments(documents);
+
+    for (const doc of normalizedDocs) {
+      const snapshot = snapshotOf(doc);
+      if (lastSavedSnapshots.has(doc.id) && lastSavedSnapshots.get(doc.id) === snapshot) {
+        continue; // 无变化跳过
+      }
+      await store.putDocument(doc);
+      lastSavedSnapshots.set(doc.id, snapshot);
     }
 
-    if (activeDocumentId) {
-      localStorage.setItem(KEY_ACTIVE_DOCUMENT_ID, activeDocumentId);
-    } else {
-      localStorage.removeItem(KEY_ACTIVE_DOCUMENT_ID);
+    // 删除 IndexedDB 中已不在内存列表里的文档
+    const liveIds = new Set(normalizedDocs.map((doc) => doc.id));
+    const storedIds = (await store.getAllDocuments()).map((doc) => doc.id);
+    for (const id of storedIds) {
+      if (!liveIds.has(id)) {
+        await store.deleteDocument(id);
+        lastSavedSnapshots.delete(id);
+      }
     }
 
-    if (codeBlockSettings) {
-      localStorage.setItem(KEY_CODE_BLOCK_SETTINGS, JSON.stringify(normalizeCodeBlockSettings(codeBlockSettings)));
-    }
-
-    if (displaySettings) {
-      localStorage.setItem(KEY_DISPLAY_SETTINGS, JSON.stringify(normalizeDisplaySettings(displaySettings)));
-    }
+    await store.putMeta({
+      currentStyle,
+      content,
+      activeDocumentId: activeDocumentId || null,
+      codeBlockSettings: codeBlockSettings ? normalizeCodeBlockSettings(codeBlockSettings) : null,
+      tocVisible: Boolean(tocVisible),
+      displaySettings: displaySettings ? normalizeDisplaySettings(displaySettings) : null
+    });
 
     return true;
   } catch (_error) {
@@ -261,7 +371,8 @@ export function savePreferences(currentStyle, content, documents = null, activeD
 export function debounceSaveContent(payload, delay = 1000, callbacks = {}) {
   if (saveTimer) clearTimeout(saveTimer);
 
-  saveTimer = setTimeout(() => {
+  saveTimer = setTimeout(async () => {
+    saveTimer = null;
     const {
       currentStyle = 'wechat-default',
       content = '',
@@ -272,11 +383,14 @@ export function debounceSaveContent(payload, delay = 1000, callbacks = {}) {
       displaySettings = null
     } = payload || {};
 
-    const success = savePreferences(currentStyle, content, documents, activeDocumentId, codeBlockSettings, tocVisible, displaySettings);
-
-    if (success) {
-      callbacks.onSuccess?.(payload);
-    } else {
+    try {
+      const success = await savePreferences(currentStyle, content, documents, activeDocumentId, codeBlockSettings, tocVisible, displaySettings);
+      if (success) {
+        callbacks.onSuccess?.(payload);
+      } else {
+        callbacks.onError?.(payload);
+      }
+    } catch (_error) {
       callbacks.onError?.(payload);
     }
   }, delay);
