@@ -349,8 +349,6 @@ const selectedCardTextLength = computed(() => Math.max(
   0,
   editorSelection.value.end - editorSelection.value.start
 ));
-const cardCategoryFilter = ref('all');
-const cardMotionFilter = ref('all');
 const filteredCardStyles = computed(() => CARD_STYLES.filter((card) => (
   (cardCategoryFilter.value === 'all' || card.category === cardCategoryFilter.value)
   && (cardMotionFilter.value === 'all'
