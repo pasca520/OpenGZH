@@ -107,6 +107,16 @@
   transform: translateY(0);
 }
 
+.editor-tool-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+  transform: none;
+}
+.editor-tool-btn:disabled:hover {
+  color: var(--color-text-secondary);
+  border-color: var(--color-border-default);
+}
+
 /* ── Selection Card Popover ── */
 .selection-card-popover {
   position: fixed;

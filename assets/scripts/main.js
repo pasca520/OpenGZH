@@ -7,6 +7,7 @@ import { ImageStore } from './core/image-store.js';
 import { ImageCompressor } from './core/image-compressor.js';
 import { createMarkdownEngine } from './core/markdown-engine.js';
 import { createTurndownService, createPasteHandler } from './core/paste-handler.js';
+import { createEditHistory } from './core/edit-history.js';
 import { renderPipeline } from './core/render-pipeline.js';
 import {
   mergeTheme,
@@ -345,6 +346,35 @@ const syncScrollEnabled = ref(true);
 const codeBlockSettings = ref(getDefaultCodeBlockSettings());
 const displaySettings = ref(getDefaultDisplaySettings());
 const editorSelection = ref({ start: 0, end: 0, direction: 'none' });
+const canUndo = ref(false);
+const canRedo = ref(false);
+
+/**
+ * 主编辑器撤销/重做历史(自管理事务栈,覆盖智能粘贴、工具栏、图片插入等
+ * 所有程序化写入路径,详见 core/edit-history.js)。
+ */
+const editorHistory = createEditHistory({
+  getValue: () => getTextarea()?.value ?? markdownInput.value,
+  getSelection: () => {
+    const textarea = getTextarea();
+    if (!textarea) return { start: 0, end: 0, direction: 'none' };
+    return {
+      start: textarea.selectionStart ?? 0,
+      end: textarea.selectionEnd ?? 0,
+      direction: textarea.selectionDirection || 'none'
+    };
+  },
+  apply: (value, selection) => {
+    markdownInput.value = value;
+    const end = Math.min(selection.end ?? selection.start ?? 0, value.length);
+    const start = Math.min(selection.start ?? 0, end);
+    restoreEditorSelection(start, end);
+  },
+  onChange: (state) => {
+    canUndo.value = state.canUndo;
+    canRedo.value = state.canRedo;
+  }
+});
 const selectedCardTextLength = computed(() => Math.max(
   0,
   editorSelection.value.end - editorSelection.value.start
@@ -621,6 +651,7 @@ function syncEditorFromActiveDocument() {
   suppressEditorSync = true;
   suppressTitleSync = true;
   markdownInput.value = activeDoc ? activeDoc.content : '';
+  editorHistory.reset(markdownInput.value);
   currentDocumentTitle.value = activeDoc ? (activeDoc.manualTitle || '') : '';
   editorSelection.value = { start: 0, end: 0 };
   updateStats();
@@ -978,6 +1009,7 @@ function setContentOutputMode(mode) {
 
 function insertXhsPageAtCursor() {
   const result = insertPageMarker(markdownInput.value, editorSelection.value.start);
+  editorHistory.programmatic();
   markdownInput.value = result.markdown;
   nextTick(() => getTextarea()?.focus());
 }
@@ -985,10 +1017,12 @@ function insertXhsPageAtCursor() {
 function insertXhsPageBeforeBlock(blockId) {
   const block = xhsPages.value.flatMap((page) => page.blocks).find((item) => item.id === blockId);
   if (!block) return;
+  editorHistory.programmatic();
   markdownInput.value = insertPageMarker(markdownInput.value, block.sourceStart).markdown;
 }
 
 function removeXhsPageMarker(markerStart) {
+  editorHistory.programmatic();
   markdownInput.value = removePageMarker(markdownInput.value, markerStart).markdown;
 }
 
@@ -1350,7 +1384,10 @@ function initPasteHandler() {
     handleImageUpload,
     showToast: (message, type) => toast.show(message, type),
     getInput: () => markdownInput.value,
-    setInput: (value) => { markdownInput.value = value; },
+    setInput: (value) => {
+      editorHistory.programmatic();
+      markdownInput.value = value;
+    },
     nextTick
   });
 }
@@ -1652,12 +1689,14 @@ function exportHTML() {
 }
 
 function resetEditor() {
+  editorHistory.programmatic();
   markdownInput.value = '';
   persistDocumentState();
   toast.show('已清空编辑器内容', 'info');
 }
 
 function resetToDefault() {
+  editorHistory.programmatic();
   markdownInput.value = loadDefaultExample();
   coverTemplateId.value = 'pure-white';
   coverBackgroundId.value = 'midnight-prism';
@@ -2204,6 +2243,7 @@ function applyStyleBrush() {
   const head = full.slice(0, lineStart);
   const rest = lineEnd >= full.length ? '' : full.slice(lineEnd + 1);
   const joined = rest ? `\n${rest}` : '\n';
+  editorHistory.programmatic();
   markdownInput.value = head + base + suffix + joined;
 
   brushApplying.value = false;
@@ -2374,6 +2414,25 @@ function handleEditorSelectionChange(event) {
   openCardPicker();
 }
 
+/** beforeinput:原生编辑发生前,向历史管理器捕获「之前」快照。 */
+function handleEditorBeforeInput() {
+  editorHistory.beforeInput();
+}
+
+/** input:原生编辑发生后,录入历史并同步选区/卡片弹层。 */
+function handleEditorInput(event) {
+  editorHistory.input(event);
+  handleEditorSelectionChange(event);
+}
+
+function handleUndo() {
+  editorHistory.undo();
+}
+
+function handleRedo() {
+  editorHistory.redo();
+}
+
 function handleDocumentKeydown(event) {
   if (event.key === 'Escape' && showCardPicker.value) {
     event.preventDefault();
@@ -2422,6 +2481,7 @@ async function applySelectedCard(styleId) {
     return reportCardEditFailure(result.reason, Boolean(existing));
   }
 
+  editorHistory.programmatic();
   markdownInput.value = result.markdown;
   cardTargetState.value = { ok: true, existing: result.kind === 'replace', reason: '' };
   toast.show('已应用卡片样式', 'success');
@@ -2445,6 +2505,7 @@ async function removeSelectedCard() {
     return reportCardEditFailure(result.reason, true);
   }
 
+  editorHistory.programmatic();
   markdownInput.value = result.markdown;
   cardTargetState.value = { ok: true, existing: false, reason: '' };
   toast.show('已移除卡片样式', 'success');
@@ -2465,6 +2526,7 @@ function insertAtCursor(text, options = {}) {
   const before = markdownInput.value.slice(0, start);
   const after = markdownInput.value.slice(end);
 
+  editorHistory.programmatic();
   markdownInput.value = `${before}${text}${after}`;
 
   nextTick(() => {
@@ -2486,6 +2548,7 @@ function wrapSelection(before, after, placeholder = '文本') {
   const selected = markdownInput.value.substring(start, end) || placeholder;
   const text = `${before}${selected}${after}`;
 
+  editorHistory.programmatic();
   markdownInput.value = `${markdownInput.value.substring(0, start)}${text}${markdownInput.value.substring(end)}`;
 
   nextTick(() => {
@@ -2541,6 +2604,7 @@ function applyListToSelection(type = 'unordered') {
     })
     .join('\n');
 
+  editorHistory.programmatic();
   markdownInput.value = `${source.slice(0, blockStart)}${nextBlock}${source.slice(blockEnd)}`;
 
   nextTick(() => {
@@ -2571,6 +2635,7 @@ function insertCodeBlock() {
   const selected = markdownInput.value.substring(start, end);
   const snippet = `\`\`\`\n${selected}\n\`\`\``;
 
+  editorHistory.programmatic();
   markdownInput.value = `${markdownInput.value.substring(0, start)}${snippet}${markdownInput.value.substring(end)}`;
 
   nextTick(() => {
@@ -2621,6 +2686,13 @@ async function handleXhsCoverUpload(event) {
 
 function handleKeydown(event) {
   const isMod = event.ctrlKey || event.metaKey;
+
+  if (isMod && (event.key.toLowerCase() === 'z' || event.key.toLowerCase() === 'y')) {
+    event.preventDefault();
+    if (event.shiftKey || event.key.toLowerCase() === 'y') editorHistory.redo();
+    else editorHistory.undo();
+    return;
+  }
 
   if (isMod && event.key.toLowerCase() === 's') {
     event.preventDefault();
@@ -3639,6 +3711,12 @@ const app = createApp({
       updateImageShadowOpacity,
       updateImageShadowColor,
       handleKeydown,
+      handleEditorBeforeInput,
+      handleEditorInput,
+      handleUndo,
+      handleRedo,
+      canUndo,
+      canRedo,
       syncEditorSelection,
       insertHeading,
       insertQuote,
