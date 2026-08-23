@@ -319,11 +319,14 @@ export function materializeAnimatedCardDecorations(doc, {
     image.setAttribute('alt', '');
     image.setAttribute('aria-hidden', 'true');
     image.setAttribute('data-ogzh-card-gif', kind);
+    // 保留装饰元素完整的盒子约束（display/float/margin/width/height/overflow 等），
+    // 让 GIF 沿用预览的尺寸框架；不追加 width/max-width/height 覆盖，
+    // 避免出现重复声明互相抵消（如 max-width:70% 被 max-width:100% 覆盖、height:auto 破坏 8px 高度条）。
     image.setAttribute(
       'style',
       mergeStyleText(
         decoration.getAttribute('style') || '',
-        `width:${gif.width}px;max-width:100%;height:auto;border:0;`
+        'border: 0; line-height: 0;'
       )
     );
     decoration.replaceWith(image);
@@ -527,7 +530,10 @@ function extractStyleValue(styleText, property) {
   if (!styleText || !property) return null;
   const escapedProperty = property.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const match = styleText.match(new RegExp(`(?:^|;)\\s*${escapedProperty}\\s*:\\s*([^;]+)`, 'i'));
-  return match ? match[1].trim() : null;
+  if (!match) return null;
+  // 剥离尾部的 !important：调用方重新附加 !important 时避免产生
+  // `color: #fff !important !important` 这类被浏览器整体丢弃的非法声明
+  return match[1].trim().replace(/\s*!important\s*$/i, '');
 }
 
 const FONT_SCALE_BASE_PX = 14;

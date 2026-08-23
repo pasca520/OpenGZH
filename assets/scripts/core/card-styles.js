@@ -638,7 +638,7 @@ export function buildCardPresentation(styleId, tokenInput, options = {}) {
       const titleText = readableForeground(tokens.body, tokens.surface, includePreview);
       const title = `${headingStyle(titleText, '0 0 17px')} min-height: 31px; padding-top: 3px !important;`;
       return presentationResult({
-        containerStyle: `${common} padding: 29px 25px 22px; border: 1px solid ${tokens.line}; background-color: ${tokens.surface}; background-image: linear-gradient(90deg, ${tokens.accent} 0, ${tokens.accent} 112px, transparent 112px); background-repeat: no-repeat; background-size: 100% 9px; border-radius: 4px 14px 4px 4px; color: ${bodyOnSurface} !important; box-shadow: 4px 5px 0 ${tokens.line};`,
+        containerStyle: `${common} padding: 29px 25px 22px; border: 1px solid ${tokens.line}; background-color: ${tokens.surface}; border-radius: 4px 14px 4px 4px; color: ${bodyOnSurface} !important; box-shadow: 4px 5px 0 ${tokens.line};`,
         titleStyle: title,
         headingStyle: title,
         bodyStyle: bodyStyle(bodyOnSurface),
@@ -792,7 +792,8 @@ export function renderCardPreviewHtml(styleId, styleConfig) {
   } else if (styleId === 'history-document') {
     const { name, meta } = splitHistoryDocumentItem(card.preview);
     const rowStyles = historyDocumentRowStyles(presentation.bodyStyle, tokens, Boolean(meta));
-    content = `<h4 style="${headingStyle}">${escapeHtml(card.defaultTitle)}</h4>` +
+    content = `<span data-ogzh-card-decoration="history-bar" aria-hidden="true" style="${escapeHtml(historyDocumentBarStyle(tokens))}"></span>` +
+      `<h4 style="${headingStyle}">${escapeHtml(card.defaultTitle)}</h4>` +
       `<p aria-label="${escapeHtml(card.preview)}" style="${escapeHtml(`${rowStyles.item} clear: both; border-top: 1px solid ${tokens.line};`)}">` +
       `<span data-ogzh-history-index="true" aria-hidden="true" style="${escapeHtml(rowStyles.index)}">01</span>` +
       `<span data-ogzh-history-name="true" style="${escapeHtml(rowStyles.name)}">${escapeHtml(name)}</span>` +
@@ -829,11 +830,15 @@ export function splitHistoryDocumentItem(value) {
   };
 }
 
+function historyDocumentBarStyle(tokens) {
+  return `display: block; height: 9px; margin: -29px -25px 20px; border-radius: 4px 14px 0 0; background-color: ${tokens.accent}; background-image: linear-gradient(90deg, ${tokens.accent} 0, ${tokens.accent} 112px, transparent 112px); background-repeat: no-repeat; background-size: 100% 9px;`;
+}
+
 function historyDocumentRowStyles(bodyStyle, tokens, hasMetadata) {
   return {
     list: `clear: both; margin: 0 !important; padding: 0 !important; border-top: 1px solid ${tokens.line}; list-style: none !important; list-style-type: none !important;`,
     item: `${bodyStyle} display: block; box-sizing: border-box; min-height: 45px; padding: 10px 0 !important; border-bottom: 1px solid ${tokens.line}; list-style: none !important; list-style-type: none !important; overflow: visible; text-overflow: clip; white-space: normal;`,
-    index: `display: inline-block; box-sizing: border-box; width: 25px; height: 25px; margin: 0 10px 0 0; background-color: ${tokens.soft}; color: ${tokens.accent}; border-radius: 50%; font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 25px; text-align: center; vertical-align: top;`,
+    index: `display: inline-block; box-sizing: border-box; width: 25px; height: 25px; margin: 0 10px 0 0; background-color: ${tokens.soft}; color: ${tokens.accent}; border-radius: 50%; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 25px; text-align: center; vertical-align: top;`,
     name: `display: inline-block; box-sizing: border-box; width: ${hasMetadata ? 'calc(76% - 35px)' : 'calc(100% - 35px)'}; min-width: 0; overflow-wrap: anywhere; word-break: break-word; white-space: normal; font-weight: 700; vertical-align: top;`,
     metadata: `display: ${hasMetadata ? 'inline-block' : 'none'}; box-sizing: border-box; width: 24%; padding-left: 12px; overflow: hidden; color: ${tokens.muted}; font-size: 12px; text-align: right; text-overflow: ellipsis; white-space: nowrap; vertical-align: top;`
   };
@@ -1136,8 +1141,14 @@ export function applyCardStyles(doc, styleConfig) {
     }
     if (styleId === 'history-document') {
       applyHistoryDocumentRows(doc, section, presentation.bodyStyle, tokens);
+      applyHistoryDocumentBar(doc, section, tokens);
     }
   });
+}
+
+function applyHistoryDocumentBar(doc, section, tokens) {
+  const bar = createCardDecoration(doc, 'history-bar', '', historyDocumentBarStyle(tokens));
+  section.insertBefore(bar, section.firstChild);
 }
 
 function buildCardDirectiveIndex(source) {

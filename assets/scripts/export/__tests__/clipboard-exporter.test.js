@@ -184,6 +184,41 @@ describe('materializeAnimatedCardDecorations', () => {
     expect(replacements[0].getAttribute('style')).toContain('float: left');
     expect(replacements[0].getAttribute('style')).toContain('margin: 0 10px 15px 0');
   });
+
+  it('keeps the preview box constraints instead of overriding them with conflicting sizes', () => {
+    const replacements = [];
+    const decoration = {
+      getAttribute: (name) => {
+        if (name === 'data-ogzh-card-animation') return 'highlight';
+        if (name === 'style') return 'display: block; width: 176px; max-width: 70%; height: 8px; overflow: hidden;';
+        return null;
+      },
+      replaceWith: (image) => replacements.push(image)
+    };
+    const doc = {
+      querySelectorAll: () => [decoration],
+      createElement: () => {
+        const attributes = new Map();
+        return {
+          setAttribute: (name, value) => attributes.set(name, String(value)),
+          getAttribute: (name) => attributes.get(name) ?? null
+        };
+      }
+    };
+
+    materializeAnimatedCardDecorations(doc, {
+      styleConfig: {},
+      build: () => ({ dataUrl: 'data:image/gif;base64,highlight', width: 176, height: 28 })
+    });
+
+    const style = replacements[0].getAttribute('style');
+    expect(style).toBe('display: block; width: 176px; max-width: 70%; height: 8px; overflow: hidden; border: 0; line-height: 0;');
+    expect(style).not.toContain('height: auto');
+    expect(style).not.toContain('100%');
+    expect(style.match(/(?:^|;)\s*width:/g)).toHaveLength(1);
+    expect(style.match(/(?:^|;)\s*max-width:/g)).toHaveLength(1);
+    expect(style.match(/(?:^|;)\s*height:/g)).toHaveLength(1);
+  });
 });
 
 describe('convertOrderedListsToWechatParagraphs', () => {

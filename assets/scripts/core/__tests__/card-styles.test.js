@@ -2077,10 +2077,20 @@ describe('card presentation DOM application', () => {
       expect(item.textContent).toBe(`${index}${name}${meta}`);
       expect(item.style.getPropertyValue('white-space')).toBe('normal');
       expect(indexNode.style.getPropertyValue('border-radius')).toBe('50%');
+      expect(indexNode.style.getPropertyValue('font-size')).toBe('13px');
       expect(nameNode.style.getPropertyValue('white-space')).toBe('normal');
       expect(nameNode.style.getPropertyValue('overflow-wrap')).toBe('anywhere');
       expect(metaNode.style.getPropertyValue('white-space')).toBe('nowrap');
     }
+    const bar = decorations(section, 'history-bar')[0];
+    expect(bar).toBeDefined();
+    expect(bar.getAttribute('aria-hidden')).toBe('true');
+    expect(bar.style.getPropertyValue('display')).toBe('block');
+    expect(bar.style.getPropertyValue('height')).toBe('9px');
+    expect(bar.style.getPropertyValue('background-color')).toBeTruthy();
+    expect(section.children[0]).toBe(bar);
+    expect(section.style.getPropertyValue('background-image')).toBe('');
+    expect(section.style.getPropertyValue('background-color')).toBeTruthy();
     expect(firstLink.parentNode).toBe(first.children.find(
       (child) => child.hasAttribute('data-ogzh-history-name')
     ));
@@ -2093,6 +2103,7 @@ describe('card presentation DOM application', () => {
     expect(first.children.filter((child) => child.hasAttribute('data-ogzh-history-index'))).toHaveLength(1);
     expect(first.children.filter((child) => child.hasAttribute('data-ogzh-history-name'))).toHaveLength(1);
     expect(first.children.filter((child) => child.hasAttribute('data-ogzh-history-meta'))).toHaveLength(1);
+    expect(decorations(section, 'history-bar')).toHaveLength(1);
 
     section.setAttribute('data-ogzh-card', 'minimal-outline');
     applyCardStyles(doc, STYLES['latepost-depth']);
@@ -2316,6 +2327,11 @@ describe('card preview HTML', () => {
     expect(html).toContain('white-space: normal');
     expect(html).toContain('border-radius: 50%');
     expect(html).toContain('float: left');
+    expect(html).toContain('data-ogzh-card-decoration="history-bar"');
+    expect(html).toContain('font-size: 13px');
+    expect(html.indexOf('data-ogzh-card-decoration="history-bar"')).toBeLessThan(
+      html.indexOf('<h4')
+    );
     expect(html.indexOf('data-ogzh-card-decoration="documents"')).toBeLessThan(
       html.indexOf('<h4')
     );
