@@ -30,6 +30,7 @@ const CLIPBOARD_IMAGE_MAX_DIMENSION = 1200;
 const CLIPBOARD_IMAGE_JPEG_QUALITY = 0.6;
 const IMAGE_READ_TIMEOUT_MS = 8000;
 const IMAGE_GIF_CHECK_TIMEOUT_MS = 3000;
+const ARTICLE_INVALID = 'ARTICLE_INVALID';
 
 function withTimeout(promise, ms, message = 'Operation timed out') {
   let timer;
@@ -267,6 +268,22 @@ export async function materializeClipboardImages(images, {
   }
 
   return { successCount, gifCount, failures };
+}
+
+export function deferLocalImages(images) {
+  const failures = [];
+
+  for (const image of images) {
+    const imageId = image.getAttribute('data-image-id');
+    const src = image.getAttribute('src') || '';
+    if (imageId) {
+      image.setAttribute('src', `img://${imageId}`);
+    } else if (src.startsWith('blob:')) {
+      failures.push(src);
+    }
+  }
+
+  return { failures };
 }
 
 export async function materializeMarkdownTables(tables, {
@@ -980,84 +997,129 @@ function maybeReplaceAnimatedEndWithGif(doc, { styleConfig, displaySettings }) {
   }
 }
 
-export async function copyToWechat({ renderedHTML, styleConfig, imageStore, showToast, codeTheme, displaySettings }) {
+export async function prepareWechatContent({
+  renderedHTML,
+  styleConfig,
+  imageStore,
+  showToast = () => {},
+  codeTheme,
+  displaySettings,
+  imagePolicy = 'clipboard'
+} = {}) {
+  if (!renderedHTML) {
+    const error = new Error('没有内容可复制');
+    error.code = ARTICLE_INVALID;
+    throw error;
+  }
+
+  const fontScale = Number(displaySettings?.fontScale) || 1;
+  // 始终走缩放（内部会按 14px 基准归一化），保证复制结果与预览字号一致
+  const baseStyleConfig = styleConfig?.styles ? styleConfig : { ...(styleConfig || {}), styles: {} };
+  const effectiveStyleConfig = scaleStyleConfigFontSizes(baseStyleConfig, fontScale);
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(renderedHTML, 'text/html');
+
+  doc.querySelectorAll('table').forEach((table) => {
+    table.setAttribute('data-markdown-table', 'true');
+  });
+  convertGridToTable(doc);
+  normalizeTablesForWechat(doc);
+
+  const images = Array.from(doc.querySelectorAll('img'));
+  let imageFailures = [];
+  let imageFailureCount = 0;
+  if (images.length > 0 && imagePolicy === 'clipboard') {
+    showToast(`正在处理 ${images.length} 张图片...`, 'success');
+    const imageResult = await materializeClipboardImages(images, { imageStore });
+    if (imageResult.failures.length > 0) {
+      imageFailureCount = imageResult.failures.length;
+      imageFailures = imageResult.failures.map((failure) => failure.src);
+      const failedSources = imageResult.failures.map((failure) => failure.src).join('、');
+      console.warn('Clipboard image conversion failed:', imageResult.failures);
+      // 失败的图片替换为可见占位提示，不阻断整体复制
+      imageResult.failures.forEach((failure) => {
+        if (failure.element) replaceFailedImageWithPlaceholder(failure.element, failure.src);
+      });
+      showToast(`有 ${imageResult.failures.length} 张图片无法自动导入：${failedSources}`, 'error');
+    } else if (imageResult.gifCount > 0) {
+      showToast(
+        `图片处理完成：成功 ${imageResult.successCount} 张，GIF ${imageResult.gifCount} 张`,
+        'success'
+      );
+    }
+  } else if (images.length > 0 && imagePolicy === 'defer-local') {
+    const result = deferLocalImages(images);
+    imageFailures = result.failures;
+    imageFailureCount = imageFailures.length;
+  }
+
+  await convertMathForWechat(doc);
+  applyCodeHighlighting(doc, { codeTheme, styleConfig: effectiveStyleConfig });
+  convertCodeBlocks(doc, effectiveStyleConfig, codeTheme);
+  flattenListItems(doc);
+  convertOrderedListsToWechatParagraphs(doc, effectiveStyleConfig);
+  normalizeListTypographyForWechat(doc, effectiveStyleConfig);
+  inlineContainerTypographyForWechat(doc, effectiveStyleConfig);
+  normalizeBlockquotes(doc);
+  wrapSectionIfNeeded(doc, effectiveStyleConfig);
+
+  maybeReplaceAnimatedEndWithGif(doc, { styleConfig, displaySettings });
+  materializeAnimatedCardDecorations(doc, { styleConfig: effectiveStyleConfig });
+
+  const text = buildClipboardPlainText(doc);
+  const tableBackground = extractBackgroundColor(effectiveStyleConfig.styles.container) || '#ffffff';
+  const markdownTables = Array.from(doc.querySelectorAll('table[data-markdown-table="true"]'));
+  try {
+    await materializeMarkdownTables(markdownTables, { background: tableBackground });
+  } catch (error) {
+    console.error('表格转图失败:', error);
+    showToast(error.message, 'error');
+    error.wechatToastHandled = true;
+    throw error;
+  }
+
+  stripFormulaExportMetadata(doc.body);
+  const html = doc.body.innerHTML;
+
+  return {
+    html,
+    text,
+    images: Array.from(doc.querySelectorAll('img')).map((image) => image.getAttribute('src') || ''),
+    imageFailures,
+    imageFailureCount,
+  };
+}
+
+export async function writeWechatClipboard(prepared, {
+  clipboard = navigator.clipboard,
+  ClipboardItemCtor = ClipboardItem,
+  BlobCtor = Blob
+} = {}) {
+  const item = new ClipboardItemCtor({
+    'text/html': new BlobCtor([prepared.html], { type: 'text/html' }),
+    'text/plain': new BlobCtor([prepared.text], { type: 'text/plain' })
+  });
+
+  await clipboard.write([item]);
+}
+
+export async function copyToWechat(options = {}) {
+  const { renderedHTML, showToast = () => {} } = options;
   if (!renderedHTML) {
     showToast('没有内容可复制', 'error');
     return false;
   }
 
-  const fontScale = Number(displaySettings?.fontScale) || 1;
-  // 始终走缩放（内部会按 14px 基准归一化），保证复制结果与预览字号一致
-  const effectiveStyleConfig = scaleStyleConfigFontSizes(styleConfig, fontScale);
-
   try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(renderedHTML, 'text/html');
-
-    doc.querySelectorAll('table').forEach((table) => {
-      table.setAttribute('data-markdown-table', 'true');
+    const prepared = await prepareWechatContent({
+      ...options,
+      imagePolicy: 'clipboard',
+      showToast
     });
-    convertGridToTable(doc);
-    normalizeTablesForWechat(doc);
-
-    const images = Array.from(doc.querySelectorAll('img'));
-    let imageFailureCount = 0;
-    if (images.length > 0) {
-      showToast(`正在处理 ${images.length} 张图片...`, 'success');
-      const imageResult = await materializeClipboardImages(images, { imageStore });
-      if (imageResult.failures.length > 0) {
-        imageFailureCount = imageResult.failures.length;
-        const failedSources = imageResult.failures.map((failure) => failure.src).join('、');
-        console.warn('Clipboard image conversion failed:', imageResult.failures);
-        // 失败的图片替换为可见占位提示，不阻断整体复制
-        imageResult.failures.forEach((failure) => {
-          if (failure.element) replaceFailedImageWithPlaceholder(failure.element, failure.src);
-        });
-        showToast(`有 ${imageResult.failures.length} 张图片无法自动导入：${failedSources}`, 'error');
-      } else if (imageResult.gifCount > 0) {
-        showToast(
-          `图片处理完成：成功 ${imageResult.successCount} 张，GIF ${imageResult.gifCount} 张`,
-          'success'
-        );
-      }
-    }
-
-    await convertMathForWechat(doc);
-    applyCodeHighlighting(doc, { codeTheme, styleConfig: effectiveStyleConfig });
-    convertCodeBlocks(doc, effectiveStyleConfig, codeTheme);
-    flattenListItems(doc);
-    convertOrderedListsToWechatParagraphs(doc, effectiveStyleConfig);
-    normalizeListTypographyForWechat(doc, effectiveStyleConfig);
-    inlineContainerTypographyForWechat(doc, effectiveStyleConfig);
-    normalizeBlockquotes(doc);
-    wrapSectionIfNeeded(doc, effectiveStyleConfig);
-
-    maybeReplaceAnimatedEndWithGif(doc, { styleConfig, displaySettings });
-    materializeAnimatedCardDecorations(doc, { styleConfig: effectiveStyleConfig });
-
-    const text = buildClipboardPlainText(doc);
-    const tableBackground = extractBackgroundColor(effectiveStyleConfig.styles.container) || '#ffffff';
-    const markdownTables = Array.from(doc.querySelectorAll('table[data-markdown-table="true"]'));
-    try {
-      await materializeMarkdownTables(markdownTables, { background: tableBackground });
-    } catch (error) {
-      console.error('表格转图失败:', error);
-      showToast(error.message, 'error');
-      return false;
-    }
-
-    stripFormulaExportMetadata(doc.body);
-    const html = doc.body.innerHTML;
-
-    const item = new ClipboardItem({
-      'text/html': new Blob([html], { type: 'text/html' }),
-      'text/plain': new Blob([text], { type: 'text/plain' })
-    });
-
-    await navigator.clipboard.write([item]);
-    if (imageFailureCount > 0) {
+    await writeWechatClipboard(prepared);
+    if (prepared.imageFailureCount > 0) {
       showToast(
-        `复制成功，但有 ${imageFailureCount} 张图片未能自动导入，已替换为占位提示，请在公众号后台手动上传`,
+        `复制成功，但有 ${prepared.imageFailureCount} 张图片未能自动导入，已替换为占位提示，请在公众号后台手动上传`,
         'error'
       );
     } else {
@@ -1065,6 +1127,7 @@ export async function copyToWechat({ renderedHTML, styleConfig, imageStore, show
     }
     return true;
   } catch (error) {
+    if (error?.wechatToastHandled) return false;
     console.error('复制失败:', error);
     showToast('复制失败', 'error');
     return false;

@@ -1,19 +1,134 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as clipboardExporter from '../clipboard-exporter.js';
 import {
+  deferLocalImages,
   materializeAnimatedCardDecorations,
   materializeClipboardImages,
   materializeMarkdownTables,
+  prepareWechatContent,
+  writeWechatClipboard,
 } from '../clipboard-exporter.js';
 
-function makeImage(src) {
-  const attributes = new Map([['src', src]]);
+function makeImage(src, extraAttributes = {}) {
+  const attributes = new Map([['src', src], ...Object.entries(extraAttributes)]);
   return {
     getAttribute: (name) => attributes.get(name) || null,
     setAttribute: (name, value) => attributes.set(name, value),
     attributes,
   };
 }
+
+describe('deferLocalImages', () => {
+  it('defers indexed local images while preserving data URLs and reporting anonymous blobs', () => {
+    const images = [
+      makeImage('blob:rendered', { 'data-image-id': 'hero' }),
+      makeImage('data:image/png;base64,cG5n'),
+      makeImage('blob:anonymous'),
+    ];
+
+    const result = deferLocalImages(images);
+
+    expect(images.map((image) => image.getAttribute('src'))).toEqual([
+      'img://hero',
+      'data:image/png;base64,cG5n',
+      'blob:anonymous',
+    ]);
+    expect(result.failures).toEqual(['blob:anonymous']);
+  });
+});
+
+describe('writeWechatClipboard', () => {
+  it('writes prepared HTML and plain text exactly once', async () => {
+    const writes = [];
+    class TestClipboardItem {
+      constructor(data) {
+        this.data = data;
+      }
+    }
+    class TestBlob {
+      constructor(parts, options) {
+        this.parts = parts;
+        this.type = options.type;
+      }
+    }
+    const clipboard = {
+      write: vi.fn(async (items) => writes.push(...items)),
+    };
+    const prepared = { html: '<p>HTML</p>', text: 'TEXT' };
+
+    await writeWechatClipboard(prepared, {
+      clipboard,
+      ClipboardItemCtor: TestClipboardItem,
+      BlobCtor: TestBlob,
+    });
+
+    expect(clipboard.write).toHaveBeenCalledTimes(1);
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).toBeInstanceOf(TestClipboardItem);
+    expect(writes[0].data['text/html']).toMatchObject({
+      parts: [prepared.html],
+      type: 'text/html',
+    });
+    expect(writes[0].data['text/plain']).toMatchObject({
+      parts: [prepared.text],
+      type: 'text/plain',
+    });
+  });
+});
+
+describe('prepareWechatContent', () => {
+  it('is exported and rejects empty content with ARTICLE_INVALID', async () => {
+    expect(prepareWechatContent).toBeTypeOf('function');
+    await expect(prepareWechatContent({ renderedHTML: '' }))
+      .rejects.toMatchObject({ code: 'ARTICLE_INVALID' });
+  });
+
+  it('keeps deferred image references and does not read the image store', async () => {
+    const images = [
+      makeImage('blob:rendered', { 'data-image-id': 'hero' }),
+      makeImage('data:image/png;base64,cG5n'),
+      makeImage('blob:anonymous'),
+    ];
+    const imageStore = { getImageRecord: vi.fn() };
+    const body = {
+      cloneNode: () => ({ querySelectorAll: () => [], textContent: '正文' }),
+      querySelectorAll: () => [],
+      get innerHTML() {
+        return images.map((image) => `<img src="${image.getAttribute('src')}">`).join('');
+      },
+    };
+    const doc = {
+      body,
+      querySelector: () => null,
+      querySelectorAll: (selector) => selector === 'img' ? images : [],
+    };
+    const previousParser = globalThis.DOMParser;
+    globalThis.DOMParser = class {
+      parseFromString() {
+        return doc;
+      }
+    };
+
+    try {
+      const prepared = await prepareWechatContent({
+        renderedHTML: '<p>fixture</p>',
+        styleConfig: { styles: { container: '' } },
+        imageStore,
+        imagePolicy: 'defer-local',
+      });
+
+      expect(typeof prepared.html).toBe('string');
+      expect(prepared.html).toContain('img://hero');
+      expect(prepared.html).toContain('data:image/png;base64,cG5n');
+      expect(prepared.html).toContain('blob:anonymous');
+      expect(prepared.imageFailures).toEqual(['blob:anonymous']);
+      expect(imageStore.getImageRecord).not.toHaveBeenCalled();
+    } finally {
+      if (previousParser) globalThis.DOMParser = previousParser;
+      else delete globalThis.DOMParser;
+    }
+  });
+});
 
 describe('materializeClipboardImages', () => {
   it('reports failed images with their element instead of silently keeping their src', async () => {
