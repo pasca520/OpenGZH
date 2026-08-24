@@ -1,0 +1,144 @@
+import { readFile } from 'node:fs/promises';
+import { describe, expect, it, vi } from 'vitest';
+import { createZhihuAdapter, transformZhihuContent } from '../../src/adapters/zhihu.js';
+
+const tokenFixture = JSON.parse(await readFile(new URL('../fixtures/zhihu-image-token.json', import.meta.url), 'utf8'));
+const withRules = (_rules, work) => work();
+const response = (body, init) => new Response(body, init);
+
+describe('Zhihu adapter', () => {
+  it('detects login from /api/v4/me and validates safe identity fields', async () => {
+    const adapter = createZhihuAdapter();
+    await expect(adapter.checkAuth({ fetch: async () => response(JSON.stringify({ id: 'u1', name: '测试用户' })), withHeaderRules: withRules }))
+      .resolves.toEqual({ authenticated: true, userId: 'u1', username: '测试用户' });
+    await expect(createZhihuAdapter().checkAuth({ fetch: async () => response(JSON.stringify({ id: 'u1<script>', name: 'x' })), withHeaderRules: withRules }))
+      .rejects.toMatchObject({ code: 'PLATFORM_CHANGED' });
+  });
+
+  it.each([
+    [401, 'auth-required'], [403, 'auth-required'], [302, 'redirect'], [0, 'redirect'],
+  ])('maps HTTP %s or redirect responses without pretending platform failure is logout', async (status, label) => {
+    const responseValue = status === 0
+      ? { status: 0, ok: false, type: 'opaqueredirect', async json() { return {}; } }
+      : response('', { status });
+    const adapter = createZhihuAdapter();
+    if (label === 'auth-required') {
+      await expect(adapter.checkAuth({ fetch: async () => responseValue, withHeaderRules: withRules }))
+        .resolves.toEqual({ authenticated: false });
+    } else {
+      await expect(adapter.checkAuth({ fetch: async () => responseValue, withHeaderRules: withRules }))
+        .rejects.toMatchObject({ code: 'PLATFORM_CHANGED' });
+    }
+  });
+
+  it('maps auth network failures and malformed success separately', async () => {
+    await expect(createZhihuAdapter().checkAuth({ fetch: async () => { throw new TypeError('offline'); }, withHeaderRules: withRules }))
+      .rejects.toMatchObject({ code: 'NETWORK_ERROR', retryable: true });
+    await expect(createZhihuAdapter().checkAuth({ fetch: async () => response('nope', { status: 200 }), withHeaderRules: withRules }))
+      .rejects.toMatchObject({ code: 'PLATFORM_CHANGED' });
+    await expect(createZhihuAdapter().checkAuth({ fetch: async () => response(JSON.stringify({ id: 'u1' }), { status: 500 }), withHeaderRules: withRules }))
+      .rejects.toMatchObject({ code: 'NETWORK_ERROR', retryable: true });
+  });
+
+  it('transforms table, image, and code structures without inline styles', () => {
+    const result = transformZhihuContent('<table style="x" data-x="1"><thead><tr><th>A</th></tr></thead><tbody><tr><td>B</td></tr></tbody></table><img src="img://hero"><figure><img src="img://already"></figure><pre><code class="language-js">x</code></pre>');
+    expect(result).toContain('<table data-draft-node="block" data-draft-type="table" data-size="normal" data-row-style="normal"><tbody><tr><th>A</th></tr><tr><td>B</td></tr></tbody></table>');
+    expect(result).toContain('<figure><img src="img://hero"></figure>');
+    expect(result).toContain('<figure><img src="img://already"></figure>');
+    expect(result).toContain('<pre lang="js"><code>x</code></pre>');
+    expect(result).not.toMatch(/(?:^|\s)style=/i);
+  });
+
+  it('removes quoted and unquoted styles and rejects executable or unsafe attributes', () => {
+    expect(transformZhihuContent('<p style=x onclick="evil()" data-safe="yes" onload=evil>text</p>'))
+      .toBe('<p>text</p>');
+    expect(transformZhihuContent('<script>alert(1)</script><img src="javascript:alert(1)" onerror="evil">'))
+      .not.toMatch(/script|javascript|onerror|onload/i);
+    expect(transformZhihuContent('<a href="https://evil.example" data-draft-node="inline" data-draft-type="x">x</a>'))
+      .toBe('<a href="https://evil.example" data-draft-node="inline" data-draft-type="x">x</a>');
+    expect(() => transformZhihuContent({ toString() { throw new Error('coercion'); } })).toThrow();
+  });
+
+  it('negotiates and uploads a binary image only to the fixed OSS host', async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(response(JSON.stringify(tokenFixture)))
+      .mockResolvedValueOnce(response('', { status: 200 }));
+    const adapter = createZhihuAdapter({ hmacSha1Base64: vi.fn(async () => 'test-signature'), now: () => new Date('2026-01-01T00:00:00Z') });
+    const runtime = { fetch, withHeaderRules: withRules };
+    await expect(adapter.uploadImage(runtime, new Blob(['png'], { type: 'image/png' }), 'hero.png'))
+      .resolves.toBe('https://pic4.zhimg.com/test/object-key');
+    expect(fetch.mock.calls[0][0]).toBe('https://api.zhihu.com/images');
+    expect(fetch.mock.calls[1][0]).toBe('https://zhihu-pics-upload.zhimg.com/test/object-key');
+    expect(fetch.mock.calls[1][1].headers.Authorization).toBe('OSS test-access-id:test-signature');
+    expect(fetch.mock.calls[1][1].body).toBeInstanceOf(Blob);
+  });
+
+  it('polls state=1 with bounded image status requests and returns a strict URL', async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(response(JSON.stringify({ upload_file: { state: 1, image_id: 'image-1', object_key: 'ignored' } })))
+      .mockResolvedValueOnce(response(JSON.stringify({ state: 0 })))
+      .mockResolvedValueOnce(response(JSON.stringify({ original_hash: 'hash-1' })));
+    const adapter = createZhihuAdapter({ delay: async () => {} });
+    await expect(adapter.uploadImage({ fetch, withHeaderRules: withRules }, new Blob(['png'], { type: 'image/png' }), 'hero.png'))
+      .resolves.toBe('https://pic4.zhimg.com/hash-1');
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual(['https://api.zhihu.com/images', 'https://api.zhihu.com/images/image-1', 'https://api.zhihu.com/images/image-1']);
+  });
+
+  it('rejects malformed upload credentials, IDs, and unsafe object keys without leaking secrets', async () => {
+    for (const uploadFile of [
+      { state: 0, image_id: 'id', object_key: '../escape' },
+      { state: 0, image_id: 'id', object_key: 'safe?x=1' },
+      { state: 0, image_id: 'id', object_key: 'safe\nkey' },
+    ]) {
+      const fetch = vi.fn().mockResolvedValue(response(JSON.stringify({ upload_file: uploadFile, upload_token: tokenFixture.upload_token })));
+      await expect(createZhihuAdapter().uploadImage({ fetch, withHeaderRules: withRules }, new Blob(['png']), 'hero.png'))
+        .rejects.toMatchObject({ code: 'PLATFORM_CHANGED' });
+      expect(JSON.stringify(await createZhihuAdapter().uploadImage({ fetch: vi.fn().mockResolvedValue(response(JSON.stringify({ upload_file: { state: 0, image_id: 'id', object_key: 'safe' }, upload_token: { access_id: 'id', access_key: 'key', access_token: 'token' } }))), withHeaderRules: withRules }, new Blob(['png']), 'hero.png').catch((error) => error))).not.toMatch(/token|access|key/i);
+    }
+  });
+
+  it('creates then updates a draft and returns the edit URL', async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(response(JSON.stringify({ id: 'draft-1' }), { status: 201 }))
+      .mockResolvedValueOnce(response(null, { status: 204 }));
+    const adapter = createZhihuAdapter();
+    const result = await adapter.saveDraft({ fetch, withHeaderRules: withRules }, {
+      title: '标题', semanticHtml: '<p>正文<img src="img://hero"></p>',
+    }, new Map([['img://hero', 'https://pic4.zhimg.com/test/object-key']]), {});
+    expect(result).toEqual({ draftId: 'draft-1', draftUrl: 'https://zhuanlan.zhihu.com/p/draft-1/edit' });
+    expect(JSON.parse(fetch.mock.calls[1][1].body).content).toContain('https://pic4.zhimg.com/test/object-key');
+  });
+
+  it('updates an existing draftId without creating another draft', async () => {
+    const fetch = vi.fn(async () => response(null, { status: 204 }));
+    const adapter = createZhihuAdapter();
+    await adapter.saveDraft({ fetch, withHeaderRules: withRules }, { title: '标题', semanticHtml: '<p>正文</p>' }, new Map(), { draftId: 'draft-existing' });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0][0]).toContain('/api/articles/draft-existing/draft');
+  });
+
+  it('preserves the created draftId when PATCH fails and rejects unsafe task IDs', async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(response(JSON.stringify({ id: 'draft-1' }), { status: 201 }))
+      .mockResolvedValueOnce(response('failed', { status: 500 }));
+    const adapter = createZhihuAdapter();
+    await expect(adapter.saveDraft({ fetch, withHeaderRules: withRules }, { title: '标题', semanticHtml: '<p>正文</p>' }, new Map(), {}))
+      .rejects.toMatchObject({ code: 'DRAFT_UPDATE_FAILED', draftId: 'draft-1', retryable: true });
+    for (const draftId of ['token=secret', '../escape', 'x/y', 'draft\n1', '<b>id</b>', 'x'.repeat(129)]) {
+      await expect(adapter.saveDraft({ fetch: vi.fn(), withHeaderRules: withRules }, { title: '标题', semanticHtml: '<p>正文</p>' }, new Map(), { draftId }))
+        .rejects.toMatchObject({ code: 'PLATFORM_CHANGED' });
+    }
+  });
+
+  it('keeps create success ID when header-rule cleanup fails after PATCH', async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(response(JSON.stringify({ id: 'draft-cleanup' }), { status: 201 }))
+      .mockResolvedValueOnce(response(null, { status: 204 }));
+    const runtime = {
+      fetch,
+      withHeaderRules: vi.fn(async (_rules, work) => { await work(); throw new Error('DNR cleanup failed'); }),
+    };
+    await expect(createZhihuAdapter().saveDraft(runtime, { title: '标题', semanticHtml: '<p>正文</p>' }, new Map()))
+      .rejects.toMatchObject({ code: 'UNKNOWN_REMOTE_STATE', draftId: 'draft-cleanup', retryable: false });
+  });
+});

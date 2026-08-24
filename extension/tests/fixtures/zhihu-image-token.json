@@ -1,0 +1,12 @@
+{
+  "upload_file": {
+    "state": 0,
+    "image_id": "test-image-id",
+    "object_key": "test/object-key"
+  },
+  "upload_token": {
+    "access_id": "test-access-id",
+    "access_key": "test-access-key",
+    "access_token": "test-access-token"
+  }
+}
