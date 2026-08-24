@@ -158,9 +158,12 @@ async function signedFetch(runtime, signAws4, token, method, url) {
   }
 }
 
-function ensurePlatformResponse(response, { upload = false, authRedirect = false } = {}) {
+function ensurePlatformResponse(response, { upload = false, authRedirect = false, authApi = true } = {}) {
   const status = responseStatus(response);
-  if ([401, 403].includes(status)) throw authRequired();
+  if ([401, 403].includes(status)) {
+    if (authApi || !upload) throw authRequired();
+    throw imageUploadError('掘金 ImageX 请求未获授权', { httpStatus: status });
+  }
   if (isRedirect(response)) {
     if (authRedirect) throw authRequired();
     throw platformChanged('掘金平台请求发生跳转', { httpStatus: status });
@@ -193,7 +196,12 @@ export function createJuejinAdapter({
     const value = response.headers?.get?.('x-ware-csrf-token');
     const parts = typeof value === 'string' ? value.split(',') : [];
     const token = safeToken(parts[1] || '');
-    if (!token || !/^[A-Za-z0-9._-]{1,256}$/u.test(token)) throw platformChanged('掘金 CSRF 响应格式已变化');
+    const sessionToken = safeToken(parts[4] || '');
+    if (parts.length !== 5 || parts[0] !== '0' || !token || !/^[A-Za-z0-9._-]{1,256}$/u.test(token)
+      || !/^[1-9]\d{0,15}$/u.test(parts[2] || '') || parts[3] !== 'success'
+      || !sessionToken || !/^[A-Za-z0-9._-]{1,256}$/u.test(sessionToken)) {
+      throw platformChanged('掘金 CSRF 响应格式已变化');
+    }
     return token;
   }
 
@@ -238,7 +246,7 @@ export function createJuejinAdapter({
       const token = await getImageToken(runtime);
       const applyUrl = `https://imagex.bytedanceapi.com/?Action=ApplyImageUpload&Version=2018-08-01&ServiceId=${SERVICE_ID}`;
       const applyResponse = await signedFetch(runtime, signAws4, token, 'GET', applyUrl);
-      ensurePlatformResponse(applyResponse, { upload: true });
+      ensurePlatformResponse(applyResponse, { upload: true, authApi: false });
       const apply = await parseJson(applyResponse);
       const address = apply.Result?.UploadAddress;
       if (!isRecord(address) || !Array.isArray(address.StoreInfos) || !address.StoreInfos.length || !Array.isArray(address.UploadHosts) || !address.UploadHosts.length) throw platformChanged('掘金 ApplyImageUpload 响应结构已变化');
@@ -258,10 +266,10 @@ export function createJuejinAdapter({
       } catch (_error) {
         throw imageUploadError('掘金 TOS 上传网络异常');
       }
-      ensurePlatformResponse(uploadResponse, { upload: true });
+      ensurePlatformResponse(uploadResponse, { upload: true, authApi: false });
       const commitUrl = `https://imagex.bytedanceapi.com/?Action=CommitImageUpload&Version=2018-08-01&SessionKey=${encodeURIComponent(sessionKey)}&ServiceId=${SERVICE_ID}`;
       const commitResponse = await signedFetch(runtime, signAws4, token, 'POST', commitUrl);
-      ensurePlatformResponse(commitResponse, { upload: true });
+      ensurePlatformResponse(commitResponse, { upload: true, authApi: false });
       const commit = await parseJson(commitResponse);
       const committed = commit.Result?.Results;
       if (!Array.isArray(committed) || !committed.some((entry) => isRecord(entry) && entry.Uri === storeUri && entry.UriStatus === 2000)) throw platformChanged('掘金 CommitImageUpload 响应结构已变化');
@@ -315,11 +323,13 @@ export function createJuejinAdapter({
           if (status >= 500 || isOk(response)) throw new PlatformError('UNKNOWN_REMOTE_STATE', '无法确认掘金是否已创建草稿', { httpStatus: status, retryable: false });
           throw error;
         }
-        if (data.err_no === 429) throw new PlatformError('RATE_LIMITED', '掘金草稿请求过于频繁', { retryable: true });
+        const responseDraftId = safeId(data.data?.id);
+        if (responseDraftId) createdDraftId = responseDraftId;
         if (!isOk(response)) {
-          if (status >= 500) throw new PlatformError('UNKNOWN_REMOTE_STATE', '无法确认掘金是否已创建草稿', { httpStatus: status, retryable: false });
-          throw new PlatformError('DRAFT_CREATE_FAILED', '掘金草稿创建失败', { httpStatus: status, retryable: true });
+          if (status >= 500) throw new PlatformError('UNKNOWN_REMOTE_STATE', '无法确认掘金是否已创建草稿', { httpStatus: status, ...(createdDraftId ? { draftId: createdDraftId } : {}), retryable: false });
+          throw new PlatformError('DRAFT_CREATE_FAILED', '掘金草稿创建失败', { httpStatus: status, ...(createdDraftId ? { draftId: createdDraftId } : {}), retryable: false });
         }
+        if (data.err_no === 429) throw new PlatformError('RATE_LIMITED', '掘金草稿请求过于频繁', { retryable: true });
         if (!Number.isInteger(data.err_no)) throw platformChanged('掘金草稿响应格式已变化', { httpStatus: status });
         if (data.err_no !== 0) {
           if (data.err_no === 403) throw authRequired();
@@ -331,7 +341,9 @@ export function createJuejinAdapter({
         return { draftId: createdDraftId, draftUrl: `https://juejin.cn/editor/drafts/${encodeURIComponent(createdDraftId)}` };
       });
     } catch (error) {
-      if (createdDraftId) throw new PlatformError('UNKNOWN_REMOTE_STATE', '掘金草稿请求已返回但请求头清理失败，请人工检查草稿箱', { draftId: createdDraftId, retryable: false });
+      if (createdDraftId && !(error instanceof PlatformError)) {
+        throw new PlatformError('UNKNOWN_REMOTE_STATE', '掘金草稿请求已返回但请求头清理失败，请人工检查草稿箱', { draftId: createdDraftId, retryable: false });
+      }
       throw error;
     }
   }
@@ -349,6 +361,7 @@ export function createJuejinAdapter({
       if ([401, 403].includes(status) || isRedirect(response)) {
         return { authenticated: false };
       }
+      if (status === 429) throw new PlatformError('RATE_LIMITED', '掘金登录检测请求过于频繁', { httpStatus: status, retryable: true });
       if (!isOk(response)) {
         if (status >= 500) throw networkError('掘金登录检测网络异常', { httpStatus: status });
         throw platformChanged('掘金登录检测响应状态已变化', { httpStatus: status });

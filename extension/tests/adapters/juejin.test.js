@@ -1,6 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it, vi } from 'vitest';
 import { createJuejinAdapter } from '../../src/adapters/juejin.js';
+import { createDistributionRunner } from '../../src/background/distribution-runner.js';
+import { serializeError } from '../../src/core/platform-errors.js';
 
 const fixture = JSON.parse(await readFile(new URL('../fixtures/juejin-imagex-token.json', import.meta.url), 'utf8'));
 const withRules = (_rules, work) => work();
@@ -35,6 +37,11 @@ describe('Juejin adapter', () => {
       .rejects.toMatchObject({ code: 'PLATFORM_CHANGED', retryable: false });
   });
 
+  it('maps auth rate limiting to RATE_LIMITED without claiming logout', async () => {
+    await expect(createJuejinAdapter().checkAuth({ fetch: async () => response('busy', { status: 429 }) }))
+      .rejects.toMatchObject({ code: 'RATE_LIMITED', retryable: true });
+  });
+
   it.each([401, 403, 302, 0])('maps CSRF HTTP/redirect %s to AUTH_REQUIRED', async (status) => {
     const fetch = vi.fn().mockResolvedValue(redirect(status));
     await expect(createJuejinAdapter().getCsrfToken({ fetch })).rejects.toMatchObject({ code: 'AUTH_REQUIRED', retryable: true });
@@ -42,6 +49,23 @@ describe('Juejin adapter', () => {
 
   it('requires a safe CSRF header token', async () => {
     for (const value of ['', '0,,1,success,s', '0,test token,1,success,s', '0,test\ncsrf,1,success,s']) {
+      const fetch = vi.fn().mockResolvedValue({ status: 200, ok: true, headers: { get: () => value } });
+      await expect(createJuejinAdapter().getCsrfToken({ fetch })).rejects.toMatchObject({ code: 'PLATFORM_CHANGED' });
+    }
+  });
+
+  it('requires the exact five-part CSRF envelope', async () => {
+    for (const value of [
+      'garbage,valid-token',
+      '0,valid-token,1,success,session,extra',
+      '1,valid-token,1,success,session',
+      '0,valid-token,0,success,session',
+      '0,valid-token,12345678901234567,success,session',
+      '0,valid-token,1,error,session',
+      '0,valid-token,1,success,',
+      '0,valid-token,1,success,bad token',
+      '0,valid-token,1,success,bad\nsession',
+    ]) {
       const fetch = vi.fn().mockResolvedValue({ status: 200, ok: true, headers: { get: () => value } });
       await expect(createJuejinAdapter().getCsrfToken({ fetch })).rejects.toMatchObject({ code: 'PLATFORM_CHANGED' });
     }
@@ -130,6 +154,39 @@ describe('Juejin adapter', () => {
     expect(JSON.stringify(commitError)).not.toMatch(/test-secret-key|test-session-key/);
   });
 
+  it.each([401, 403])('maps Apply %s to an image failure instead of AUTH_REQUIRED', async (status) => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(response(JSON.stringify(fixture.token)))
+      .mockResolvedValueOnce(response('unauthorized', { status }));
+    const adapter = createJuejinAdapter({ signAws4: vi.fn(async () => ({ headers: { authorization: 'sig', 'x-amz-date': '20260824T020000Z' } })), now: () => new Date('2026-08-24T10:00:00+08:00') });
+    await expect(adapter.uploadImage({ fetch, withHeaderRules: withRules }, new Blob(['png']), 'hero.png'))
+      .rejects.toMatchObject({ code: 'IMAGE_UPLOAD_FAILED', retryable: true });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([401, 403])('maps Commit %s to an image failure instead of AUTH_REQUIRED', async (status) => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(response(JSON.stringify(fixture.token)))
+      .mockResolvedValueOnce(response(JSON.stringify(fixture.apply)))
+      .mockResolvedValueOnce(response('', { status: 200 }))
+      .mockResolvedValueOnce(response('unauthorized', { status }));
+    const adapter = createJuejinAdapter({ signAws4: vi.fn(async () => ({ headers: { authorization: 'sig', 'x-amz-date': '20260824T020000Z' } })), now: () => new Date('2026-08-24T10:00:00+08:00') });
+    await expect(adapter.uploadImage({ fetch, withHeaderRules: withRules }, new Blob(['png']), 'hero.png'))
+      .rejects.toMatchObject({ code: 'IMAGE_UPLOAD_FAILED', retryable: true });
+    expect(fetch).toHaveBeenCalledTimes(4);
+  });
+
+  it.each([401, 403])('maps TOS PUT %s to an image failure instead of AUTH_REQUIRED', async (status) => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(response(JSON.stringify(fixture.token)))
+      .mockResolvedValueOnce(response(JSON.stringify(fixture.apply)))
+      .mockResolvedValueOnce(response('unauthorized', { status }));
+    const adapter = createJuejinAdapter({ signAws4: vi.fn(async () => ({ headers: { authorization: 'sig', 'x-amz-date': '20260824T020000Z' } })), now: () => new Date('2026-08-24T10:00:00+08:00') });
+    await expect(adapter.uploadImage({ fetch, withHeaderRules: withRules }, new Blob(['png']), 'hero.png'))
+      .rejects.toMatchObject({ code: 'IMAGE_UPLOAD_FAILED', retryable: true });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
   it.each([
     ['volces.com', 'base host'],
     ['uploads.volces.com.evil.example', 'lookalike host'],
@@ -206,6 +263,35 @@ describe('Juejin adapter', () => {
       await expect(createJuejinAdapter().saveDraft({ fetch, withHeaderRules: withRules }, { title: '标题', portableMarkdown: '正文' }, new Map()))
         .rejects.toMatchObject({ code: expected });
     }
+  });
+
+  it.each([
+    [400, 'DRAFT_CREATE_FAILED', 'draft-400'],
+    [500, 'UNKNOWN_REMOTE_STATE', 'draft-500'],
+  ])('retains safe draft ID from HTTP %s create responses as non-retryable state', async (status, code, draftId) => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(response('', { headers: { 'x-ware-csrf-token': '0,test-csrf,1,success,s' } }))
+      .mockResolvedValueOnce(response(JSON.stringify({ err_no: 1001, data: { id: draftId } }), { status }));
+    const error = await createJuejinAdapter().saveDraft({ fetch, withHeaderRules: withRules }, { title: '标题', portableMarkdown: '正文' }, new Map())
+      .catch((value) => value);
+    expect(error).toMatchObject({ code, draftId, retryable: false });
+    expect(serializeError(error)).toMatchObject({ code, draftId, retryable: false });
+
+    const states = [];
+    const runner = createDistributionRunner({
+      adapterFactories: { juejin: () => ({
+        id: 'juejin', checkAuth: async () => ({ authenticated: true }), uploadImage: vi.fn(), saveDraft: async () => { throw error; },
+      }) },
+      runtimeFactory: () => ({ requestImage: async () => new Blob(['png']) }),
+      onState: (state) => states.push(state), persist: vi.fn(async () => {}),
+    });
+    const article = {
+      schemaVersion: 1, documentId: 'doc-1', title: '标题', markdown: '正文', portableMarkdown: '正文',
+      semanticHtml: '<p>正文</p>', wechatHtml: '<p>正文</p>', images: [], createdAt: 1787529600000,
+    };
+    const result = await runner.runBatch({ taskId: 'task-id', operationId: 'op-id', article, platformIds: ['juejin'] });
+    expect(result.results[0]).toMatchObject({ draftId, error: { code, draftId, retryable: false } });
+    expect(states).toContainEqual(expect.objectContaining({ state: code === 'UNKNOWN_REMOTE_STATE' ? 'unknown' : 'failed', draftId }));
   });
 
   it('maps HTTP 429 to RATE_LIMITED before parsing a malformed body', async () => {
