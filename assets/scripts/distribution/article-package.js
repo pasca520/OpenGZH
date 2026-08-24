@@ -44,50 +44,6 @@ function isIndentedCode(line) {
   return /^(?: {4}|\t)/.test(line);
 }
 
-function maskLine(line) {
-  return line.replace(/[^\n]/g, ' ');
-}
-
-function maskInlineCode(line) {
-  const masked = line.split('');
-  let index = 0;
-  while (index < line.length) {
-    if (line[index] !== '`') {
-      index += 1;
-      continue;
-    }
-    const start = index;
-    while (index < line.length && line[index] === '`') index += 1;
-    const marker = line.slice(start, index);
-    let close = line.indexOf(marker, index);
-    while (close >= 0 && (line[close - 1] === '`' || line[close + marker.length] === '`')) {
-      close = line.indexOf(marker, close + 1);
-    }
-    if (close < 0) continue;
-    masked.fill(' ', start, close + marker.length);
-    index = close + marker.length;
-  }
-  return masked.join('');
-}
-
-function maskMarkdownCode(markdown) {
-  let fence = null;
-  return String(markdown).split('\n').map((line) => {
-    if (fence) {
-      const masked = maskLine(line);
-      if (isFenceEnd(line, fence)) fence = null;
-      return masked;
-    }
-    const opening = parseFenceStart(line);
-    if (opening) {
-      fence = opening;
-      return maskLine(line);
-    }
-    if (isIndentedCode(line)) return maskLine(line);
-    return maskInlineCode(line);
-  }).join('\n');
-}
-
 /**
  * Remove only OpenGZH's outer card/page syntax while retaining article content.
  * Generic fenced directives are kept verbatim, including ones nested in a card.
@@ -118,7 +74,7 @@ export function toPortableMarkdown(markdown = '') {
     }
 
     if (cardDepth === 0) {
-      if (/^:::ogzh-card(?:\s+.*)?$/.test(trimmed)) {
+      if (/^:::ogzh-card\s+[a-z0-9-]+\s*$/.test(line)) {
         cardDepth = 1;
         continue;
       }
@@ -127,7 +83,7 @@ export function toPortableMarkdown(markdown = '') {
       continue;
     }
 
-    if (/^:::\s*$/.test(trimmed)) {
+    if (/^:::\s*$/.test(line)) {
       cardDepth -= 1;
       if (cardDepth > 0) output.push(line);
       continue;
@@ -263,16 +219,6 @@ export function toSemanticHtml(html = '') {
   return output.join('').trim();
 }
 
-function imageSourcesFromMarkdown(markdown) {
-  const matches = [];
-  const pattern = /!\[([^\]]*)\]\(\s*(?:<([^>]+)>|([^\s)]+))/g;
-  let match;
-  while ((match = pattern.exec(markdown))) {
-    matches.push({ index: match.index, source: match[2] || match[3], alt: match[1] || '' });
-  }
-  return matches;
-}
-
 function imageSourcesFromHtml(html) {
   const matches = [];
   let cursor = 0;
@@ -291,14 +237,6 @@ function imageSourcesFromHtml(html) {
     });
   }
   return matches;
-}
-
-function portableImageSources(markdown) {
-  const maskedMarkdown = maskMarkdownCode(markdown);
-  return [
-    ...imageSourcesFromMarkdown(maskedMarkdown),
-    ...imageSourcesFromHtml(maskedMarkdown)
-  ].sort((left, right) => left.index - right.index);
 }
 
 function isImageSource(source) {
@@ -388,8 +326,8 @@ export async function buildDistributionPackage({
     throw contractError(IMAGE_READ_FAILED, 'WeChat image preparation failed');
   }
   const wechatHtml = prepared.html;
+  // ponytail: rendered HTML is the canonical image inventory; Markdown-only resources require the real token stream if this boundary changes.
   const imageOccurrences = [
-    ...portableImageSources(portableMarkdown),
     ...imageSourcesFromHtml(semanticHtml),
     ...imageSourcesFromHtml(wechatHtml)
   ].filter(({ source }) => isImageSource(source));

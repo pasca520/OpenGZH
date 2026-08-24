@@ -50,6 +50,36 @@ describe('article distribution contract', () => {
     ].join('\n'));
   });
 
+  it('拆除卡片包装时严格匹配单个样式参数和无缩进 opener', () => {
+    const markdown = [
+      ':::ogzh-card accent-bar',
+      '真实卡片正文',
+      ':::',
+      '  :::ogzh-card accent-bar',
+      '保留缩进 opener',
+      ':::',
+      ':::ogzh-card',
+      '保留无样式 opener',
+      ':::',
+      ':::ogzh-card accent-bar extra',
+      '保留多参数 opener',
+      ':::'
+    ].join('\n');
+
+    expect(toPortableMarkdown(markdown)).toBe([
+      '真实卡片正文',
+      '  :::ogzh-card accent-bar',
+      '保留缩进 opener',
+      ':::',
+      ':::ogzh-card',
+      '保留无样式 opener',
+      ':::',
+      ':::ogzh-card accent-bar extra',
+      '保留多参数 opener',
+      ':::'
+    ].join('\n'));
+  });
+
   it('keeps card-like examples in matched fenced and indented code', () => {
     const markdown = [
       '正文前',
@@ -143,7 +173,7 @@ describe('article distribution contract', () => {
         imageId: 'hero',
         mimeType: 'image/png',
         filename: 'hero.png',
-        alt: 'Hero'
+        alt: 'Semantic hero'
       },
       {
         ref: pngDataUrl,
@@ -151,7 +181,7 @@ describe('article distribution contract', () => {
         dataUrl: pngDataUrl,
         mimeType: 'image/png',
         filename: 'generated-2.png',
-        alt: 'Generated'
+        alt: 'Semantic generated'
       }
     ]);
     expect(snapshot.images.every((image) => !('blob' in image || 'source' in image || 'id' in image || 'name' in image))).toBe(true);
@@ -171,7 +201,7 @@ describe('article distribution contract', () => {
     expect(imageStore.getImageRecord).toHaveBeenCalledWith('hero');
   });
 
-  it('deduplicates image references in portable markdown, semantic html, and prepared html order', async () => {
+  it('deduplicates semantic and prepared HTML image references in rendered order', async () => {
     const prepareWechatContent = async () => ({
       html: '<p><img src="img://third"><img src="img://first"></p>',
       imageFailures: []
@@ -187,29 +217,32 @@ describe('article distribution contract', () => {
     const snapshot = await buildDistributionPackage({
       documentId: 'doc-order',
       title: '顺序',
-      markdown: '![first](img://first)\n\n![second](img://second)',
-      renderedHtml: '<p><img src="img://second"></p>',
+      markdown: '![markdown-only](img://markdown-only)\n\n![second](img://second)',
+      renderedHtml: '<p><img src="img://second"><img src="img://first"></p>',
       imageStore,
       prepareWechatContent
     });
 
     expect(snapshot.images.map(({ ref }) => ref)).toEqual([
-      'img://first',
       'img://second',
+      'img://first',
       'img://third'
     ]);
   });
 
-  it('does not inventory image examples inside markdown code', async () => {
+  it('does not inventory image-like syntax outside rendered HTML', async () => {
     const markdown = [
+      '<!-- ![comment](img://missing) <img src="img://missing"> -->',
+      '\\![escaped](img://missing)',
+      '`![inline](img://missing)`',
+      '`![cross',
+      'line](img://missing)`',
       '```markdown',
       '![fenced](img://missing)',
       '<img src="img://missing">',
       '```',
-      '`![inline](img://missing)`',
       '    ![indented](img://missing)',
-      '    <img src="img://missing">',
-      `![real](<${pngDataUrl}>)`
+      '    <img src="img://missing">'
     ].join('\n');
 
     const snapshot = await buildDistributionPackage({
@@ -222,14 +255,64 @@ describe('article distribution contract', () => {
       now: () => 1787529600000
     });
 
-    expect(snapshot.images).toEqual([{
-      ref: pngDataUrl,
-      kind: 'data-url',
-      dataUrl: pngDataUrl,
-      mimeType: 'image/png',
-      filename: 'generated-1.png',
-      alt: 'real'
-    }]);
+    expect(snapshot.images).toEqual([]);
+    expect(snapshot.imageStore).toBeUndefined();
+    expect(snapshot.semanticHtml).toBe('<p>正文</p>');
+  });
+
+  it('inventories semantic HTML first and appends unique WeChat-generated images', async () => {
+    const sharedRef = 'img://shared';
+    const semanticRef = 'img://semantic-first';
+    const markdownOnlyRef = 'img://markdown-only';
+    const imageStore = {
+      getImageRecord: vi.fn(async (id) => {
+        if (id === 'shared') return { name: 'shared.png', blob: new Blob(['shared'], { type: 'image/png' }) };
+        if (id === 'semantic-first') return { name: 'semantic-first.png', blob: new Blob(['first'], { type: 'image/png' }) };
+        return null;
+      })
+    };
+
+    const snapshot = await buildDistributionPackage({
+      documentId: 'doc-rendered-inventory',
+      title: '渲染图片清单',
+      markdown: `![Markdown only](${markdownOnlyRef})\n![Shared markdown](${sharedRef})`,
+      renderedHtml: `<p><img src="${sharedRef}" alt="Rendered shared"><img src="${semanticRef}" alt="Rendered first"></p>`,
+      imageStore,
+      prepareWechatContent: async () => ({
+        html: `<p><img src="${pngDataUrl}" alt="Generated"><img src="${sharedRef}" alt="Prepared duplicate"></p>`,
+        imageFailures: []
+      }),
+      now: () => 1787529600000
+    });
+
+    expect(snapshot.images).toEqual([
+      {
+        ref: sharedRef,
+        kind: 'indexed-db',
+        imageId: 'shared',
+        mimeType: 'image/png',
+        filename: 'shared.png',
+        alt: 'Rendered shared'
+      },
+      {
+        ref: semanticRef,
+        kind: 'indexed-db',
+        imageId: 'semantic-first',
+        mimeType: 'image/png',
+        filename: 'semantic-first.png',
+        alt: 'Rendered first'
+      },
+      {
+        ref: pngDataUrl,
+        kind: 'data-url',
+        dataUrl: pngDataUrl,
+        mimeType: 'image/png',
+        filename: 'generated-3.png',
+        alt: 'Generated'
+      }
+    ]);
+    expect(imageStore.getImageRecord).toHaveBeenCalledTimes(2);
+    expect(imageStore.getImageRecord).not.toHaveBeenCalledWith('markdown-only');
   });
 
   it('uses quote-aware HTML tag boundaries and removes only xhs page comments', () => {
@@ -243,7 +326,7 @@ describe('article distribution contract', () => {
       documentId: 'doc-missing',
       title: '缺失',
       markdown: '![missing](img://missing)',
-      renderedHtml: '<p>正文</p>',
+      renderedHtml: '<p><img src="img://missing"></p>',
       imageStore: { getImageRecord: vi.fn(async () => null) },
       prepareWechatContent: async () => ({ html: '<p>正文</p>', imageFailures: [] })
     })).rejects.toMatchObject({ code: 'IMAGE_READ_FAILED' });
@@ -258,8 +341,8 @@ describe('article distribution contract', () => {
       await expect(buildDistributionPackage({
         documentId: 'doc-invalid',
         title: '非法',
-        markdown: `![bad](<${ref}>)`,
-        renderedHtml: '<p>正文</p>',
+        markdown: '# 非法图片',
+        renderedHtml: `<p><img src="${ref}"></p>`,
         imageStore: { getImageRecord: vi.fn() },
         prepareWechatContent: async () => ({ html: '<p>正文</p>', imageFailures: [] }),
         now: () => 1787529600000
