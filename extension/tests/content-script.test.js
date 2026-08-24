@@ -406,6 +406,46 @@ function makeUiDom() {
 }
 
 describe('async extension selection storage and selected-only auth', () => {
+  it('does not check auth with an empty selection after direct open or close and reopen', async () => {
+    const { createUi } = loadTestApi();
+    const { doc, anchor } = makeUiDom();
+    const messages = [];
+    const ui = createUi({
+      document: doc,
+      anchor,
+      storage: { get: async () => ({}), set: async () => {}, remove: async () => {} },
+      port: { postMessage: (message) => messages.push(message) },
+    });
+    await ui.ready;
+    await ui.openPanel();
+    for (const id of allPlatforms) {
+      ui.rows.get(id).checkbox.checked = false;
+      ui.rows.get(id).checkbox.dispatchEvent(new FakeEvent('change'));
+    }
+    expect(ui.state.selected).toEqual([]);
+    const messageCount = messages.length;
+
+    await ui.openPanel();
+    expect(messages).toHaveLength(messageCount);
+    ui.closePanel();
+    await ui.openPanel();
+    expect(messages).toHaveLength(messageCount);
+    expect(allPlatforms.every((id) => {
+      const row = ui.rows.get(id);
+      return row.checkbox.checked === false && row.status.textContent === '未选择';
+    })).toBe(true);
+    expect(ui.alert.textContent).toBe('至少选择一个平台');
+    await ui.startBatch();
+    expect(messages).toHaveLength(messageCount);
+    expect(ui.alert.textContent).toBe('至少选择一个平台');
+
+    ui.rows.get('weixin').checkbox.checked = true;
+    ui.rows.get('weixin').checkbox.dispatchEvent(new FakeEvent('change'));
+    await ui.openPanel();
+    expect(messages.at(-1)).toEqual({ type: 'CHECK_AUTH', platformIds: ['weixin'] });
+    expect(ui.alert.textContent).toBe('');
+  });
+
   it('restores chrome.storage.local selection before opening and keeps empty selection transient', async () => {
     const { createUi } = loadTestApi();
     const { doc, anchor } = makeUiDom();

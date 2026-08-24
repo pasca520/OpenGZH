@@ -644,6 +644,11 @@
       for (const platformId of PLATFORM_IDS) {
         setStatus(platformId, state.selected.includes(platformId) ? 'checking-auth' : 'unselected');
       }
+      if (!state.selected.length) {
+        setAlert('至少选择一个平台');
+        return false;
+      }
+      setAlert('');
       post({ type: 'CHECK_AUTH', platformIds: state.selected.slice() });
     }
 
