@@ -68,6 +68,11 @@ async function readResponseText(response, fallback = '') {
   }
 }
 
+async function readResponseTextStrict(response) {
+  if (typeof response?.text !== 'function') throw new TypeError('响应不可读取');
+  return response.text();
+}
+
 function parseObject(text) {
   let data;
   try {
@@ -194,7 +199,8 @@ function parseHtml(source) {
     }
     if (source.startsWith('<!--', index)) {
       const end = source.indexOf('-->', index + 4);
-      index = end < 0 ? source.length : end + 3;
+      if (end < 0) throw platformChanged('知乎正文注释未闭合');
+      index = end + 3;
       continue;
     }
     const token = readTag(source, index);
@@ -385,7 +391,7 @@ async function negotiateImage(runtime, bytes) {
   }
   const status = responseStatus(response);
   if ([401, 403].includes(status)) throw authRequired();
-  if (isRedirect(response)) throw platformChanged('知乎图片协商地址发生跳转', { httpStatus: status });
+  if (isRedirect(response)) throw authRequired();
   if (!isOk(response)) throw imageUploadError(`知乎图片协商失败: ${status}`, { httpStatus: status });
   const data = parseObject(await readResponseText(response));
   const uploadFile = validateUploadFile(data?.upload_file);
@@ -406,7 +412,7 @@ async function pollImage(runtime, imageId, delay) {
     }
     const status = responseStatus(response);
     if ([401, 403].includes(status)) throw authRequired();
-    if (isRedirect(response)) throw platformChanged('知乎图片状态地址发生跳转', { httpStatus: status });
+    if (isRedirect(response)) throw authRequired();
     if (!isOk(response)) throw imageUploadError(`知乎图片状态查询失败: ${status}`, { httpStatus: status });
     const data = parseObject(await readResponseText(response));
     const hash = safeOpaqueId(data?.original_hash, IMAGE_HASH);
@@ -540,8 +546,13 @@ export function createZhihuAdapter({
             }
             const status = responseStatus(createResponse);
             if ([401, 403].includes(status)) throw authRequired();
-            if (isRedirect(createResponse)) throw platformChanged('知乎创建草稿地址发生跳转', { httpStatus: status });
-            const text = await readResponseText(createResponse);
+            if (isRedirect(createResponse)) throw authRequired();
+            let text;
+            try {
+              text = await readResponseTextStrict(createResponse);
+            } catch (_error) {
+              throw new PlatformError('UNKNOWN_REMOTE_STATE', '无法确认知乎是否已创建空草稿', { httpStatus: status, retryable: false });
+            }
             const data = parseObject(text);
             const returnedId = safeOpaqueId(data?.id);
             if (returnedId) {
@@ -568,7 +579,7 @@ export function createZhihuAdapter({
           }
           const updateStatus = responseStatus(updateResponse);
           if ([401, 403].includes(updateStatus)) throw authRequired(draftId);
-          if (isRedirect(updateResponse)) throw new PlatformError('DRAFT_UPDATE_FAILED', '知乎草稿更新地址发生跳转', { draftId, httpStatus: updateStatus, retryable: false });
+          if (isRedirect(updateResponse)) throw authRequired(draftId);
           if (!isOk(updateResponse)) throw new PlatformError('DRAFT_UPDATE_FAILED', `知乎草稿更新失败: ${updateStatus}`, { draftId, httpStatus: updateStatus, retryable: true });
           return { draftId, draftUrl: `https://zhuanlan.zhihu.com/p/${encodeURIComponent(draftId)}/edit` };
         });
