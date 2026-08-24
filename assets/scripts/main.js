@@ -137,6 +137,10 @@ const XHS_DENSITY_LABELS = { relaxed: '舒展', standard: '标准', compact: '�
 let xhsPaginationTimer = null;
 let xhsPaginationRevision = 0;
 let xhsScrollSelectionTimer = null;
+let renderTimer = null;
+let renderRevision = 0;
+let renderInFlight = null;
+let statsTimer = null;
 let xhsPreviewObserver = null;
 let xhsMeasureStageEl = null;
 const xhsPreviewUrlCache = new Map();
@@ -1201,6 +1205,7 @@ function getResolvedCodeTheme() {
 
 function toggleToc() {
   tocVisible.value = !tocVisible.value;
+  flushRenderNow();
   persistDocumentState();
 }
 
@@ -1219,29 +1224,80 @@ function scrollToTocHeading(id) {
   });
 }
 
-async function renderMarkdown() {
-  if (!markdownInput.value.trim()) {
-    renderedContent.value = '';
-    return;
-  }
-  if (!md) return;
+/**
+ * 渲染核心：执行一次完整渲染。revision 为本次渲染的竞态号；
+ * 渲染完成后写入 renderedContent 前校验 revision 未过期，过期则丢弃结果
+ * （仿照 xhsPaginationRevision 模式）。revision 为 null 时不做校验（即时渲染）。
+ */
+function performRender(revision) {
+  const job = (async () => {
+    if (!markdownInput.value.trim()) {
+      if (revision === null || revision === renderRevision) renderedContent.value = '';
+      return;
+    }
+    if (!md) return;
 
-  const styleConfig = STYLES[currentStyle.value];
-  if (!styleConfig) return;
+    const styleConfig = STYLES[currentStyle.value];
+    if (!styleConfig) return;
 
-  try {
-    renderedContent.value = await renderPipeline({
-      markdown: markdownInput.value,
-      md,
-      imageStore,
-      styleConfig,
-      styleOverride: getActiveDocument()?.styleOverride,
-      codeTheme: getResolvedCodeTheme(),
-      displaySettings: displaySettings.value
-    });
-  } catch (error) {
-    console.error('渲染失败:', error);
+    try {
+      const result = await renderPipeline({
+        markdown: markdownInput.value,
+        md,
+        imageStore,
+        styleConfig,
+        styleOverride: getActiveDocument()?.styleOverride,
+        codeTheme: getResolvedCodeTheme(),
+        displaySettings: displaySettings.value
+      });
+      if (revision !== null && revision !== renderRevision) return; // 过期丢弃
+      renderedContent.value = result;
+    } catch (error) {
+      console.error('渲染失败:', error);
+    }
+  })();
+  renderInFlight = job; // 供 flushPendingRender 等待 in-flight 渲染
+  return job;
+}
+
+function renderMarkdown() {
+  return performRender(null);
+}
+
+/** 尾沿防抖：连续输入合并为最后一次 180ms 后渲染；每次调用递增 revision 使旧渲染过期。 */
+function scheduleRender(delay = 180) {
+  clearTimeout(renderTimer);
+  const revision = ++renderRevision;
+  renderTimer = setTimeout(() => {
+    renderTimer = null;
+    performRender(revision);
+  }, delay);
+}
+
+/** 节流：300ms 窗口内至多执行一次 updateStats（尾沿，执行时读取最新输入）。 */
+function scheduleStats(delay = 300) {
+  if (statsTimer) return;
+  statsTimer = setTimeout(() => {
+    statsTimer = null;
+    updateStats();
+  }, delay);
+}
+
+/** 强制立即渲染：清理 pending timer、递增 revision 使 in-flight 渲染失效、立即执行并返回 Promise。 */
+function flushRenderNow() {
+  clearTimeout(renderTimer);
+  renderTimer = null;
+  return performRender(++renderRevision);
+}
+
+/** 冲刷 pending 渲染：有 timer 未触发则立即执行同一渲染并等待完成；无 pending 则直接 resolve。 */
+function flushPendingRender() {
+  if (renderTimer) {
+    clearTimeout(renderTimer);
+    renderTimer = null;
+    return performRender(renderRevision);
   }
+  return renderInFlight || Promise.resolve();
 }
 
 function sortDocumentsByCurrentOrder() {
@@ -1267,7 +1323,7 @@ function switchDocument(documentId) {
   persistDocumentState();
   activeDocumentId.value = documentId;
   syncEditorFromActiveDocument();
-  renderMarkdown();
+  flushRenderNow();
   scheduleXhsPagination(0);
 }
 
@@ -1751,7 +1807,8 @@ function exportMarkdown() {
   toast.show('已导出 Markdown', 'success');
 }
 
-function exportHTML() {
+async function exportHTML() {
+  await flushPendingRender();
   const activeDoc = getActiveDocument();
   const blob = new Blob([renderedContent.value], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
@@ -1811,6 +1868,8 @@ function resetToDefault() {
 }
 
 async function doCopy() {
+  // 复制前强制冲刷 pending 渲染，保证复制内容对齐到最新渲染结果
+  await flushPendingRender();
   // 复制与预览共用同一 merged 样式配置（含文档级覆盖），保证粘贴即所见
   const styleConfig = mergeTheme(STYLES[currentStyle.value], getActiveDocument()?.styleOverride);
   const success = await copyToWechat({
@@ -1846,7 +1905,7 @@ function selectCodeTheme(key) {
   } catch (_error) {
     // ignore
   }
-  renderMarkdown();
+  flushRenderNow();
 }
 
 function clampNumber(value, min, max, fallback, precision = 0) {
@@ -2012,7 +2071,7 @@ function updateStyleOverride(patch) {
   doc.styleOverride = normalizeStyleOverride(next);
   markCurrentDocumentDirty();
   schedulePersistDocumentState();
-  renderMarkdown();
+  flushRenderNow();
 }
 
 function setStyleToken(key, value) {
@@ -2061,7 +2120,7 @@ function clearStyleOverride() {
   doc.styleOverride = {};
   markCurrentDocumentDirty();
   schedulePersistDocumentState();
-  renderMarkdown();
+  flushRenderNow();
   toast.show('已还原模板默认样式', 'info');
 }
 
@@ -2257,7 +2316,8 @@ function insertStyleBox(key) {
   const snippet = insertBoxMarkdown(key);
   if (!snippet) return;
   insertAtCursor(snippet);
-  renderMarkdown();
+  // insertAtCursor 已触发 watch(markdownInput)，由 scheduleRender 统一合并渲染，避免重复解析
+  scheduleRender();
 }
 
 function toggleStyleBrush() {
@@ -3426,8 +3486,8 @@ async function exportCoverPngAction() {
 const app = createApp({
   setup() {
     watch(markdownInput, (value) => {
-      renderMarkdown();
-      updateStats();
+      scheduleRender();
+      scheduleStats();
       scheduleXhsPagination();
 
       if (suppressEditorSync) {
@@ -3459,17 +3519,17 @@ const app = createApp({
     });
 
     watch(currentStyle, () => {
-      renderMarkdown();
+      flushRenderNow();
       persistDocumentState();
     });
 
     watch(codeBlockSettings, () => {
-      renderMarkdown();
+      flushRenderNow();
       persistDocumentState();
     }, { deep: true });
 
     watch(displaySettings, () => {
-      renderMarkdown();
+      flushRenderNow();
       persistDocumentState();
     }, { deep: true });
 
