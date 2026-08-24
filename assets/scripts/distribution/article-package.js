@@ -59,6 +59,7 @@ export function toPortableMarkdown(markdown = '') {
       if (cardDepth > 0) output.push(line);
       continue;
     }
+    if (/^<!--\s*xhs-page\s*-->$/.test(trimmed)) continue;
     if (isDirectiveOpen(line)) cardDepth += 1;
     output.push(line);
   }
@@ -164,17 +165,29 @@ export function toSemanticHtml(html = '') {
 
 function imageSourcesFromMarkdown(markdown) {
   const matches = [];
-  const pattern = /!\[[^\]]*\]\(\s*(?:<([^>]+)>|([^\s)]+))/g;
+  const pattern = /!\[([^\]]*)\]\(\s*(?:<([^>]+)>|([^\s)]+))/g;
   let match;
-  while ((match = pattern.exec(markdown))) matches.push({ index: match.index, source: match[1] || match[2] });
+  while ((match = pattern.exec(markdown))) {
+    matches.push({ index: match.index, source: match[2] || match[3], alt: match[1] || '' });
+  }
   return matches;
 }
 
 function imageSourcesFromHtml(html) {
   const matches = [];
-  const pattern = /<img\b[^>]*\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi;
+  const pattern = /<img\b[^>]*>/gi;
   let match;
-  while ((match = pattern.exec(html))) matches.push({ index: match.index, source: match[1] ?? match[2] ?? match[3] });
+  while ((match = pattern.exec(html))) {
+    const tag = match[0];
+    const sourceMatch = tag.match(/\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
+    if (!sourceMatch) continue;
+    const altMatch = tag.match(/\balt\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
+    matches.push({
+      index: match.index,
+      source: sourceMatch[1] ?? sourceMatch[2] ?? sourceMatch[3],
+      alt: altMatch ? (altMatch[1] ?? altMatch[2] ?? altMatch[3]) : ''
+    });
+  }
   return matches;
 }
 
@@ -182,7 +195,7 @@ function portableImageSources(markdown) {
   return [
     ...imageSourcesFromMarkdown(markdown),
     ...imageSourcesFromHtml(markdown)
-  ].sort((left, right) => left.index - right.index).map(({ source }) => source);
+  ].sort((left, right) => left.index - right.index);
 }
 
 function isImageSource(source) {
@@ -194,46 +207,35 @@ function extensionFromMime(mime) {
   return mime.slice(mime.indexOf('/') + 1).replace(/\+xml$/i, '').replace(/[^a-z0-9]+/gi, '') || 'bin';
 }
 
-function stableRecordName(name, fallback) {
-  const basename = String(name || '').split(/[\\/]/).pop().replace(/[^a-z0-9._-]/gi, '_');
-  return basename && basename !== '.' && basename !== '..' ? basename : fallback;
-}
-
-function dataImageAsset(source, index) {
-  const match = source.match(DATA_IMAGE_PATTERN);
+function dataImageAsset(ref, index, alt) {
+  const match = ref.match(DATA_IMAGE_PATTERN);
   if (!match || !/^image\//i.test(match[1])) {
-    throw contractError(ARTICLE_INVALID, `Invalid image data URL: ${source.slice(0, 40)}`);
+    throw contractError(ARTICLE_INVALID, `Invalid image data URL: ${ref.slice(0, 40)}`);
   }
   const mimeType = match[1].toLowerCase();
   const extension = extensionFromMime(mimeType);
-  let blob;
   try {
-    const binary = atob(match[2]);
-    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-    blob = new Blob([bytes], { type: mimeType });
+    atob(match[2]);
   } catch {
-    throw contractError(ARTICLE_INVALID, `Invalid image data URL: ${source.slice(0, 40)}`);
+    throw contractError(ARTICLE_INVALID, `Invalid image data URL: ${ref.slice(0, 40)}`);
   }
   const filename = `generated-${index}.${extension}`;
-  return { source, filename, name: filename, mimeType, blob };
+  return { ref, kind: 'data-url', dataUrl: ref, mimeType, filename, alt };
 }
 
-async function imageAsset(source, index, imageStore) {
-  if (source.startsWith('data:')) return dataImageAsset(source, index);
-  const id = source.slice('img://'.length);
+async function imageAsset(ref, index, imageStore, alt) {
+  if (ref.startsWith('data:')) return dataImageAsset(ref, index, alt);
+  const imageId = ref.slice('img://'.length);
   let record;
   try {
-    record = await imageStore?.getImageRecord?.(id);
+    record = await imageStore?.getImageRecord?.(imageId);
   } catch {
-    throw contractError(IMAGE_READ_FAILED, `Image record could not be read: ${id}`);
+    throw contractError(IMAGE_READ_FAILED, `Image record could not be read: ${imageId}`);
   }
-  if (!record?.blob) throw contractError(IMAGE_READ_FAILED, `Image record is missing: ${id}`);
-  const mimeType = record.mimeType || record.blob.type || 'application/octet-stream';
-  const baseName = stableRecordName(record.name, `generated-${index}`);
-  const filename = /\.[a-z0-9]{2,8}$/i.test(baseName)
-    ? baseName
-    : `${baseName}.${extensionFromMime(mimeType)}`;
-  return { source, id, filename, name: filename, mimeType, blob: record.blob };
+  if (!record?.blob) throw contractError(IMAGE_READ_FAILED, `Image record is missing: ${imageId}`);
+  const mimeType = record.blob.type || 'application/octet-stream';
+  const filename = record.name || `generated-${index}.${extensionFromMime(mimeType)}`;
+  return { ref, kind: 'indexed-db', imageId, mimeType, filename, alt };
 }
 
 function freezeImages(images) {
@@ -248,18 +250,23 @@ export async function buildDistributionPackage({
   documentId,
   title,
   markdown = '',
-  renderedHTML = '',
+  renderedHtml = '',
   styleConfig,
   imageStore,
   codeTheme,
   displaySettings,
-  prepareWechatContent = async ({ renderedHTML: html }) => ({ html, imageFailures: [] })
+  prepareWechatContent = async ({ renderedHTML: html }) => ({ html, imageFailures: [] }),
+  now = Date.now
 }) {
-  const createdAt = Date.now();
-  const portableMarkdown = toPortableMarkdown(markdown);
-  const semanticHtml = toSemanticHtml(renderedHTML);
+  const createdAt = now();
+  const normalizedDocumentId = String(documentId || '');
+  const normalizedTitle = String(title || '').trim();
+  const normalizedMarkdown = String(markdown || '');
+  const normalizedRenderedHtml = String(renderedHtml || '');
+  const portableMarkdown = toPortableMarkdown(normalizedMarkdown);
+  const semanticHtml = toSemanticHtml(normalizedRenderedHtml);
   const prepared = await prepareWechatContent({
-    renderedHTML,
+    renderedHTML: normalizedRenderedHtml,
     styleConfig,
     imageStore,
     codeTheme,
@@ -271,22 +278,28 @@ export async function buildDistributionPackage({
     throw contractError(IMAGE_READ_FAILED, 'WeChat image preparation failed');
   }
   const wechatHtml = typeof prepared === 'string' ? prepared : (prepared?.html ?? prepared?.wechatHtml ?? '');
-  const sources = [
+  const imageOccurrences = [
     ...portableImageSources(portableMarkdown),
-    ...imageSourcesFromHtml(semanticHtml).map(({ source }) => source),
-    ...imageSourcesFromHtml(wechatHtml).map(({ source }) => source)
-  ].filter(isImageSource);
-  const uniqueSources = [...new Set(sources)];
+    ...imageSourcesFromHtml(semanticHtml),
+    ...imageSourcesFromHtml(wechatHtml)
+  ].filter(({ source }) => isImageSource(source));
+  const seenRefs = new Set();
+  const uniqueImages = imageOccurrences.filter(({ source }) => {
+    if (seenRefs.has(source)) return false;
+    seenRefs.add(source);
+    return true;
+  });
   const images = [];
-  for (let index = 0; index < uniqueSources.length; index += 1) {
-    images.push(await imageAsset(uniqueSources[index], index + 1, imageStore));
+  for (let index = 0; index < uniqueImages.length; index += 1) {
+    const { source, alt } = uniqueImages[index];
+    images.push(await imageAsset(source, index + 1, imageStore, alt));
   }
 
   return Object.freeze({
     schemaVersion: DISTRIBUTION_SCHEMA_VERSION,
-    documentId,
-    title,
-    markdown,
+    documentId: normalizedDocumentId,
+    title: normalizedTitle,
+    markdown: normalizedMarkdown,
     portableMarkdown,
     semanticHtml,
     wechatHtml,
