@@ -89,6 +89,7 @@ import {
 const { createApp, ref, reactive, watch, nextTick, onMounted, onBeforeUnmount, computed } = window.Vue;
 
 const UNTITLED_PREFIX = '未命名文档';
+const CRASH_RECOVERY_KEY = 'opengzh-crash-recovery';
 
 const markdownInput = ref('');
 const renderedContent = ref('');
@@ -691,23 +692,45 @@ function handleSaveError() {
   currentSaveState.value = 'error';
 }
 
-function persistDocumentState() {
-  const success = savePreferences(
-    currentStyle.value,
-    getActiveDocument()?.content || markdownInput.value,
-    documents.value,
-    activeDocumentId.value,
-    codeBlockSettings.value,
-    tocVisible.value,
-    displaySettings.value
-  );
+let persistInFlight = false;
+let persistQueued = false;
+
+async function persistDocumentState() {
+  // 防重入：写入进行中时合并为一次尾随调用，保证最终状态落盘
+  if (persistInFlight) {
+    persistQueued = true;
+    return false;
+  }
+
+  persistInFlight = true;
+  currentSaveState.value = 'saving';
+  let success = false;
+  try {
+    success = await savePreferences(
+      currentStyle.value,
+      getActiveDocument()?.content || markdownInput.value,
+      documents.value,
+      activeDocumentId.value,
+      codeBlockSettings.value,
+      tocVisible.value,
+      displaySettings.value
+    );
+  } catch (_error) {
+    success = false;
+  } finally {
+    persistInFlight = false;
+  }
+
+  if (persistQueued) {
+    persistQueued = false;
+    return persistDocumentState();
+  }
 
   if (success) {
     handleSaveSuccess();
   } else {
     handleSaveError();
   }
-
   return success;
 }
 
@@ -716,6 +739,58 @@ function schedulePersistDocumentState() {
     onSuccess: handleSaveSuccess,
     onError: handleSaveError
   });
+}
+
+/**
+ * 崩溃恢复兜底：把最新 activeDoc.content 镜像写一份到 localStorage。
+ * 允许配额超限静默失败（try/catch 吞掉）。
+ */
+function writeCrashRecoveryMirror() {
+  try {
+    const activeDoc = getActiveDocument();
+    localStorage.setItem(CRASH_RECOVERY_KEY, JSON.stringify({
+      documentId: activeDoc?.id || null,
+      content: activeDoc?.content ?? markdownInput.value,
+      savedAt: Date.now()
+    }));
+  } catch (_error) {
+    // 配额超限等异常：静默失败，不影响主流程
+  }
+}
+
+function readCrashRecoveryMirror() {
+  try {
+    const raw = localStorage.getItem(CRASH_RECOVERY_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed.content === 'string' ? parsed : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+/** 尽力冲刷：触发 IndexedDB 写 + 写崩溃恢复镜像。unload 场景下 IndexedDB 写入是尽力而为。 */
+function flushOnLeave() {
+  writeCrashRecoveryMirror();
+  savePreferences(
+    currentStyle.value,
+    getActiveDocument()?.content || markdownInput.value,
+    documents.value,
+    activeDocumentId.value,
+    codeBlockSettings.value,
+    tocVisible.value,
+    displaySettings.value
+  ).catch(() => {});
+}
+
+function handleBeforeUnload() {
+  flushOnLeave();
+}
+
+function handleVisibilityChange() {
+  if (document.visibilityState === 'hidden') {
+    flushOnLeave();
+  }
 }
 
 // ── XHS Image Mode ─────────────────────────────────────────────
@@ -3414,7 +3489,11 @@ const app = createApp({
     onMounted(async () => {
       starredStyles.value = getStarredStyles();
 
-      const preferences = loadPreferences();
+      window.addEventListener('beforeunload', handleBeforeUnload);
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+
+      // IndexedDB 文档库初始化 + 旧 localStorage 数据迁移（loadPreferences 现为异步）
+      const preferences = await loadPreferences();
       currentStyle.value = preferences.currentStyle;
       codeBlockSettings.value = preferences.codeBlockSettings;
       displaySettings.value = preferences.displaySettings;
@@ -3518,13 +3597,34 @@ const app = createApp({
       activeDocumentId.value = preferences.activeDocumentId;
       ensureActiveDocument();
       syncEditorFromActiveDocument();
+
+      // 崩溃恢复：镜像内容比 IndexedDB 中对应文档新时提示恢复
+      const crashMirror = readCrashRecoveryMirror();
+      if (crashMirror) {
+        const mirroredDoc = documents.value.find((doc) => doc.id === crashMirror.documentId);
+        if (mirroredDoc && crashMirror.content !== mirroredDoc.content && crashMirror.savedAt > (mirroredDoc.updatedAt || 0)) {
+          toast.show('检测到未保存的编辑内容，正在恢复…', 'info', 6000);
+          mirroredDoc.content = crashMirror.content;
+          if (activeDocumentId.value === mirroredDoc.id) {
+            syncEditorFromActiveDocument();
+          }
+        }
+        try {
+          localStorage.removeItem(CRASH_RECOVERY_KEY);
+        } catch (_error) {
+          // ignore
+        }
+      }
+
       renderMarkdown();
-      persistDocumentState();
+      await persistDocumentState();
 
       nextTick(() => setupSyncScroll());
     });
 
     onBeforeUnmount(() => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       document.removeEventListener('keydown', handleDocumentKeydown);
       if (cardPopoverWindowResizeHandler) {
         window.removeEventListener('resize', cardPopoverWindowResizeHandler);
