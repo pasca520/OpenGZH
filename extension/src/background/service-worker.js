@@ -67,11 +67,20 @@ function safeDraftUrl(platformId, value) {
   return url.href;
 }
 
+function sanitizePlatformState(message) {
+  if (message?.type !== 'PLATFORM_STATE' || !Object.hasOwn(message, 'draftUrl')) return message;
+  const sanitized = { ...message };
+  const draftUrl = safeDraftUrl(message.platformId, message.draftUrl);
+  if (draftUrl) sanitized.draftUrl = draftUrl;
+  else delete sanitized.draftUrl;
+  return sanitized;
+}
+
 export function isAllowedSender(sender) {
   if (sender?.frameId !== 0 || typeof sender?.url !== 'string') return false;
   try {
     const url = new URL(sender.url);
-    return (url.protocol === 'https:' && url.hostname === 'opengzh.pasca.fun')
+    return (url.protocol === 'https:' && url.hostname === 'opengzh.pasca.fun' && !url.port && !url.username && !url.password)
       || (url.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(url.hostname));
   } catch (_error) {
     return false;
@@ -136,6 +145,7 @@ export function registerServiceWorker(chromeApi = globalThis.chrome, adapterFact
     let disposed = false;
     let runningType = '';
     let batchReserved = false;
+    const retryReservations = new Set();
     let queue = Promise.resolve();
     const taskContexts = new Map();
     const latestResults = new Map();
@@ -146,6 +156,7 @@ export function registerServiceWorker(chromeApi = globalThis.chrome, adapterFact
       imageBroker.dispose();
       taskContexts.clear();
       latestResults.clear();
+      retryReservations.clear();
     };
     const send = (message) => {
       if (disposed) return false;
@@ -176,7 +187,7 @@ export function registerServiceWorker(chromeApi = globalThis.chrome, adapterFact
         if (disposed) throw new PlatformError('NETWORK_ERROR', '页面连接已断开', { retryable: true });
         return createRequestRuntime({ platformId, taskId, imageBroker });
       },
-      onState: (message) => send(message),
+      onState: (message) => send(sanitizePlatformState(message)),
       persist,
     });
 
@@ -197,6 +208,14 @@ export function registerServiceWorker(chromeApi = globalThis.chrome, adapterFact
         fail(message, invalid('当前批次仍在执行，请等待批次完成'));
         return Promise.resolve();
       }
+      const retryKey = message.type === 'RETRY_PLATFORM' && nonEmpty(message.taskId) && nonEmpty(message.platformId)
+        ? `${message.taskId}\u0000${message.platformId}`
+        : null;
+      if (retryKey && retryReservations.has(retryKey)) {
+        fail(message, invalid('该平台已有重试任务在执行，请等待完成'));
+        return Promise.resolve();
+      }
+      if (retryKey) retryReservations.add(retryKey);
       if (message.type === 'START_BATCH') batchReserved = true;
       queue = queue.then(async () => {
         if (disposed) return;
@@ -208,6 +227,7 @@ export function registerServiceWorker(chromeApi = globalThis.chrome, adapterFact
         } finally {
           runningType = '';
           if (message.type === 'START_BATCH') batchReserved = false;
+          if (retryKey) retryReservations.delete(retryKey);
         }
       });
       return queue;

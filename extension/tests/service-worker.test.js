@@ -27,6 +27,7 @@ describe('service worker boundary', () => {
     [{ url: 'https://opengzh.pasca.fun/', frameId: 0 }, true],
     [{ url: 'http://localhost:8080/', frameId: 0 }, true],
     [{ url: 'http://127.0.0.1:8080/', frameId: 0 }, true],
+    [{ url: 'https://opengzh.pasca.fun:8443/', frameId: 0 }, false],
     [{ url: 'https://opengzh.pasca.fun/', frameId: 1 }, false],
     [{ url: 'https://evil.example/', frameId: 0 }, false],
   ])('validates sender %#', (sender, expected) => expect(isAllowedSender(sender)).toBe(expected));
@@ -149,6 +150,59 @@ describe('service worker boundary', () => {
     expect(port.messages.some((message) => message.type === 'FATAL_ERROR')).toBe(false);
     expect(port.messages.find((message) => message.type === 'BATCH_COMPLETE')).toMatchObject({ taskId: 'task-storage', operationId: 'op-storage', results: [{ draftUrl: 'https://mp.weixin.qq.com/d?appmsgid=d' }] });
     expect(chromeApi.tabs.create).toHaveBeenCalledWith({ url: 'https://mp.weixin.qq.com/d?appmsgid=d', active: false });
+  });
+
+  it('sanitizes PLATFORM_STATE draft URLs before sending them to content', async () => {
+    const onConnect = { addListener: vi.fn() };
+    const port = portFixture();
+    const adapter = {
+      id: 'weixin',
+      checkAuth: vi.fn(async () => ({ authenticated: true })),
+      uploadImage: vi.fn(),
+      saveDraft: vi.fn(async () => ({ draftId: 'd', draftUrl: 'https://mp.weixin.qq.com:8443/d?token=raw-token&authorization=raw-auth&appmsgid=d#raw-fragment' })),
+    };
+    const chromeApi = { runtime: { onConnect }, permissions: { contains: vi.fn(async () => true) }, storage: { session: { set: vi.fn(async () => {}) } }, tabs: { create: vi.fn(), update: vi.fn() } };
+    registerServiceWorker(chromeApi, { weixin: () => adapter });
+    onConnect.addListener.mock.calls[0][0](port);
+    await port.receive({ type: 'START_BATCH', taskId: 'task-state-url', operationId: 'op-state-url', platformIds: ['weixin'], article });
+    const serialized = JSON.stringify(port.messages);
+    expect(serialized).not.toContain('raw-token');
+    expect(serialized).not.toContain('raw-auth');
+    const state = port.messages.find((message) => message.type === 'PLATFORM_STATE' && message.state === 'success');
+    expect(state).toBeDefined();
+    expect(state).not.toHaveProperty('draftUrl');
+    expect(port.messages.some((message) => message.type === 'FATAL_ERROR')).toBe(true);
+  });
+
+  it('deduplicates retry commands per task and platform, then releases the reservation', async () => {
+    const onConnect = { addListener: vi.fn() };
+    const port = portFixture();
+    let releaseRetry;
+    const retryGate = new Promise((resolve) => { releaseRetry = resolve; });
+    let saveCount = 0;
+    const adapter = {
+      id: 'weixin',
+      checkAuth: vi.fn(async () => ({ authenticated: true })),
+      uploadImage: vi.fn(),
+      saveDraft: vi.fn(async () => {
+        saveCount += 1;
+        if (saveCount === 2) await retryGate;
+        throw new Error('known create failure');
+      }),
+    };
+    const chromeApi = { runtime: { onConnect }, permissions: { contains: vi.fn(async () => true) }, storage: { session: { set: vi.fn(async () => {}) } }, tabs: { create: vi.fn(), update: vi.fn() } };
+    registerServiceWorker(chromeApi, { weixin: () => adapter });
+    onConnect.addListener.mock.calls[0][0](port);
+    await port.receive({ type: 'START_BATCH', taskId: 'task-retry-dedupe', operationId: 'op-start', platformIds: ['weixin'], article });
+    const firstRetry = port.receive({ type: 'RETRY_PLATFORM', taskId: 'task-retry-dedupe', operationId: 'op-retry-1', platformId: 'weixin' });
+    await vi.waitFor(() => expect(saveCount).toBe(2));
+    port.receive({ type: 'RETRY_PLATFORM', taskId: 'task-retry-dedupe', operationId: 'op-retry-2', platformId: 'weixin' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(port.messages.at(-1)).toMatchObject({ type: 'FATAL_ERROR', taskId: 'task-retry-dedupe', operationId: 'op-retry-2' });
+    releaseRetry();
+    await firstRetry;
+    await port.receive({ type: 'RETRY_PLATFORM', taskId: 'task-retry-dedupe', operationId: 'op-retry-3', platformId: 'weixin' });
+    expect(saveCount).toBe(3);
   });
 
   it('fails closed for malformed auth responses and adapter identity in CHECK_AUTH', async () => {
