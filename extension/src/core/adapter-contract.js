@@ -113,7 +113,7 @@ function findInlineCodeClose(source, start, length) {
   return -1;
 }
 
-function protectedRanges(source) {
+function protectedRanges(source, markdown) {
   const ranges = [];
   const add = (start, end) => ranges.push({ start, end: Math.max(end, start + 1) });
   for (let index = 0; index < source.length;) {
@@ -121,6 +121,10 @@ function protectedRanges(source) {
       const end = source.indexOf('-->', index + 4);
       add(index, end < 0 ? source.length : end + 3);
       index = end < 0 ? source.length : end + 3;
+      continue;
+    }
+    if (!markdown) {
+      index += 1;
       continue;
     }
     const lineStart = index === 0 || source[index - 1] === '\n';
@@ -147,7 +151,7 @@ function protectedRanges(source) {
         continue;
       }
     }
-    if (source[index] === '`') {
+    if (source[index] === '`' && !isEscaped(source, index)) {
       let run = 1;
       while (source[index + run] === '`') run += 1;
       const close = findInlineCodeClose(source, index + run, run);
@@ -213,7 +217,7 @@ function normalizeLabel(label) {
 
 export function imageReferencesInContent(content, markdown = false) {
   const source = String(content || '');
-  const ranges = protectedRanges(source);
+  const ranges = protectedRanges(source, markdown);
   const spans = [];
   const referenceLabels = new Set();
   const referenceUsages = [];

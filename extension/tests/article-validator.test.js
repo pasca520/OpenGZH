@@ -337,4 +337,45 @@ describe('validateSelectedPlatformImages', () => {
       images: [],
     }, ['juejin'])).not.toThrow();
   });
+
+  it('scans image tags inside backticks in semantic HTML', () => {
+    const external = 'https://images.example.com/semantic-literal.png';
+    expect(() => validateSelectedPlatformImages({
+      ...article,
+      semanticHtml: '<p>`literal <img src="' + external + '">`</p>',
+      images: [],
+    }, ['zhihu'])).toThrowError(expect.objectContaining({ code: 'IMAGE_NOT_LOCAL' }));
+  });
+
+  it('scans a Markdown image after ordinary less-than text', () => {
+    const external = 'https://images.example.com/less-than.png';
+    expect(() => validateSelectedPlatformImages({
+      ...article,
+      portableMarkdown: `2 < 3\n\n![remote](${external})`,
+      images: [],
+    }, ['juejin'])).toThrowError(expect.objectContaining({ code: 'IMAGE_NOT_LOCAL' }));
+  });
+
+  it('does not let escaped Markdown backticks hide a later image', () => {
+    const external = 'https://images.example.com/escaped-backtick.png';
+    expect(() => validateSelectedPlatformImages({
+      ...article,
+      portableMarkdown: ['\\`not code', `![remote](${external})`, '\\`'].join('\n'),
+      images: [],
+    }, ['juejin'])).toThrowError(expect.objectContaining({ code: 'IMAGE_NOT_LOCAL' }));
+  });
+
+  it('still ignores images inside valid Markdown inline code and fenced code', () => {
+    const external = 'https://images.example.com/code-only.png';
+    expect(() => validateSelectedPlatformImages({
+      ...article,
+      portableMarkdown: [
+        '`![inline](' + external + ')`',
+        '```',
+        `![fenced](${external})`,
+        '```',
+      ].join('\n'),
+      images: [],
+    }, ['juejin'])).not.toThrow();
+  });
 });
