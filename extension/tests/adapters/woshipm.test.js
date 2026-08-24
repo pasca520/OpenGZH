@@ -45,6 +45,21 @@ describe('Woshipm adapter', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it('does not accept auth-shaped text inside control-following regex literals', async () => {
+    const page = `
+      <script>
+        var userSettings={"uid":"1585"};
+        if (true) /; window.settings={"jltoken":"regex-token"}; var userSettings={"uid":"1585"}/dgimsuvy;
+        while (false) /; window.settings={"jltoken":"while-token"}; var userSettings={"uid":"1585"}/g;
+        for (;;) /; window.settings={"jltoken":"for-token"}; var userSettings={"uid":"1585"}/u;
+        with (scope) /; window.settings={"jltoken":"with-token"}; var userSettings={"uid":"1585"}/i;
+      </script>`;
+    const fetch = vi.fn().mockResolvedValue(response(page));
+    await expect(createWoshipmAdapter().checkAuth({ fetch, withHeaderRules: withRules }))
+      .rejects.toMatchObject({ code: 'PLATFORM_CHANGED', retryable: false });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it('fails closed when a top-level uid has no valid token', async () => {
     const pages = [
       '<script>var userSettings={uid:"1585"};</script>',
@@ -66,6 +81,19 @@ describe('Woshipm adapter', () => {
     await expect(adapter.checkAuth({ fetch, withHeaderRules: withRules })).resolves.toEqual({ authenticated: true, userId: '1585', username: '测试用户' });
     await expect(adapter.uploadImage({ fetch, withHeaderRules: withRules }, new Blob(['png']), 'hero.png'))
       .rejects.toMatchObject({ code: 'AUTH_REQUIRED', retryable: true });
+  });
+
+  it('maps writing-page 429 to RATE_LIMITED', async () => {
+    await expect(createWoshipmAdapter().checkAuth({ fetch: async () => response('', { status: 429 }), withHeaderRules: withRules }))
+      .rejects.toMatchObject({ code: 'RATE_LIMITED', retryable: true, httpStatus: 429 });
+  });
+
+  it('maps profile 429 to RATE_LIMITED', async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(response(writingPage))
+      .mockResolvedValueOnce(response('', { status: 429 }));
+    await expect(createWoshipmAdapter().checkAuth({ fetch, withHeaderRules: withRules }))
+      .rejects.toMatchObject({ code: 'RATE_LIMITED', retryable: true, httpStatus: 429 });
   });
 
   it('maps auth network, 5xx, malformed profile, and uid mismatch separately', async () => {

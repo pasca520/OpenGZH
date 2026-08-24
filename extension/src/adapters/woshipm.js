@@ -117,7 +117,9 @@ function maskJavascript(source) {
   const mask = (index) => {
     if (index >= 0 && index < masked.length && masked[index] !== '\n' && masked[index] !== '\r') masked[index] = ' ';
   };
-  const canStartRegex = (token) => ['start', 'operator', 'open', 'comma', 'colon', 'keyword'].includes(token);
+  const controlWords = new Set(['catch', 'for', 'if', 'switch', 'while', 'with']);
+  const canStartRegex = (token) => ['start', 'operator', 'open', 'comma', 'colon', 'keyword', 'control-close'].includes(token);
+  const parenKinds = [];
   let mode = 'code';
   let quote = '';
   let previous = 'start';
@@ -193,14 +195,19 @@ function maskJavascript(source) {
       let cursor = index + 1;
       while (cursor < source.length && /[A-Za-z0-9_$]/u.test(source[cursor])) cursor += 1;
       const word = source.slice(index, cursor);
-      previous = ['return', 'throw', 'case', 'delete', 'void', 'typeof', 'instanceof', 'in', 'new', 'yield', 'await'].includes(word) ? 'keyword' : 'value';
+      if (controlWords.has(word)) previous = 'control';
+      else previous = ['return', 'throw', 'case', 'delete', 'do', 'else', 'void', 'typeof', 'instanceof', 'in', 'new', 'yield', 'await'].includes(word) ? 'keyword' : 'value';
       index = cursor - 1;
       continue;
     }
-    if (character === '(' || character === '[' || character === '{') previous = 'open';
+    if (character === '(') {
+      parenKinds.push(previous === 'control' ? 'control' : 'normal');
+      previous = 'open';
+    } else if (character === '[' || character === '{') previous = 'open';
     else if (character === ',' ) previous = 'comma';
     else if (character === ':') previous = 'colon';
-    else if (character === ')' || character === ']' || character === '}') previous = 'close';
+    else if (character === ')') previous = parenKinds.pop() === 'control' ? 'control-close' : 'close';
+    else if (character === ']' || character === '}') previous = 'close';
     else previous = 'operator';
   }
   return masked.join('');
@@ -389,6 +396,7 @@ export function createWoshipmAdapter() {
         catch (_error) { throw networkError('人人登录检测网络异常'); }
         if (isRedirect(page) || [401, 403].includes(responseStatus(page))) return { authenticated: false };
         const pageStatus = responseStatus(page);
+        if (pageStatus === 429) throw new PlatformError('RATE_LIMITED', '人人登录检测请求过于频繁', { httpStatus: pageStatus, retryable: true });
         if (pageStatus >= 500) throw networkError('人人登录检测网络异常', { httpStatus: pageStatus });
         if (!isOk(page)) throw platformChanged('人人登录页响应状态已变化', { httpStatus: pageStatus });
         let html;
@@ -405,6 +413,7 @@ export function createWoshipmAdapter() {
         catch (_error) { throw networkError('人人用户资料网络异常'); }
         if (isRedirect(response) || [401, 403].includes(responseStatus(response))) return { authenticated: false };
         const status = responseStatus(response);
+        if (status === 429) throw new PlatformError('RATE_LIMITED', '人人用户资料请求过于频繁', { httpStatus: status, retryable: true });
         if (status >= 500) throw networkError('人人用户资料网络异常', { httpStatus: status });
         if (!isOk(response)) throw platformChanged('人人用户资料响应状态已变化', { httpStatus: status });
         let text;
