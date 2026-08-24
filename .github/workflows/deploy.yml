@@ -33,7 +33,6 @@ jobs:
             --exclude='docs' \
             --exclude='deploy' \
             --exclude='assets/fonts' \
-            --exclude='assets/images/cover-illustrations' \
             --exclude='.claude' \
             --exclude='node_modules' \
             --exclude='.superpowers' \
@@ -76,7 +75,6 @@ jobs:
               --exclude='docs' \
               --exclude='deploy' \
               --exclude='assets/fonts' \
-              --exclude='assets/images/cover-illustrations' \
               --exclude='.claude' \
               --exclude='node_modules' \
               --exclude='.superpowers' \
