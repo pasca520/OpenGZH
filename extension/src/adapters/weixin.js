@@ -2,6 +2,8 @@ import { applyImageMap } from '../core/adapter-contract.js';
 import { PlatformError, redactSecrets, remoteStateError, summarizeRemote } from '../core/platform-errors.js';
 
 const HOME_URL = 'https://mp.weixin.qq.com/';
+const DRAFT_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
+const EXECUTABLE_SCRIPT_TYPES = new Set(['text/javascript', 'application/javascript', 'text/ecmascript', 'application/ecmascript', 'application/x-javascript', 'module']);
 const HEADER_RULES = Object.freeze([{
   id: 1001,
   priority: 1,
@@ -161,6 +163,37 @@ function skipWhitespace(source, start) {
   return index;
 }
 
+function isExecutableScript(attributes) {
+  const type = /(?:^|\s)type\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(attributes || '');
+  if (!type) return true;
+  const value = (type[1] ?? type[2] ?? type[3] ?? '').trim().toLowerCase().split(';', 1)[0];
+  return EXECUTABLE_SCRIPT_TYPES.has(value);
+}
+
+function skipLeadingTrivia(source, start) {
+  let cursor = start;
+  while (cursor < source.length) {
+    cursor = skipWhitespace(source, cursor);
+    if (source[cursor] === ';') {
+      cursor += 1;
+      continue;
+    }
+    if (source.startsWith('//', cursor)) {
+      const end = source.indexOf('\n', cursor + 2);
+      cursor = end < 0 ? source.length : end + 1;
+      continue;
+    }
+    if (source.startsWith('/*', cursor)) {
+      const end = source.indexOf('*/', cursor + 2);
+      if (end < 0) return -1;
+      cursor = end + 2;
+      continue;
+    }
+    return cursor;
+  }
+  return cursor;
+}
+
 function parseObjectProperties(source) {
   if (!source.startsWith('{')) return null;
   const properties = new Map();
@@ -210,20 +243,20 @@ function parseObjectProperties(source) {
 }
 
 function* bootstrapObjects(html) {
-  const scriptPattern = /<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi;
+  const scriptPattern = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi;
   for (const match of String(html).matchAll(scriptPattern)) {
-    const script = match[1];
+    if (!isExecutableScript(match[1])) continue;
+    const script = match[2];
     const masked = maskJavascript(script);
-    const assignments = /(?:^|[^\w$.])window\s*\.\s*wx\s*=\s*\{/gi;
-    let assignment;
-    while ((assignment = assignments.exec(masked))) {
-      const objectStart = assignment.index + assignment[0].lastIndexOf('{');
-      const objectEnd = balancedEnd(masked, objectStart);
-      if (objectEnd < 0) continue;
-      const properties = parseObjectProperties(script.slice(objectStart, objectEnd));
-      if (properties) yield properties;
-      assignments.lastIndex = objectEnd;
-    }
+    const cursor = skipLeadingTrivia(script, 0);
+    if (cursor < 0 || script.startsWith('<!--', cursor)) continue;
+    const assignment = /^window\s*\.\s*wx\s*=\s*\{/i.exec(masked.slice(cursor));
+    if (!assignment) continue;
+    const objectStart = cursor + assignment[0].lastIndexOf('{');
+    const objectEnd = balancedEnd(masked, objectStart);
+    if (objectEnd < 0) continue;
+    const properties = parseObjectProperties(script.slice(objectStart, objectEnd));
+    if (properties) yield properties;
   }
 }
 
@@ -259,6 +292,12 @@ function safeWeixinHref(href) {
   } catch (_error) {
     return null;
   }
+}
+
+function normalizeDraftId(value) {
+  if (typeof value !== 'string' && typeof value !== 'number') return null;
+  const draftId = String(value);
+  return DRAFT_ID_PATTERN.test(draftId) ? draftId : null;
 }
 
 function hasExplicitPort(value) {
@@ -551,15 +590,21 @@ export function createWeixinAdapter() {
           });
         }
         if (isResponseNotOk(response)) {
+          if (status >= 500) {
+            const draftId = normalizeDraftId(data.appMsgId);
+            throw new PlatformError('UNKNOWN_REMOTE_STATE', '微信公众号草稿请求状态未知，请人工检查草稿箱', {
+              ...(draftId ? { draftId } : {}),
+              httpStatus: status, remoteSummary: safeRemoteSummary(text), retryable: false,
+            });
+          }
           throw new PlatformError('DRAFT_CREATE_FAILED', `微信公众号草稿创建失败: ${status}`, {
             httpStatus: status, remoteSummary: safeRemoteSummary(text), retryable: true,
           });
         }
-        if ((typeof data.appMsgId !== 'string' && typeof data.appMsgId !== 'number') || !String(data.appMsgId).trim()) {
+        const draftId = normalizeDraftId(data.appMsgId);
+        if (!draftId) {
           throw new PlatformError('PLATFORM_CHANGED', '微信公众号草稿响应缺少 appMsgId', { httpStatus: status, remoteSummary: safeRemoteSummary(text), retryable: false });
         }
-        const draftId = String(data.appMsgId).trim();
-        if (!draftId) throw new PlatformError('PLATFORM_CHANGED', '微信公众号草稿响应缺少 appMsgId', { httpStatus: status, remoteSummary: safeRemoteSummary(text), retryable: false });
         const draftUrl = `https://mp.weixin.qq.com/cgi-bin/appmsg?t=media/appmsg_edit&action=edit&type=77&appmsgid=${encodeURIComponent(draftId)}&token=${encodeURIComponent(current.token)}&lang=zh_CN`;
         completedDraft = { draftId, draftUrl };
         return completedDraft;

@@ -44,15 +44,39 @@ describe('WeChat adapter', () => {
   });
 
   it.each([
-    ['single and double quoted strings', `const single = 'window.wx = { data: { t: "bad-token" } }'; const double = "window.wx = { ticket: 'bad-ticket' }";`],
-    ['template strings', 'const template = `window.wx = { data: { t: "bad-token" }, ticket: "bad-ticket", user_name: "bad-user" }`;'],
-    ['line and block comments', '// window.wx = { data: { t: "bad-token" }, ticket: "bad-ticket", user_name: "bad-user" };\n/* window.wx = { data: { t: "bad-token" }, ticket: "bad-ticket", user_name: "bad-user" } */'],
-  ])('ignores %s before the real bootstrap assignment', async (_label, decoy) => {
+    ['single and double quoted strings', `const single = 'window.wx = { data: { t: "bad-token" } }'; const double = "window.wx = { ticket: 'bad-ticket' }";`, false],
+    ['template strings', 'const template = `window.wx = { data: { t: "bad-token" }, ticket: "bad-ticket", user_name: "bad-user" }`;', false],
+    ['line and block comments', '// window.wx = { data: { t: "bad-token" }, ticket: "bad-ticket", user_name: "bad-user" };\n/* window.wx = { data: { t: "bad-token" }, ticket: "bad-ticket", user_name: "bad-user" } */', true],
+  ])('handles %s before the real bootstrap assignment', async (_label, decoy, accepted) => {
     const valid = 'window.wx = { data: { t: "test-token-123" }, ticket: "test-ticket-456", user_name: "test-user-789", nick_name: "测试账号", time: "1787529600" };';
     const html = `<script>${decoy}\n${valid}</script>`;
     const adapter = createWeixinAdapter();
     await expect(adapter.checkAuth(runtimeFor(vi.fn(async () => response(html)))))
-      .resolves.toEqual({ authenticated: true, userId: 'test-user-789', username: '测试账号' });
+      .resolves.toEqual(accepted ? { authenticated: true, userId: 'test-user-789', username: '测试账号' } : { authenticated: false });
+  });
+
+  it.each([
+    ['regex literal', '/window.wx = { data: { t: "bad-token" }, ticket: "bad-ticket", user_name: "bad-user" }/;'],
+    ['HTML comment', '<!-- window.wx = { data: { t: "bad-token" }, ticket: "bad-ticket", user_name: "bad-user" } -->'],
+    ['conditional body', 'if (false) { window.wx = { data: { t: "bad-token" }, ticket: "bad-ticket", user_name: "bad-user" }; }'],
+    ['function body', 'function bootstrap() { window.wx = { data: { t: "bad-token" }, ticket: "bad-ticket", user_name: "bad-user" }; }'],
+  ])('rejects %s instead of scanning nested or non-code assignments', async (_label, source) => {
+    const valid = 'window.wx = { data: { t: "test-token-123" }, ticket: "test-ticket-456", user_name: "test-user-789" };';
+    const adapter = createWeixinAdapter();
+    await expect(adapter.checkAuth(runtimeFor(vi.fn(async () => response(`<script>${source}\n${valid}</script>`)))))
+      .resolves.toEqual({ authenticated: false });
+  });
+
+  it('ignores text/plain decoys but accepts no-type and explicit JavaScript script types', async () => {
+    const valid = 'window.wx = { data: { t: "test-token-123" }, ticket: "test-ticket-456", user_name: "test-user-789" };';
+    const plainOnly = createWeixinAdapter();
+    await expect(plainOnly.checkAuth(runtimeFor(vi.fn(async () => response(`<script type="text/plain">${valid}</script>`)))))
+      .resolves.toEqual({ authenticated: false });
+    for (const opening of ['<script>', '<script data-type="text/plain">', '<script type="text/javascript">', '<script type="application/javascript">']) {
+      const adapter = createWeixinAdapter();
+      await expect(adapter.checkAuth(runtimeFor(vi.fn(async () => response(`${opening}${valid}</script>`)))))
+        .resolves.toMatchObject({ authenticated: true, userId: 'test-user-789' });
+    }
   });
 
   it.each([
@@ -255,7 +279,8 @@ describe('WeChat adapter', () => {
       { body: '{"base_resp":{"ret":1,"err_msg":"token=test-token-123"}}', init: undefined, code: 'DRAFT_CREATE_FAILED' },
       { body: '{not-json', init: undefined, code: 'PLATFORM_CHANGED' },
       { body: '{}', init: { status: 500 }, code: 'PLATFORM_CHANGED' },
-      { body: '{"base_resp":{"ret":0}}', init: { status: 500 }, code: 'DRAFT_CREATE_FAILED' },
+      { body: '{"base_resp":{"ret":0}}', init: { status: 500 }, code: 'UNKNOWN_REMOTE_STATE' },
+      { body: '{"base_resp":{"ret":1,"err_msg":"业务失败"}}', init: { status: 500 }, code: 'DRAFT_CREATE_FAILED' },
     ];
     for (const entry of cases) {
       const fetch = vi.fn().mockResolvedValueOnce(response(home)).mockResolvedValueOnce(response(entry.body, entry.init));
@@ -282,5 +307,22 @@ describe('WeChat adapter', () => {
       expect(error).toMatchObject({ code: 'PLATFORM_CHANGED' });
       expect(JSON.stringify(error)).not.toMatch(/escaped-token|nested-ticket/);
     }
+  });
+
+  it.each([
+    'token=secret',
+    'bad value',
+    '<b>draft</b>',
+    'draft-1\n',
+    'x'.repeat(129),
+  ])('rejects unsafe appMsgId values: %s', async (appMsgId) => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(response(home))
+      .mockResolvedValueOnce(response(JSON.stringify({ appMsgId, base_resp: { ret: 0 } })));
+    const adapter = createWeixinAdapter();
+    const runtime = runtimeFor(fetch);
+    await adapter.checkAuth(runtime);
+    await expect(adapter.saveDraft(runtime, { title: '标题', wechatHtml: '<p>正文</p>' }, new Map()))
+      .rejects.toMatchObject({ code: 'PLATFORM_CHANGED', retryable: false });
   });
 });
