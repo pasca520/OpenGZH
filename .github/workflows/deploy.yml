@@ -32,7 +32,7 @@ jobs:
           REMOTE_PORT: ${{ secrets.REMOTE_PORT }}
           SOURCE: ./
           TARGET: /opt/opengzh-staging/${{ github.sha }}
-          ARGS: -avz --delete --exclude='.git' --exclude='.github' --exclude='.gitignore' --exclude='docs' --exclude='deploy' --exclude='assets/fonts'
+          ARGS: -avz --delete --exclude='.git' --exclude='.github' --exclude='.gitignore' --exclude='docs' --exclude='deploy' --exclude='assets/fonts' --exclude='.claude' --exclude='node_modules' --exclude='.superpowers' --exclude='design-previews' --exclude='social-card-*' --exclude='social-video-*'
 
       - name: Promote staged release
         uses: appleboy/ssh-action@v1
@@ -53,6 +53,12 @@ jobs:
               --exclude='docs' \
               --exclude='deploy' \
               --exclude='assets/fonts' \
+              --exclude='.claude' \
+              --exclude='node_modules' \
+              --exclude='.superpowers' \
+              --exclude='design-previews' \
+              --exclude='social-card-*' \
+              --exclude='social-video-*' \
               "$release_dir/" /opt/opengzh/
             install -m 0644 "$release_dir/index.html" /opt/opengzh/index.html
             rm -rf "$release_dir"
