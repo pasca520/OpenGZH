@@ -22,8 +22,30 @@ jobs:
           REMOTE_USER: ${{ secrets.REMOTE_USER }}
           REMOTE_PORT: ${{ secrets.REMOTE_PORT }}
           SOURCE: ./
-          TARGET: /opt/opengzh
+          TARGET: /opt/opengzh-staging/${{ github.sha }}
           ARGS: -avz --delete --exclude='.git' --exclude='.github' --exclude='.gitignore' --exclude='docs' --exclude='deploy'
+
+      - name: Promote staged release
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.REMOTE_HOST }}
+          username: ${{ secrets.REMOTE_USER }}
+          port: ${{ secrets.REMOTE_PORT }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -eu
+            release_dir="/opt/opengzh-staging/${{ github.sha }}"
+            test -f "$release_dir/index.html"
+            rsync -a --delete \
+              --exclude='index.html' \
+              --exclude='.git' \
+              --exclude='.github' \
+              --exclude='.gitignore' \
+              --exclude='docs' \
+              --exclude='deploy' \
+              "$release_dir/" /opt/opengzh/
+            install -m 0644 "$release_dir/index.html" /opt/opengzh/index.html
+            rm -rf "$release_dir"
 
       - name: Reload nginx
         uses: appleboy/ssh-action@v1
