@@ -53,10 +53,46 @@ describe('adapter contract', () => {
   });
 
   it('replaces exact image references without treating the values as regular expressions', () => {
-    const content = '<img src="img://hero"><img src="img://hero-2">';
-    expect(applyImageMap(content, new Map([['img://hero', 'https://cdn.test/hero.png']]))).toBe(
-      '<img src="https://cdn.test/hero.png"><img src="https://cdn.test/hero.png-2">',
+    const html = '<img src="img://hero-2"><img src="img://hero">\n<code>img://hero</code>';
+    expect(applyImageMap(html, new Map([
+      ['img://hero-2', 'https://cdn.test/hero-2'],
+      ['img://hero', 'https://cdn.test/img://hero-2'],
+    ]))).toBe('<img src="https://cdn.test/hero-2"><img src="https://cdn.test/img://hero-2">\n<code>img://hero</code>');
+    expect(applyImageMap('![nested [alt]](img://hero-2)\n![reference][hero]\n\n[hero]: img://hero', new Map([
+      ['img://hero-2', 'https://cdn.test/hero-2'],
+      ['img://hero', 'https://cdn.test/img://hero-2'],
+    ]))).toBe('![nested [alt]](https://cdn.test/hero-2)\n![reference][hero]\n\n[hero]: https://cdn.test/img://hero-2');
+  });
+
+  it('does not replace ordinary text or a longer ref when only the short ref is mapped', () => {
+    expect(applyImageMap(
+      '<p>img://hero-2</p><img src="img://hero-2">',
+      new Map([['img://hero', 'https://cdn.test/hero.png']]),
+    )).toBe('<p>img://hero-2</p><img src="img://hero-2">');
+    expect(applyImageMap('<p>![literal](img://hero)</p>', new Map([['img://hero', 'https://cdn.test/hero.png']]))).toBe(
+      '<p>![literal](img://hero)</p>',
     );
+  });
+
+  it('does not cascade when a replacement target contains another source', () => {
+    expect(applyImageMap(
+      '<img src="img://first"><img src="img://second">',
+      new Map([
+        ['img://first', 'https://cdn.test/img://second'],
+        ['img://second', 'https://cdn.test/second'],
+      ]),
+    )).toBe('<img src="https://cdn.test/img://second"><img src="https://cdn.test/second">');
+  });
+
+  it('supports mixed Juejin Markdown and inline HTML when markdown mode is explicit', () => {
+    expect(applyImageMap(
+      '<p><img src="img://html"></p>\n![markdown](img://markdown)',
+      new Map([
+        ['img://html', 'https://cdn.test/html.png'],
+        ['img://markdown', 'https://cdn.test/markdown.png'],
+      ]),
+      { markdown: true },
+    )).toBe('<p><img src="https://cdn.test/html.png"></p>\n![markdown](https://cdn.test/markdown.png)');
   });
 });
 
@@ -130,6 +166,34 @@ describe('validateArticle', () => {
       }],
     })).toThrowError(expect.objectContaining({ code: 'ARTICLE_INVALID' }));
   });
+
+  it('rejects accessors before a valid getter can cross the boundary', () => {
+    let valid = true;
+    const accessorArticle = { ...article };
+    Object.defineProperty(accessorArticle, 'title', {
+      configurable: true,
+      get: () => valid ? '标题' : '',
+    });
+    expect(() => validateArticle(accessorArticle)).toThrowError(expect.objectContaining({ code: 'ARTICLE_INVALID' }));
+    valid = false;
+    expect(() => validateArticle(accessorArticle)).toThrowError(expect.objectContaining({ code: 'ARTICLE_INVALID' }));
+  });
+
+  it('rejects sparse images and arrays with extra properties', () => {
+    const sparse = { ...article, images: Array(1) };
+    expect(() => validateArticle(sparse)).toThrowError(expect.objectContaining({ code: 'ARTICLE_INVALID' }));
+    const extra = [article.images[0]];
+    extra.extra = 'must not cross';
+    expect(() => validateArticle({ ...article, images: extra }))
+      .toThrowError(expect.objectContaining({ code: 'ARTICLE_INVALID' }));
+  });
+
+  it('maps Proxy descriptor failures to ARTICLE_INVALID', () => {
+    const proxied = new Proxy(article, {
+      ownKeys: () => { throw new Error('descriptor failure'); },
+    });
+    expect(() => validateArticle(proxied)).toThrowError(expect.objectContaining({ code: 'ARTICLE_INVALID' }));
+  });
 });
 
 describe('validateSelectedPlatformImages', () => {
@@ -171,5 +235,45 @@ describe('validateSelectedPlatformImages', () => {
       ...markdownArticle,
       portableMarkdown: '![cdn](https://p3-juejin.byteimg.com/tos-cn-i/a.png)',
     }, ['juejin'])).not.toThrow();
+  });
+
+  it('requires a non-empty unique list of fixed platform IDs', () => {
+    expect(() => validateSelectedPlatformImages(article, [])).toThrowError(expect.objectContaining({ code: 'ARTICLE_INVALID' }));
+    expect(() => validateSelectedPlatformImages(article, ['zhihu', 'zhihu']))
+      .toThrowError(expect.objectContaining({ code: 'ARTICLE_INVALID' }));
+    expect(() => validateSelectedPlatformImages(article, ['unknown']))
+      .toThrowError(expect.objectContaining({ code: 'ARTICLE_INVALID' }));
+  });
+
+  it('scans quote-aware HTML attributes, reference Markdown, and nested alt text', () => {
+    const external = 'https://images.example.com/evil.png';
+    expect(() => validateSelectedPlatformImages({
+      ...article,
+      semanticHtml: `<img alt=">" src="${external}">`,
+      images: [],
+    }, ['zhihu'])).toThrowError(expect.objectContaining({ code: 'IMAGE_NOT_LOCAL' }));
+    expect(() => validateSelectedPlatformImages({
+      ...article,
+      portableMarkdown: `![x][hero]\n\n[hero]: ${external}`,
+      images: [],
+    }, ['juejin'])).toThrowError(expect.objectContaining({ code: 'IMAGE_NOT_LOCAL' }));
+    expect(() => validateSelectedPlatformImages({
+      ...article,
+      portableMarkdown: `![outer [nested]](${external})`,
+      images: [],
+    }, ['juejin'])).toThrowError(expect.objectContaining({ code: 'IMAGE_NOT_LOCAL' }));
+  });
+
+  it('ignores comments, code blocks, and escaped Markdown while scanning real images', () => {
+    const safe = {
+      ...article,
+      semanticHtml: '<!-- <img src="https://images.example.com/comment.png"> --><pre><code><img src="https://images.example.com/code.png"></code></pre><img src="img://hero">',
+    };
+    expect(() => validateSelectedPlatformImages(safe, ['zhihu'])).not.toThrow();
+    expect(() => validateSelectedPlatformImages({
+      ...article,
+      portableMarkdown: '\\![escaped](https://images.example.com/escaped.png)\n\n`![code](https://images.example.com/code.png)`\n\n```\n![fenced](https://images.example.com/fenced.png)\n```\n\n    ![indented](https://images.example.com/indented.png)\n\n![real](https://images.example.com/real.png)',
+      images: [],
+    }, ['juejin'])).toThrowError(expect.objectContaining({ code: 'IMAGE_NOT_LOCAL' }));
   });
 });

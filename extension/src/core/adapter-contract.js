@@ -21,9 +21,240 @@ export function articleContentForPlatform(article, platformId) {
   return article.semanticHtml;
 }
 
-export function applyImageMap(content, imageMap) {
-  let output = String(content || '');
-  const entries = imageMap instanceof Map ? imageMap.entries() : Object.entries(imageMap || {});
-  for (const [source, target] of entries) output = output.split(String(source)).join(String(target));
+function findTagEnd(source, start) {
+  let quote = null;
+  for (let index = start + 1; index < source.length; index += 1) {
+    const character = source[index];
+    if (quote) {
+      if (character === quote) quote = null;
+    } else if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === '>') {
+      return index + 1;
+    }
+  }
+  return source.length;
+}
+
+function readAttribute(source, start, end) {
+  let cursor = start;
+  while (cursor < end) {
+    while (cursor < end && /\s/.test(source[cursor])) cursor += 1;
+    if (cursor >= end || source[cursor] === '>' || source[cursor] === '/') break;
+    const nameStart = cursor;
+    while (cursor < end && !/[\s=/>]/.test(source[cursor])) cursor += 1;
+    const name = source.slice(nameStart, cursor).toLowerCase();
+    while (cursor < end && /\s/.test(source[cursor])) cursor += 1;
+    if (source[cursor] !== '=') {
+      while (cursor < end && !/[\s>]/.test(source[cursor])) cursor += 1;
+      continue;
+    }
+    cursor += 1;
+    while (cursor < end && /\s/.test(source[cursor])) cursor += 1;
+    const valueStart = cursor;
+    let valueEnd = cursor;
+    if (source[cursor] === '"' || source[cursor] === "'") {
+      const quote = source[cursor];
+      cursor += 1;
+      const contentStart = cursor;
+      while (cursor < end && source[cursor] !== quote) cursor += 1;
+      valueEnd = cursor;
+      if (name === 'src') return { value: source.slice(contentStart, valueEnd), start: contentStart, end: valueEnd };
+      cursor += 1;
+      continue;
+    }
+    while (cursor < end && !/[\s>]/.test(source[cursor])) cursor += 1;
+    valueEnd = cursor;
+    if (name === 'src') return { value: source.slice(valueStart, valueEnd), start: valueStart, end: valueEnd };
+  }
+  return null;
+}
+
+function findBalanced(source, start, opening, closing) {
+  let depth = 1;
+  for (let index = start + 1; index < source.length; index += 1) {
+    if (source[index] === '\\') {
+      index += 1;
+      continue;
+    }
+    if (source[index] === opening) depth += 1;
+    if (source[index] === closing && --depth === 0) return index;
+  }
+  return -1;
+}
+
+function protectedRanges(source) {
+  const ranges = [];
+  const add = (start, end) => ranges.push({ start, end: Math.max(end, start + 1) });
+  for (let index = 0; index < source.length;) {
+    if (source.startsWith('<!--', index)) {
+      const end = source.indexOf('-->', index + 4);
+      add(index, end < 0 ? source.length : end + 3);
+      index = end < 0 ? source.length : end + 3;
+      continue;
+    }
+    const lineStart = index === 0 || source[index - 1] === '\n';
+    if (lineStart) {
+      const fence = source.slice(index).match(/^ {0,3}(`{3,}|~{3,})/);
+      if (fence) {
+        const marker = fence[1][0];
+        const length = fence[1].length;
+        const close = new RegExp(`^ {0,3}${marker}{${length},}\\s*$`, 'm');
+        const rest = source.slice(index + fence[0].length);
+        const match = close.exec(rest);
+        const end = match ? index + fence[0].length + match.index + match[0].length : source.length;
+        add(index, end);
+        index = end;
+        continue;
+      }
+      const indented = source.slice(index).match(/^(?: {4}|\t)[^\n]*(?:\n|$)/);
+      if (indented) {
+        add(index, index + indented[0].length);
+        index += indented[0].length;
+        continue;
+      }
+    }
+    if (source[index] === '`') {
+      let run = 1;
+      while (source[index + run] === '`') run += 1;
+      const marker = '`'.repeat(run);
+      const close = source.indexOf(marker, index + run);
+      const end = close < 0 ? source.length : close + run;
+      add(index, end);
+      index = end;
+      continue;
+    }
+    const code = source.slice(index).match(/^<(pre|code)\b/i);
+    if (code) {
+      const tagEnd = findTagEnd(source, index);
+      const tag = source.slice(index, tagEnd);
+      const name = code[1];
+      const close = new RegExp(`</${name}\\s*>`, 'i').exec(source.slice(index + tag.length));
+      const end = close ? index + tag.length + close.index + close[0].length : source.length;
+      add(index, end);
+      index = end;
+      continue;
+    }
+    index += 1;
+  }
+  return ranges.sort((left, right) => left.start - right.start);
+}
+
+function rangeAt(ranges, index) {
+  // ponytail: this O(n*ranges) scan is bounded by the small article snapshot; use a cursor or interval index if very large documents become a supported input.
+  return ranges.find((range) => index >= range.start && index < range.end);
+}
+
+function markdownDestination(source, start) {
+  let cursor = start;
+  while (/\s/.test(source[cursor] || '')) cursor += 1;
+  if (source[cursor] === '<') {
+    const end = source.indexOf('>', cursor + 1);
+    return end < 0 ? null : { value: source.slice(cursor + 1, end), start: cursor + 1, end };
+  }
+  const valueStart = cursor;
+  let parentheses = 0;
+  while (cursor < source.length) {
+    const character = source[cursor];
+    if (character === '\\') {
+      cursor += 2;
+      continue;
+    }
+    if (character === '(') parentheses += 1;
+    if (character === ')' && parentheses === 0) break;
+    if (/\s/.test(character) && parentheses === 0) break;
+    if (character === ')') parentheses -= 1;
+    cursor += 1;
+  }
+  return cursor > valueStart ? { value: source.slice(valueStart, cursor), start: valueStart, end: cursor } : null;
+}
+
+function normalizeLabel(label) {
+  return String(label || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+export function imageReferencesInContent(content, markdown = false) {
+  const source = String(content || '');
+  const ranges = protectedRanges(source);
+  const spans = [];
+  const referenceLabels = new Set();
+  const referenceUsages = [];
+  const add = (destination, kind = 'markdown') => {
+    if (destination?.value) spans.push({ ...destination, kind });
+  };
+
+  for (let index = 0; index < source.length;) {
+    const protectedRange = rangeAt(ranges, index);
+    if (protectedRange) {
+      index = protectedRange.end;
+      continue;
+    }
+    if (source[index] === '<') {
+      const end = findTagEnd(source, index);
+      if (/^<img\b/i.test(source.slice(index, end))) add(readAttribute(source, index + 4, end - 1), 'html');
+      index = end;
+      continue;
+    }
+    if (!markdown || source[index] !== '!' || source[index - 1] === '\\' || source[index + 1] !== '[') {
+      index += 1;
+      continue;
+    }
+    const altEnd = findBalanced(source, index + 1, '[', ']');
+    if (altEnd < 0) {
+      index += 1;
+      continue;
+    }
+    const cursor = altEnd + 1;
+    if (source[cursor] === '(') {
+      add(markdownDestination(source, cursor + 1), 'markdown');
+      index = cursor + 1;
+      continue;
+    }
+    if (source[cursor] === '[') {
+      const labelEnd = findBalanced(source, cursor, '[', ']');
+      if (labelEnd >= 0) {
+        const label = normalizeLabel(source.slice(cursor + 1, labelEnd)) || normalizeLabel(source.slice(index + 2, altEnd));
+        referenceLabels.add(label);
+        referenceUsages.push({ label, start: index });
+        index = labelEnd + 1;
+        continue;
+      }
+    }
+    const label = normalizeLabel(source.slice(index + 2, altEnd));
+    referenceLabels.add(label);
+    referenceUsages.push({ label, start: index });
+    index = altEnd + 1;
+  }
+
+  if (markdown && referenceLabels.size) {
+    const resolvedLabels = new Set();
+    const definition = /^[ \t]{0,3}\[([^\]\r\n]+)\]:[ \t]*(?:<([^>\r\n]+)>|([^\s\r\n]+))/gm;
+    for (const match of source.matchAll(definition)) {
+      if (!referenceLabels.has(normalizeLabel(match[1])) || rangeAt(ranges, match.index)) continue;
+      resolvedLabels.add(normalizeLabel(match[1]));
+      const value = match[2] ?? match[3];
+      const lineStart = match.index + match[0].indexOf(value);
+      add({ value, start: lineStart, end: lineStart + value.length }, 'markdown');
+    }
+    for (const usage of referenceUsages) {
+      if (!resolvedLabels.has(usage.label)) spans.push({ value: '', start: usage.start, end: usage.start, kind: 'markdown' });
+    }
+  }
+  return spans;
+}
+
+export function applyImageMap(content, imageMap, options = {}) {
+  const source = String(content || '');
+  const mapping = imageMap instanceof Map ? imageMap : new Map(Object.entries(imageMap || {}));
+  // Juejin's portable Markdown may contain inline HTML; its adapter must pass { markdown: true }.
+  const markdown = options?.markdown ?? !/<[a-z]/i.test(source);
+  const replacements = imageReferencesInContent(source, markdown)
+    .filter(({ kind }) => markdown || kind === 'html')
+    .filter(({ value }) => mapping.has(value))
+    .sort((left, right) => right.start - left.start);
+  let output = source;
+  for (const replacement of replacements) {
+    output = `${output.slice(0, replacement.start)}${mapping.get(replacement.value)}${output.slice(replacement.end)}`;
+  }
   return output;
 }

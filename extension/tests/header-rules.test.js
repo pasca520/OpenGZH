@@ -57,4 +57,48 @@ describe('header rules', () => {
       async () => 'done',
     )).rejects.toBe(cleanupError);
   });
+
+  it.each([undefined, null, false, 0, ''])('preserves a falsy thrown value: %p', async (thrown) => {
+    const updateSessionRules = vi.fn(async () => {});
+    await expect(withSessionHeaderRules(
+      { updateSessionRules },
+      [{ id: 1001 }],
+      async () => { throw thrown; },
+    )).rejects.toBe(thrown);
+    expect(updateSessionRules).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    [],
+    [{ id: 0 }],
+    [{ id: -1 }],
+    [{ id: 1.5 }],
+    [{ id: '1' }],
+    [{ id: 1 }, { id: 1 }],
+  ])('rejects unsafe rule input %j before touching DNR', async (rules) => {
+    const updateSessionRules = vi.fn(async () => {});
+    await expect(withSessionHeaderRules({ updateSessionRules }, rules, async () => 'done')).rejects.toThrow();
+    expect(updateSessionRules).not.toHaveBeenCalled();
+  });
+
+  it('serializes concurrent protected work and cleans A before adding B', async () => {
+    let releaseA;
+    const workA = vi.fn(() => new Promise((resolve) => { releaseA = resolve; }));
+    const workB = vi.fn(async () => 'b');
+    const updateSessionRules = vi.fn(async () => {});
+    const first = withSessionHeaderRules({ updateSessionRules }, [{ id: 1001 }], workA);
+    await vi.waitFor(() => expect(workA).toHaveBeenCalledTimes(1));
+    const second = withSessionHeaderRules({ updateSessionRules }, [{ id: 2001 }], workB);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(updateSessionRules).toHaveBeenCalledTimes(1);
+    releaseA();
+    await expect(first).resolves.toBeUndefined();
+    await expect(second).resolves.toBe('b');
+    expect(updateSessionRules.mock.calls.map(([request]) => request)).toEqual([
+      { removeRuleIds: [1001], addRules: [{ id: 1001 }] },
+      { removeRuleIds: [1001] },
+      { removeRuleIds: [2001], addRules: [{ id: 2001 }] },
+      { removeRuleIds: [2001] },
+    ]);
+  });
 });

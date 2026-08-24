@@ -7,9 +7,11 @@ export const ERROR_CODES = Object.freeze([
 
 const SECRET_KEY = /^(?:token|ticket|csrf|jltoken|accesskeyid|secretaccesskey|sessiontoken|access_id|access_key|access_token|authorization|cookie|password|secret|x-csrf-token)$/i;
 const SECRET_QUERY = /([?&](?:token|ticket|csrf|jltoken|sessiontoken|access[_-]?key(?:id)?|secret[_-]?access[_-]?key|access[_-]?token|authorization|x-csrf-token)=)[^&#\s]*/gi;
-const SECRET_JSON = /((?:["']?)(?:token|ticket|csrf|jltoken|accesskeyid|secretaccesskey|sessiontoken|access_id|access_key|access_token|x-csrf-token)(?:["']?\s*[:=]\s*["']?))([^"'\s,}&]+)/gi;
-const SECRET_AUTH_JSON = /((?:["']?authorization["']?\s*[:=]\s*["']))([^"'\s,}&]+)/gi;
-const BEARER = /(Authorization\s*:\s*Bearer\s+)([^\s,}"']+)/gi;
+const SECRET_JSON = /((?:["']?)(?:token|ticket|csrf|jltoken|accesskeyid|secretaccesskey|sessiontoken|access_id|access_key|access_token|authorization|cookie|x-csrf-token)(?:["']?\s*[:=]\s*["']))([\s\S]*?)(?=["'])/gi;
+const SECRET_UNQUOTED = /((?:^|[\s{,])(?:token|ticket|csrf|jltoken|accesskeyid|secretaccesskey|sessiontoken|access_id|access_key|access_token|x-csrf-token)\s*[:=]\s*)([^,}\r\n]+?)(?=\s+(?:token|ticket|csrf|jltoken|accesskeyid|secretaccesskey|sessiontoken|access_id|access_key|access_token|authorization|cookie|x-csrf-token)\s*[:=]|[,}\r\n]|$)/gi;
+const AUTH_HEADER = /(Authorization\s*:\s*(?:Bearer|Basic)\s+)([^\r\n,}]+)/gi;
+const COOKIE_HEADER = /(Cookie\s*:\s*)([^\r\n,}]+)/gi;
+const BARE_CREDENTIAL = /\b(Bearer|Basic)\s+([^\s,}]+)/gi;
 
 export class PlatformError extends Error {
   constructor(code, message, details = {}) {
@@ -21,12 +23,18 @@ export class PlatformError extends Error {
   }
 }
 
+function stripHtml(value) {
+  return String(value).replace(/<[^>]*>/g, ' ');
+}
+
 function redactString(value) {
-  return value
+  return stripHtml(value)
     .replace(SECRET_QUERY, '$1[REDACTED]')
-    .replace(BEARER, '$1[REDACTED]')
     .replace(SECRET_JSON, '$1[REDACTED]')
-    .replace(SECRET_AUTH_JSON, '$1[REDACTED]');
+    .replace(SECRET_UNQUOTED, '$1[REDACTED]')
+    .replace(AUTH_HEADER, '$1[REDACTED]')
+    .replace(COOKIE_HEADER, '$1[REDACTED]')
+    .replace(BARE_CREDENTIAL, '$1 [REDACTED]');
 }
 
 export function redactSecrets(value) {
@@ -34,7 +42,7 @@ export function redactSecrets(value) {
   if (value && typeof value === 'object') {
     return Object.fromEntries(Object.entries(value).map(([key, entry]) => [
       key,
-      SECRET_KEY.test(key) ? '[REDACTED]' : redactSecrets(entry),
+      SECRET_KEY.test(String(key).trim()) ? '[REDACTED]' : redactSecrets(entry),
     ]));
   }
   if (typeof value === 'string') return redactString(value);
@@ -54,8 +62,8 @@ export function serializeError(error) {
     code: ERROR_CODES.includes(error?.code) ? error.code : 'PLATFORM_CHANGED',
     message: summarizeRemote(error?.message || '平台响应异常'),
     ...(Number.isInteger(error?.httpStatus) ? { httpStatus: error.httpStatus } : {}),
-    ...(error?.remoteSummary ? { remoteSummary: summarizeRemote(error.remoteSummary) } : {}),
-    ...(error?.draftId ? { draftId: String(error.draftId) } : {}),
+    ...(error?.remoteSummary != null ? { remoteSummary: summarizeRemote(error.remoteSummary) } : {}),
+    ...(error?.draftId != null ? { draftId: summarizeRemote(error.draftId) } : {}),
     retryable: Boolean(error?.retryable),
   };
 }

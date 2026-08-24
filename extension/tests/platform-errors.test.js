@@ -61,6 +61,30 @@ describe('platform errors', () => {
     expect(summarizeRemote('x'.repeat(200))).toHaveLength(160);
   });
 
+  it('redacts whole authorization and cookie values, including HTML-separated headers and draft IDs', () => {
+    const raw = '{"authorization":"Bearer live-secret value","cookie":"session=live-cookie value"}';
+    expect(redactSecrets(raw)).toBe('{"authorization":"[REDACTED]","cookie":"[REDACTED]"}');
+    expect(summarizeRemote('<span>Authorization:</span><b>Bearer</b>live-html-secret')).not.toContain('live-html-secret');
+    expect(serializeError(new PlatformError('NETWORK_ERROR', 'safe', {
+      draftId: '<b>Bearer live-draft-secret</b>',
+      remoteSummary: '<p>Cookie: live-cookie-secret</p>',
+    }))).toEqual({
+      code: 'NETWORK_ERROR',
+      message: 'safe',
+      remoteSummary: 'Cookie: [REDACTED]',
+      draftId: 'Bearer [REDACTED]',
+      retryable: false,
+    });
+  });
+
+  it('redacts unquoted raw key-value credentials with spaces', () => {
+    const raw = 'token=raw-token token: raw token with spaces csrf=raw-csrf';
+    const redacted = redactSecrets(raw);
+    expect(redacted).not.toContain('raw-token');
+    expect(redacted).not.toContain('raw token with spaces');
+    expect(redacted).not.toContain('raw-csrf');
+  });
+
   it('keeps PlatformError remote state and maps ordinary errors to unknown state', () => {
     const existing = new PlatformError('DRAFT_UPDATE_FAILED', '已知失败');
     expect(remoteStateError(existing)).toBe(existing);

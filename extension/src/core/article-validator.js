@@ -1,4 +1,4 @@
-import { PLATFORM_IDS, articleContentForPlatform } from './adapter-contract.js';
+import { PLATFORM_IDS, articleContentForPlatform, imageReferencesInContent } from './adapter-contract.js';
 import { dataUrlToBlob } from './data-url.js';
 import { PlatformError } from './platform-errors.js';
 
@@ -32,6 +32,30 @@ function hasExactKeys(value, keys) {
   return ownKeys.length === keys.size && ownKeys.every((key) => typeof key === 'string' && keys.has(key));
 }
 
+function rejectAccessors(value, seen = new Set()) {
+  if (!value || typeof value !== 'object' || seen.has(value)) return;
+  if (!Array.isArray(value)) {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) invalid('文章数据只能包含普通对象');
+  }
+  seen.add(value);
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || !Object.hasOwn(descriptor, 'value')) invalid('文章数据不能包含 getter 或 setter');
+    rejectAccessors(descriptor.value, seen);
+  }
+}
+
+function hasDenseArraySlots(value) {
+  if (!Array.isArray(value)) return false;
+  const keys = Reflect.ownKeys(value);
+  if (keys.length !== value.length + 1 || !keys.includes('length')) return false;
+  for (let index = 0; index < value.length; index += 1) {
+    if (!Object.hasOwn(value, index)) return false;
+  }
+  return true;
+}
+
 function isString(value, allowEmpty = true) {
   return typeof value === 'string' && (allowEmpty || value.trim().length > 0);
 }
@@ -58,7 +82,7 @@ function validateImage(image) {
   }
 }
 
-export function validateArticle(value) {
+function validateArticleSnapshot(value) {
   if (!isPlainRecord(value) || !hasExactKeys(value, ARTICLE_KEYS) || value.schemaVersion !== 1) {
     invalid('不支持的文章数据版本或字段');
   }
@@ -66,26 +90,27 @@ export function validateArticle(value) {
     if (!isString(value[key], !['documentId', 'title'].includes(key))) invalid(`文章字段 ${key} 无效`);
   }
   if (!value.portableMarkdown.trim() && !value.semanticHtml.trim() && !value.wechatHtml.trim()) invalid('文章正文为空');
-  if (!Array.isArray(value.images) || !Number.isFinite(value.createdAt)) invalid('文章图片或时间字段无效');
-  value.images.forEach(validateImage);
+  if (!hasDenseArraySlots(value.images) || !Number.isFinite(value.createdAt)) invalid('文章图片或时间字段无效');
+  for (const image of value.images) validateImage(image);
   if (new Set(value.images.map((image) => image.ref)).size !== value.images.length) invalid('图片引用重复');
+}
+
+export function validateArticle(value) {
+  if (!isPlainRecord(value)) invalid('文章数据格式错误');
   try {
-    return structuredClone(value);
+    rejectAccessors(value);
+  } catch (error) {
+    if (error instanceof PlatformError) throw error;
+    invalid('文章数据无法安全检查');
+  }
+  let snapshot;
+  try {
+    snapshot = structuredClone(value);
   } catch {
     invalid('文章数据无法安全复制');
   }
-}
-
-function extractSources(content, markdown = false) {
-  const sources = [];
-  const add = (source) => { if (source && !sources.includes(source)) sources.push(source); };
-  const sourcePattern = /<img\b[^>]*\bsrc\s*=\s*(?:(["'])(.*?)\1|([^\s>]+))/gi;
-  for (const match of String(content || '').matchAll(sourcePattern)) add(match[2] ?? match[3]);
-  if (markdown) {
-    const markdownPattern = /!\[[^\]]*\]\(\s*(?:<([^>\r\n]+)>|([^\s)\r\n]+))(?:\s+["'][^)]*["'])?\s*\)/g;
-    for (const match of String(content || '').matchAll(markdownPattern)) add(match[1] ?? match[2]);
-  }
-  return sources;
+  validateArticleSnapshot(snapshot);
+  return snapshot;
 }
 
 function hostMatches(hostname, suffix) {
@@ -102,12 +127,26 @@ function isPlatformCdn(platformId, source) {
 }
 
 export function validateSelectedPlatformImages(article, platformIds) {
-  validateArticle(article);
-  if (!Array.isArray(platformIds)) invalid('平台选择无效');
-  const refs = new Set(article.images.map((image) => image.ref));
-  for (const platformId of platformIds) {
+  const validated = validateArticle(article);
+  try {
+    rejectAccessors(platformIds);
+  } catch (error) {
+    if (error instanceof PlatformError) throw error;
+    invalid('平台选择无法安全检查');
+  }
+  if (!hasDenseArraySlots(platformIds) || platformIds.length === 0) invalid('平台选择无效');
+  let selected;
+  try {
+    selected = structuredClone(platformIds);
+  } catch {
+    invalid('平台选择无法安全复制');
+  }
+  if (new Set(selected).size !== selected.length) invalid('平台选择重复');
+  const refs = new Set(validated.images.map((image) => image.ref));
+  for (const platformId of selected) {
     if (!PLATFORM_IDS.includes(platformId)) invalid('包含未知平台');
-    const sources = extractSources(articleContentForPlatform(article, platformId), platformId === 'juejin');
+    const sources = imageReferencesInContent(articleContentForPlatform(validated, platformId), platformId === 'juejin')
+      .map(({ value }) => value);
     for (const source of sources) {
       if (refs.has(source) || isPlatformCdn(platformId, source)) continue;
       throw new PlatformError('IMAGE_NOT_LOCAL', `图片必须先导入本地图片库: ${source.slice(0, 120)}`, { retryable: false });
