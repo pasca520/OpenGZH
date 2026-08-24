@@ -16,13 +16,13 @@ describe('Zhihu adapter', () => {
   });
 
   it.each([
-    [401, 'auth-required'], [403, 'auth-required'], [302, 'redirect'], [0, 'redirect'],
+    [401, 'auth-required'], [403, 'auth-required'], [302, 'unauthenticated'], [0, 'unauthenticated'],
   ])('maps HTTP %s or redirect responses without pretending platform failure is logout', async (status, label) => {
     const responseValue = status === 0
       ? { status: 0, ok: false, type: 'opaqueredirect', async json() { return {}; } }
       : response('', { status });
     const adapter = createZhihuAdapter();
-    if (label === 'auth-required') {
+    if (label === 'auth-required' || label === 'unauthenticated') {
       await expect(adapter.checkAuth({ fetch: async () => responseValue, withHeaderRules: withRules }))
         .resolves.toEqual({ authenticated: false });
     } else {
@@ -59,6 +59,28 @@ describe('Zhihu adapter', () => {
     expect(() => transformZhihuContent({ toString() { throw new Error('coercion'); } })).toThrow();
   });
 
+  it('promotes a figure containing only a table instead of nesting the draft table in figure', () => {
+    const result = transformZhihuContent('<figure><table><tbody><tr><td>A</td></tr></tbody></table></figure>');
+    expect(result).toBe('<table data-draft-node="block" data-draft-type="table" data-size="normal" data-row-style="normal"><tbody><tr><td>A</td></tr></tbody></table>');
+    expect(result).not.toContain('<figure>');
+  });
+
+  it('keeps approved Zhihu CDN image hosts and rejects lookalikes or unsafe URL forms', () => {
+    for (const host of ['https://zhimg.com/path/a.png', 'https://pic1.zhimg.com/path/a.png', 'https://sub.pic1.zhimg.com/path/a.png']) {
+      expect(transformZhihuContent(`<img src="${host}">`)).toContain(`<img src="${host}">`);
+    }
+    for (const host of [
+      'https://zhimg.com.evil.example/path/a.png',
+      'http://pic1.zhimg.com/path/a.png',
+      'https://user:pass@pic1.zhimg.com/path/a.png',
+      'https://pic1.zhimg.com:443/path/a.png',
+      'https://pic1.zhimg.com/path/a.png?token=secret',
+      'https://pic1.zhimg.com/path/a.png#fragment',
+    ]) {
+      expect(transformZhihuContent(`<img src="${host}">`)).toBe('');
+    }
+  });
+
   it('negotiates and uploads a binary image only to the fixed OSS host', async () => {
     const fetch = vi.fn()
       .mockResolvedValueOnce(response(JSON.stringify(tokenFixture)))
@@ -71,6 +93,25 @@ describe('Zhihu adapter', () => {
     expect(fetch.mock.calls[1][0]).toBe('https://zhihu-pics-upload.zhimg.com/test/object-key');
     expect(fetch.mock.calls[1][1].headers.Authorization).toBe('OSS test-access-id:test-signature');
     expect(fetch.mock.calls[1][1].body).toBeInstanceOf(Blob);
+  });
+
+  it('uses OSS V1 StringToSign with Content-MD5 on line two but only x-oss headers canonicalized', async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(response(JSON.stringify(tokenFixture)))
+      .mockResolvedValueOnce(response('', { status: 200 }));
+    const hmacSha1Base64 = vi.fn(async () => 'test-signature');
+    const adapter = createZhihuAdapter({ hmacSha1Base64, now: () => new Date('2026-01-01T00:00:00Z') });
+    await adapter.uploadImage({ fetch, withHeaderRules: withRules }, new Blob(['png'], { type: 'image/png' }), 'hero.png');
+    expect(hmacSha1Base64).toHaveBeenCalledWith('test-access-key', [
+      'PUT',
+      'v/E5+gWsWD9oWlI6s9EQoA==',
+      'image/png',
+      'Thu, 01 Jan 2026 00:00:00 GMT',
+      'x-oss-date:Thu, 01 Jan 2026 00:00:00 GMT',
+      'x-oss-security-token:test-access-token',
+      'x-oss-user-agent:aliyun-sdk-js/6.8.0',
+      '/zhihu-pics/test/object-key',
+    ].join('\n'));
   });
 
   it('polls state=1 with bounded image status requests and returns a strict URL', async () => {

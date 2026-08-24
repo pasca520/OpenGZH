@@ -95,7 +95,10 @@ function safeImageSource(value) {
   if (/^img:\/\/[A-Za-z0-9._~:/-]+$/u.test(value) && !value.split('/').some((part) => part === '..' || part === '.')) return value;
   try {
     const url = new URL(value);
-    if (url.protocol !== 'https:' || url.hostname !== 'pic4.zhimg.com' || url.port || url.username || url.password || url.search || url.hash || !url.pathname || url.pathname === '/') return null;
+    const authority = value.slice(value.indexOf('//') + 2).split(/[/?#]/u, 1)[0];
+    const explicitPort = authority.slice(authority.lastIndexOf('@') + 1).includes(':');
+    if (url.protocol !== 'https:' || !(url.hostname === 'zhimg.com' || url.hostname.endsWith('.zhimg.com'))
+      || explicitPort || url.username || url.password || url.search || url.hash || !url.pathname || url.pathname === '/') return null;
     if (url.pathname.split('/').some((part) => part === '..' || part === '.')) return null;
     return url.href;
   } catch (_error) {
@@ -320,6 +323,10 @@ function normalizeFigures(node) {
     const normalized = normalizeFigures(child);
     return node.tag === 'figure' && normalized.tag === 'figure' ? normalized.children : [normalized];
   });
+  if (node.tag === 'figure') {
+    const meaningful = children.filter((child) => child.tag !== '#text' || child.text.trim());
+    if (meaningful.length === 1 && meaningful[0].tag === 'table') return meaningful[0];
+  }
   return { ...node, children };
 }
 
@@ -428,7 +435,11 @@ async function putOss(runtime, negotiated, blob, bytes, hmacSha1Base64, now) {
     'x-oss-security-token': token.access_token,
     'x-oss-user-agent': 'aliyun-sdk-js/6.8.0',
   };
-  const canonicalHeaders = Object.keys(headers).sort().map((key) => `${key.toLowerCase()}:${headers[key]}`).join('\n');
+  const canonicalHeaders = Object.keys(headers)
+    .filter((key) => key.toLowerCase().startsWith('x-oss-'))
+    .sort()
+    .map((key) => `${key.toLowerCase()}:${headers[key]}`)
+    .join('\n');
   const stringToSign = `PUT\n${contentMd5}\n${contentType}\n${date}\n${canonicalHeaders}\n/zhihu-pics/${negotiated.objectKey}`;
   let signature;
   try {
@@ -478,8 +489,7 @@ export function createZhihuAdapter({
         throw networkError('知乎登录检测网络异常');
       }
       const status = responseStatus(response);
-      if ([401, 403].includes(status)) return { authenticated: false };
-      if (isRedirect(response)) throw platformChanged('知乎登录检测发生跳转', { httpStatus: status });
+      if ([401, 403].includes(status) || isRedirect(response)) return { authenticated: false };
       if (!isOk(response)) {
         if (status >= 500) throw networkError('知乎登录检测网络异常', { httpStatus: status });
         throw platformChanged('知乎登录检测响应状态已变化', { httpStatus: status });
