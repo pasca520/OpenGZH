@@ -28,7 +28,9 @@ import {
   serializeDeclarations,
   normalizeTokenHex
 } from './core/style-override.js';
-import { copyToWechat } from './export/clipboard-exporter.js';
+import { prepareWechatContent, copyToWechat } from './export/clipboard-exporter.js';
+import { buildDistributionPackage } from './distribution/article-package.js';
+import { installDistributionBridge } from './distribution/extension-bridge.js';
 import { getCategorizedThemes, getStyleName, isRecommended, getStarredStyles, toggleStarStyle } from './ui/theme-manager.js';
 import { applyAppTheme, normalizeAppTheme, toggleAppTheme } from './ui/app-theme.js';
 import {
@@ -378,6 +380,7 @@ let imageStore = null;
 let imageCompressor = null;
 let turndownService = null;
 let pasteHandler = null;
+let disposeDistributionBridge = null;
 let suppressEditorSync = false;
 let suppressTitleSync = false;
 let syncLock = false;
@@ -2803,10 +2806,30 @@ const app = createApp({
       renderMarkdown();
       await persistDocumentState();
 
+      disposeDistributionBridge = installDistributionBridge({
+        createPackage: async () => {
+          await flushPendingRender();
+          const activeDocument = getActiveDocument();
+          return buildDistributionPackage({
+            documentId: activeDocument?.id || '',
+            title: resolveDocumentDisplayTitle(activeDocument),
+            markdown: markdownInput.value,
+            renderedHtml: renderedContent.value,
+            imageStore,
+            prepareWechatContent,
+            styleConfig: mergeTheme(STYLES[currentStyle.value], activeDocument?.styleOverride),
+            codeTheme: getResolvedCodeTheme(),
+            displaySettings: displaySettings.value
+          });
+        }
+      });
+
       nextTick(() => setupSyncScroll());
     });
 
     onBeforeUnmount(() => {
+      disposeDistributionBridge?.();
+      disposeDistributionBridge = null;
       disposeXhsMode();
       disposeCoverEditor();
       window.removeEventListener('beforeunload', handleBeforeUnload);
