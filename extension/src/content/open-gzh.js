@@ -938,8 +938,12 @@
         for (const result of results) {
           if (!state.authPlatforms.includes(result.platformId) || !state.selected.includes(result.platformId)
             || state.authCompleted.has(result.platformId)) continue;
-          const authenticated = result.authenticated ?? result.loggedIn ?? result.ok;
-          setAuthStatus(result.platformId, Boolean(authenticated));
+          if (result.error) {
+            setStatus(result.platformId, 'failed', { error: result.error });
+          } else {
+            const authenticated = result.authenticated ?? result.loggedIn ?? result.ok;
+            setAuthStatus(result.platformId, Boolean(authenticated));
+          }
           state.authCompleted.add(result.platformId);
         }
         if (state.authPlatforms.every((platformId) => state.authCompleted.has(platformId))) invalidateAuth();

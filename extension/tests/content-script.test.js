@@ -629,6 +629,39 @@ describe('Task5 quality runtime contracts', () => {
     expect(ui.rows.get('weixin').status.textContent).toBe('检测登录中');
   });
 
+  it('renders a correlated auth error as a failed row without treating it as logout', async () => {
+    const { createUi } = loadTestApi();
+    const { doc, anchor } = makeUiDom();
+    const messages = [];
+    const ui = createUi({
+      document: doc,
+      anchor,
+      storage: { get: async () => ({ 'opengzh.selectedPlatformIds': ['weixin'] }), set: async () => {}, remove: async () => {} },
+      port: { postMessage: (message) => messages.push(message) },
+    });
+    await ui.ready;
+    await ui.openPanel();
+    const requestId = messages.at(-1).requestId;
+    ui.onMessage({
+      type: 'AUTH_RESULT', requestId: 'stale-auth', platformId: 'weixin',
+      error: { code: 'PLATFORM_CHANGED', message: '旧错误', retryable: false },
+    });
+    expect(ui.rows.get('weixin').status.textContent).toBe('检测登录中');
+    ui.onMessage({
+      type: 'AUTH_RESULT', requestId, platformId: 'weixin',
+      error: { code: 'PLATFORM_CHANGED', message: '平台响应已变化', retryable: false },
+    });
+    ui.onMessage({
+      type: 'AUTH_RESULT', requestId, platformId: 'weixin',
+      error: { code: 'PLATFORM_CHANGED', message: '重复错误', retryable: false },
+    });
+    expect(ui.rows.get('weixin').statusKey).toBe('failed');
+    expect(ui.rows.get('weixin').status.textContent).toBe('平台响应已变化');
+    expect(ui.rows.get('weixin').login.hidden).toBe(false);
+    expect(ui.rows.get('weixin').retry.hidden).toBe(false);
+    expect(ui.state.authRequestId).toBe(null);
+  });
+
   it('correlates operation id with task context for states, completion, and fatal errors', async () => {
     const { createUi } = loadTestApi();
     const { doc, anchor } = makeUiDom();

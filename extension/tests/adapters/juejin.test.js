@@ -28,6 +28,21 @@ describe('Juejin adapter', () => {
     await expect(createJuejinAdapter().checkAuth({ fetch })).resolves.toEqual({ authenticated: false });
   });
 
+  it('maps only the observed exact business logout envelope to unauthenticated', async () => {
+    const logout = JSON.stringify({ err_no: 2, err_msg: '参数错误', data: null });
+    await expect(createJuejinAdapter().checkAuth({ fetch: async () => response(logout) }))
+      .resolves.toEqual({ authenticated: false });
+    for (const body of [
+      JSON.stringify({ err_no: 2, err_msg: '参数错误', data: null, extra: true }),
+      JSON.stringify({ err_no: 2, err_msg: '其他错误', data: null }),
+      JSON.stringify({ err_no: 2, err_msg: '参数错误', data: {} }),
+      JSON.stringify({ err_no: '2', err_msg: '参数错误', data: null }),
+    ]) {
+      await expect(createJuejinAdapter().checkAuth({ fetch: async () => response(body) }))
+        .rejects.toMatchObject({ code: 'PLATFORM_CHANGED', retryable: false });
+    }
+  });
+
   it('fails closed for auth network, non-OK, and malformed responses', async () => {
     await expect(createJuejinAdapter().checkAuth({ fetch: async () => { throw new TypeError('offline'); } }))
       .rejects.toMatchObject({ code: 'NETWORK_ERROR', retryable: true });

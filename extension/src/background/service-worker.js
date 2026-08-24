@@ -250,11 +250,20 @@ export function registerServiceWorker(chromeApi = globalThis.chrome, adapterFact
           if (!nonEmpty(message.requestId)) throw invalid('鉴权请求 ID 无效');
           await assertHostPermissions(message.platformIds, chromeApi.permissions);
           for (const platformId of message.platformIds) {
-            const adapter = getPlatformAdapter(platformId, adapterFactories);
-            const runtime = createRequestRuntime({ platformId, taskId: `auth:${message.requestId}`, imageBroker });
-            const auth = await adapter.checkAuth(runtime);
-            if (typeof auth?.authenticated !== 'boolean') throw new PlatformError('PLATFORM_CHANGED', '鉴权响应格式无效', { retryable: false });
-            send({ type: 'AUTH_RESULT', requestId: message.requestId, platformId, authenticated: auth.authenticated });
+            try {
+              const adapter = getPlatformAdapter(platformId, adapterFactories);
+              const runtime = createRequestRuntime({ platformId, taskId: `auth:${message.requestId}`, imageBroker });
+              const auth = await adapter.checkAuth(runtime);
+              if (typeof auth?.authenticated !== 'boolean') throw new PlatformError('PLATFORM_CHANGED', '鉴权响应格式无效', { retryable: false });
+              send({ type: 'AUTH_RESULT', requestId: message.requestId, platformId, authenticated: auth.authenticated });
+            } catch (error) {
+              const safe = serializeError(error);
+              if (safe.code === 'AUTH_REQUIRED') {
+                send({ type: 'AUTH_RESULT', requestId: message.requestId, platformId, authenticated: false });
+              } else {
+                send({ type: 'AUTH_RESULT', requestId: message.requestId, platformId, error: safe });
+              }
+            }
           }
         });
       }

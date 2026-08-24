@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ADAPTER_FACTORIES, assertHostPermissions, isAllowedSender, openSuccessfulDrafts, registerServiceWorker, sanitizeBatchForSession } from '../src/background/service-worker.js';
+import { PlatformError } from '../src/core/platform-errors.js';
 
 function portFixture() {
   const messages = [];
@@ -48,7 +49,7 @@ describe('service worker boundary', () => {
     await expect(assertHostPermissions(['weixin'], { contains: vi.fn(async () => false) })).rejects.toMatchObject({ code: 'PERMISSION_DENIED', retryable: true });
   });
 
-  it('echoes requestId for auth fatal and task/operation for batch fatal', async () => {
+  it('echoes requestId for auth failures and task/operation for batch fatal', async () => {
     const onConnect = { addListener: vi.fn() };
     const port = portFixture();
     const chromeApi = {
@@ -76,7 +77,43 @@ describe('service worker boundary', () => {
     }, {});
     missingAdapterConnect.addListener.mock.calls[0][0](missingAdapterPort);
     await missingAdapterPort.receive({ type: 'CHECK_AUTH', requestId: 'auth-adapter-missing', platformIds: ['weixin'] });
-    expect(missingAdapterPort.messages[0]).toMatchObject({ type: 'FATAL_ERROR', requestId: 'auth-adapter-missing' });
+    expect(missingAdapterPort.messages[0]).toMatchObject({
+      type: 'AUTH_RESULT', requestId: 'auth-adapter-missing', platformId: 'weixin',
+      error: { code: 'PLATFORM_CHANGED', retryable: false },
+    });
+  });
+
+  it('isolates platform auth failures, preserves correlation, and continues checking', async () => {
+    const onConnect = { addListener: vi.fn() };
+    const port = portFixture();
+    const adapter = (id, checkAuth) => ({ id, checkAuth, uploadImage: vi.fn(), saveDraft: vi.fn() });
+    const factories = {
+      weixin: () => adapter('weixin', async () => { throw new PlatformError('AUTH_REQUIRED', '登录已失效', { retryable: true }); }),
+      zhihu: () => adapter('zhihu', async () => { throw new PlatformError('PLATFORM_CHANGED', 'Authorization: Bearer secret-auth-token', { retryable: false }); }),
+      juejin: () => adapter('juejin', async () => ({ authenticated: true })),
+      woshipm: () => adapter('woshipm', async () => ({ authenticated: false })),
+    };
+    registerServiceWorker({
+      runtime: { onConnect },
+      permissions: { contains: vi.fn(async () => true) },
+      storage: { session: { set: vi.fn(async () => {}) } },
+      tabs: { create: vi.fn(), update: vi.fn() },
+    }, factories);
+    onConnect.addListener.mock.calls[0][0](port);
+
+    await port.receive({ requestId: 'auth-isolated', type: 'CHECK_AUTH', platformIds: ['weixin', 'zhihu', 'juejin', 'woshipm'] });
+
+    expect(port.messages).toEqual([
+      { type: 'AUTH_RESULT', requestId: 'auth-isolated', platformId: 'weixin', authenticated: false },
+      {
+        type: 'AUTH_RESULT', requestId: 'auth-isolated', platformId: 'zhihu',
+        error: { code: 'PLATFORM_CHANGED', message: 'Authorization: Bearer [REDACTED]', retryable: false },
+      },
+      { type: 'AUTH_RESULT', requestId: 'auth-isolated', platformId: 'juejin', authenticated: true },
+      { type: 'AUTH_RESULT', requestId: 'auth-isolated', platformId: 'woshipm', authenticated: false },
+    ]);
+    expect(JSON.stringify(port.messages)).not.toContain('secret-auth-token');
+    expect(port.messages.some((message) => message.type === 'FATAL_ERROR')).toBe(false);
   });
 
   it('sanitizes session results and does not persist article or credentials', () => {
@@ -222,7 +259,10 @@ describe('service worker boundary', () => {
       registerServiceWorker({ runtime: { onConnect }, permissions: { contains: vi.fn(async () => true) }, storage: { session: { set: vi.fn(async () => {}) } }, tabs: { create: vi.fn(), update: vi.fn() } }, { weixin: factory });
       onConnect.addListener.mock.calls[0][0](port);
       await port.receive({ type: 'CHECK_AUTH', requestId: 'auth-malformed', platformIds: ['weixin'] });
-      expect(port.messages[0]).toMatchObject({ type: 'FATAL_ERROR', requestId: 'auth-malformed', code: 'PLATFORM_CHANGED' });
+      expect(port.messages[0]).toMatchObject({
+        type: 'AUTH_RESULT', requestId: 'auth-malformed', platformId: 'weixin',
+        error: { code: 'PLATFORM_CHANGED', retryable: false },
+      });
     }
   });
 

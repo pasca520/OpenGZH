@@ -96,6 +96,16 @@ function safeToken(value) {
   return typeof value === 'string' && SAFE_TOKEN.test(value) ? value : null;
 }
 
+function isObservedLoggedOutResponse(data) {
+  if (!isRecord(data)) return false;
+  const keys = Object.keys(data);
+  return keys.length === 3
+    && keys.every((key) => ['err_no', 'err_msg', 'data'].includes(key))
+    && data.err_no === 2
+    && data.err_msg === '参数错误'
+    && data.data === null;
+}
+
 function safeStoreUri(value) {
   if (typeof value !== 'string' || !STORE_URI.test(value) || value.includes('\\') || value.includes('?') || value.includes('#') || value.includes('%')) return null;
   if (value.startsWith('/') || value.includes('//') || value.split('/').some((part) => part === '.' || part === '..')) return null;
@@ -372,6 +382,7 @@ export function createJuejinAdapter({
       } catch (_error) {
         throw platformChanged('掘金登录检测响应格式已变化', { httpStatus: status });
       }
+      if (isObservedLoggedOutResponse(data)) return { authenticated: false };
       const user = data.data;
       if (!isRecord(user) || !safeId(user.user_id) || typeof user.user_name !== 'string' || !SAFE_TEXT.test(user.user_name.trim())) throw platformChanged('掘金登录检测响应格式已变化', { httpStatus: status });
       return { authenticated: true, userId: safeId(user.user_id), username: user.user_name };
