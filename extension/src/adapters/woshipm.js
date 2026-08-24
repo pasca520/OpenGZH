@@ -129,6 +129,9 @@ function maskJavascript(source) {
   let previous = 'start';
   let functionPending = false;
   let classPending = false;
+  let statementStart = true;
+  let labelCandidate = false;
+  let labelPending = false;
   for (let index = 0; index < source.length; index += 1) {
     const character = source[index];
     const next = source[index + 1];
@@ -188,6 +191,8 @@ function maskJavascript(source) {
       for (cursor += 1; cursor < source.length && /[a-z]/iu.test(source[cursor]); cursor += 1) mask(cursor);
       index = cursor - 1;
       previous = 'value';
+      statementStart = false;
+      labelCandidate = false;
       continue;
     }
     if (character === '"' || character === "'" || character === '`') {
@@ -201,6 +206,8 @@ function maskJavascript(source) {
       let cursor = index + 1;
       while (cursor < source.length && /[A-Za-z0-9_$]/u.test(source[cursor])) cursor += 1;
       const word = source.slice(index, cursor);
+      labelCandidate = statementStart;
+      statementStart = false;
       if (controlWords.has(word)) previous = 'control';
       else if (blockWords.has(word)) previous = 'block-keyword';
       else if (word === 'function') {
@@ -215,41 +222,74 @@ function maskJavascript(source) {
     }
     if (character === '=' && next === '>') {
       previous = 'arrow';
+      statementStart = false;
+      labelCandidate = false;
       index += 1;
       continue;
     }
     if (character === '(') {
       delimiters.push({ type: 'paren', control: previous === 'control' });
       previous = 'open';
+      statementStart = false;
+      labelCandidate = false;
     } else if (character === '[') {
       delimiters.push({ type: 'bracket' });
       previous = 'open';
+      statementStart = false;
+      labelCandidate = false;
     } else if (character === '{') {
-      const block = functionPending || classPending || ['start', 'statement-boundary', 'block-keyword', 'control-close', 'arrow'].includes(previous);
+      const block = functionPending || classPending || labelPending
+        || ['start', 'statement-boundary', 'block-keyword', 'control-close', 'arrow'].includes(previous);
       delimiters.push({ type: 'brace', block });
       functionPending = false;
       classPending = false;
+      labelPending = false;
+      statementStart = block;
+      labelCandidate = false;
       previous = 'open';
-    } else if (character === ',' ) previous = 'comma';
+    } else if (character === ',' ) {
+      statementStart = false;
+      labelCandidate = false;
+      previous = 'comma';
+    }
     else if (character === ':') {
       functionPending = false;
       classPending = false;
+      labelPending = labelCandidate && previous === 'value';
+      statementStart = labelPending;
+      labelCandidate = false;
       previous = 'colon';
     } else if (character === ';') {
       functionPending = false;
       classPending = false;
+      labelPending = false;
+      statementStart = true;
+      labelCandidate = false;
       previous = 'statement-boundary';
     } else if (character === ')') {
       const delimiter = delimiters.pop();
+      labelPending = false;
+      statementStart = delimiter?.type === 'paren' && delimiter.control;
+      labelCandidate = false;
       previous = delimiter?.type === 'paren' && delimiter.control ? 'control-close' : 'close';
     } else if (character === ']') {
       delimiters.pop();
+      labelPending = false;
+      statementStart = false;
+      labelCandidate = false;
       previous = 'close';
     } else if (character === '}') {
       const delimiter = delimiters.pop();
+      labelPending = false;
+      statementStart = delimiter?.type === 'brace' && delimiter.block;
+      labelCandidate = false;
       previous = delimiter?.type === 'brace' && delimiter.block ? 'block-close' : 'object-close';
+    } else {
+      labelPending = false;
+      statementStart = false;
+      labelCandidate = false;
+      previous = 'operator';
     }
-    else previous = 'operator';
   }
   return masked.join('');
 }
@@ -338,7 +378,7 @@ function findTagEnd(source, start) {
   return -1;
 }
 
-const INERT_HTML_TAGS = new Set(['noscript', 'style', 'template', 'textarea', 'title']);
+const INERT_HTML_TAGS = new Set(['iframe', 'noembed', 'noframes', 'noscript', 'plaintext', 'style', 'template', 'textarea', 'title', 'xmp']);
 
 function findClosingTag(source, start, tagName) {
   const match = new RegExp(`</${tagName}\\s*>`, 'iu').exec(source.slice(start));
@@ -361,6 +401,7 @@ function findTemplateEnd(source, start) {
       index += 1;
       continue;
     }
+    if (/^<script\b/iu.test(source.slice(index))) return -1;
     const closing = /^<\/template\b/iu.test(source.slice(index));
     const opening = /^<template\b/iu.test(source.slice(index));
     if (!closing && !opening) {
@@ -434,7 +475,15 @@ function readScriptBlocks(html) {
     }
     const tagName = tag[1].toLowerCase();
     const openingTag = source.slice(index, tagEnd + 1);
-    if (INERT_HTML_TAGS.has(tagName) && !/\/\s*>$/u.test(openingTag)) {
+    if (INERT_HTML_TAGS.has(tagName) && /\/\s*>$/u.test(openingTag)) {
+      blocks.push({ malformed: true });
+      break;
+    }
+    if (INERT_HTML_TAGS.has(tagName)) {
+      if (tagName === 'plaintext') {
+        index = source.length;
+        continue;
+      }
       const inertEnd = tagName === 'template'
         ? findTemplateEnd(source, tagEnd + 1)
         : findClosingTag(source, tagEnd + 1, tagName)?.end ?? -1;

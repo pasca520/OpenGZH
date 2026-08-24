@@ -93,7 +93,7 @@ describe('Woshipm adapter', () => {
       '<STYLE data-kind="inert"><script>window.settings={"jltoken":"style-token"}; var userSettings={"uid":"1585"};</script></STYLE>',
       '<title><script>window.settings={"jltoken":"title-token"}; var userSettings={"uid":"1585"};</script></title>',
       '<noscript data-kind="inert"><script>window.settings={"jltoken":"noscript-token"}; var userSettings={"uid":"1585"};</script></noscript>',
-      '<template data-kind="inert"><section><script>window.settings={"jltoken":"template-token"}; var userSettings={"uid":"1585"};</script></section></template>',
+      '<template data-kind="inert"><section>template text is inert</section></template>',
     ]) {
       const fetch = vi.fn().mockResolvedValue(response(page));
       await expect(createWoshipmAdapter().checkAuth({ fetch, withHeaderRules: withRules }))
@@ -111,6 +111,44 @@ describe('Woshipm adapter', () => {
       const fetch = vi.fn().mockResolvedValue(response(page));
       await expect(createWoshipmAdapter().checkAuth({ fetch, withHeaderRules: withRules }))
         .rejects.toMatchObject({ code: 'PLATFORM_CHANGED', retryable: false });
+      expect(fetch).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('fails closed on self-closing inert tags', async () => {
+    for (const tag of ['textarea', 'style', 'title', 'noscript', 'template']) {
+      const page = `<${tag} data-kind="invalid"/><script>window.settings={"jltoken":"self-closing-token"}; var userSettings={"uid":"1585"};</script>`;
+      const fetch = vi.fn()
+        .mockResolvedValueOnce(response(page))
+        .mockResolvedValueOnce(response(JSON.stringify(profile)));
+      await expect(createWoshipmAdapter().checkAuth({ fetch, withHeaderRules: withRules }))
+        .rejects.toMatchObject({ code: 'PLATFORM_CHANGED', retryable: false });
+      expect(fetch).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('fails closed when a template script string contains a template close marker', async () => {
+    const page = `<template><script>const decoy = '</template>';</script></template><script>window.settings={"jltoken":"after-template-token"}; var userSettings={"uid":"1585"};</script>`;
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(response(page))
+      .mockResolvedValueOnce(response(JSON.stringify(profile)));
+    await expect(createWoshipmAdapter().checkAuth({ fetch, withHeaderRules: withRules }))
+      .rejects.toMatchObject({ code: 'PLATFORM_CHANGED', retryable: false });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores script-looking markup in legacy raw-text or inert containers', async () => {
+    for (const [tag, closing] of [
+      ['xmp', '</xmp>'],
+      ['iframe data-kind="inert"', '</iframe>'],
+      ['noembed', '</noembed>'],
+      ['noframes', '</noframes>'],
+      ['plaintext', ''],
+    ]) {
+      const page = `<${tag}><script>window.settings={"jltoken":"${tag}-token"}; var userSettings={"uid":"1585"};</script>${closing}`;
+      const fetch = vi.fn().mockResolvedValue(response(page));
+      await expect(createWoshipmAdapter().checkAuth({ fetch, withHeaderRules: withRules }))
+        .resolves.toEqual({ authenticated: false });
       expect(fetch).toHaveBeenCalledTimes(1);
     }
   });
@@ -159,9 +197,25 @@ describe('Woshipm adapter', () => {
     }
   });
 
+  it('masks regex decoys after labelled statement blocks', async () => {
+    for (const [block, token] of [
+      ['label: {}', 'label-block-token'],
+      ['if (true) label: {}', 'conditional-label-block-token'],
+    ]) {
+      const page = `<script>var userSettings={"uid":"1585"}; ${block} /; window.settings={"jltoken":"${token}"}/g;</script>`;
+      const fetch = vi.fn()
+        .mockResolvedValueOnce(response(page))
+        .mockResolvedValueOnce(response(JSON.stringify(profile)));
+      await expect(createWoshipmAdapter().checkAuth({ fetch, withHeaderRules: withRules }))
+        .rejects.toMatchObject({ code: 'PLATFORM_CHANGED', retryable: false });
+      expect(fetch).toHaveBeenCalledTimes(1);
+    }
+  });
+
   it('does not mask a normal division after an object expression', async () => {
     const page = `<script>
       const ratio = {} / { value: 1 };
+      const nestedRatio = { label: { value: 1 } } / { value: 2 };
       window.settings={"jltoken":"valid-token"}; var userSettings={"uid":"1585"};
     </script>`;
     const fetch = vi.fn()
