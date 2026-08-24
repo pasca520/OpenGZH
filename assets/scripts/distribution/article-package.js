@@ -7,7 +7,7 @@ export const DISTRIBUTION_SCHEMA_VERSION = 1;
 export const IMAGE_READ_FAILED = 'IMAGE_READ_FAILED';
 export const ARTICLE_INVALID = 'ARTICLE_INVALID';
 
-const DATA_IMAGE_PATTERN = /^data:([^;,]+);base64,([A-Za-z0-9+/]+={0,2})$/i;
+const DATA_IMAGE_PATTERN = /^data:(image\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/]+={0,2})$/i;
 const MIME_EXTENSIONS = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
@@ -29,6 +29,65 @@ function isDirectiveOpen(line) {
   return /^\s*:::[a-z][\w-]*(?:\s|$)/i.test(line);
 }
 
+function parseFenceStart(line) {
+  const match = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+  if (!match || (match[1][0] === '`' && match[2].includes('`'))) return null;
+  return { char: match[1][0], length: match[1].length };
+}
+
+function isFenceEnd(line, fence) {
+  const escapedChar = fence.char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^ {0,3}${escapedChar}{${fence.length},}\\s*$`).test(line);
+}
+
+function isIndentedCode(line) {
+  return /^(?: {4}|\t)/.test(line);
+}
+
+function maskLine(line) {
+  return line.replace(/[^\n]/g, ' ');
+}
+
+function maskInlineCode(line) {
+  const masked = line.split('');
+  let index = 0;
+  while (index < line.length) {
+    if (line[index] !== '`') {
+      index += 1;
+      continue;
+    }
+    const start = index;
+    while (index < line.length && line[index] === '`') index += 1;
+    const marker = line.slice(start, index);
+    let close = line.indexOf(marker, index);
+    while (close >= 0 && (line[close - 1] === '`' || line[close + marker.length] === '`')) {
+      close = line.indexOf(marker, close + 1);
+    }
+    if (close < 0) continue;
+    masked.fill(' ', start, close + marker.length);
+    index = close + marker.length;
+  }
+  return masked.join('');
+}
+
+function maskMarkdownCode(markdown) {
+  let fence = null;
+  return String(markdown).split('\n').map((line) => {
+    if (fence) {
+      const masked = maskLine(line);
+      if (isFenceEnd(line, fence)) fence = null;
+      return masked;
+    }
+    const opening = parseFenceStart(line);
+    if (opening) {
+      fence = opening;
+      return maskLine(line);
+    }
+    if (isIndentedCode(line)) return maskLine(line);
+    return maskInlineCode(line);
+  }).join('\n');
+}
+
 /**
  * Remove only OpenGZH's outer card/page syntax while retaining article content.
  * Generic fenced directives are kept verbatim, including ones nested in a card.
@@ -37,20 +96,34 @@ export function toPortableMarkdown(markdown = '') {
   const lines = String(markdown).replace(/\r\n?/g, '\n').split('\n');
   const output = [];
   let cardDepth = 0;
-  let fencedCode = false;
+  let fence = null;
 
   for (const line of lines) {
     const trimmed = line.trim();
-    const codeFence = /^(`{3,}|~{3,})/.test(trimmed);
+
+    if (fence) {
+      output.push(line);
+      if (isFenceEnd(line, fence)) fence = null;
+      continue;
+    }
+    const opening = parseFenceStart(line);
+    if (opening) {
+      output.push(line);
+      fence = opening;
+      continue;
+    }
+    if (isIndentedCode(line)) {
+      output.push(line);
+      continue;
+    }
 
     if (cardDepth === 0) {
-      if (!fencedCode && /^:::ogzh-card(?:\s+.*)?$/.test(trimmed)) {
+      if (/^:::ogzh-card(?:\s+.*)?$/.test(trimmed)) {
         cardDepth = 1;
         continue;
       }
-      if (!fencedCode && /^<!--\s*xhs-page\s*-->$/.test(trimmed)) continue;
+      if (/^<!--\s*xhs-page\s*-->$/i.test(trimmed)) continue;
       output.push(line);
-      if (codeFence) fencedCode = !fencedCode;
       continue;
     }
 
@@ -59,7 +132,7 @@ export function toPortableMarkdown(markdown = '') {
       if (cardDepth > 0) output.push(line);
       continue;
     }
-    if (/^<!--\s*xhs-page\s*-->$/.test(trimmed)) continue;
+    if (/^<!--\s*xhs-page\s*-->$/i.test(trimmed)) continue;
     if (isDirectiveOpen(line)) cardDepth += 1;
     output.push(line);
   }
@@ -83,6 +156,34 @@ function parseTagAttributes(source) {
 
 function serializeAttributes(attributes) {
   return attributes.map(({ name, value }) => value == null ? name : `${name}="${value.replace(/"/g, '&quot;')}"`).join(' ');
+}
+
+function findTagEnd(source, start) {
+  let quote = null;
+  for (let index = start + 1; index < source.length; index += 1) {
+    const character = source[index];
+    if (quote) {
+      if (character === quote) quote = null;
+    } else if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === '>') {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function nextHtmlTag(source, cursor) {
+  const index = source.indexOf('<', cursor);
+  if (index < 0) return null;
+  if (source.startsWith('<!--', index)) {
+    const commentEnd = source.indexOf('-->', index + 4);
+    const end = commentEnd < 0 ? source.length : commentEnd + 3;
+    return { index, raw: source.slice(index, end), end };
+  }
+  const tagEnd = findTagEnd(source, index);
+  const end = tagEnd < 0 ? source.length : tagEnd + 1;
+  return { index, raw: source.slice(index, end), end };
 }
 
 function normalizeTag(rawTag, tagName) {
@@ -126,17 +227,16 @@ export function toSemanticHtml(html = '') {
   const source = String(html || '');
   const output = [];
   const stack = [];
-  const tagPattern = /<!--[\s\S]*?-->|<[^>]*>/g;
   let cursor = 0;
-  let match;
+  let tag;
 
-  while ((match = tagPattern.exec(source))) {
-    output.push(source.slice(cursor, match.index));
-    const raw = match[0];
-    cursor = match.index + raw.length;
+  while ((tag = nextHtmlTag(source, cursor))) {
+    output.push(source.slice(cursor, tag.index));
+    const raw = tag.raw;
+    cursor = tag.end;
 
     if (raw.startsWith('<!--')) {
-      output.push(raw);
+      if (!/^<!--[\s\S]*?-->$/.test(raw) || !/^<!--\s*xhs-page\s*-->$/i.test(raw)) output.push(raw);
       continue;
     }
     const openMatch = raw.match(/^<\s*([a-z][\w:-]*)\b([\s\S]*?)>$/i);
@@ -175,15 +275,17 @@ function imageSourcesFromMarkdown(markdown) {
 
 function imageSourcesFromHtml(html) {
   const matches = [];
-  const pattern = /<img\b[^>]*>/gi;
-  let match;
-  while ((match = pattern.exec(html))) {
-    const tag = match[0];
-    const sourceMatch = tag.match(/\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
+  let cursor = 0;
+  let tag;
+  while ((tag = nextHtmlTag(html, cursor))) {
+    cursor = tag.end;
+    if (tag.raw.startsWith('<!--') || !/^<\s*img\b/i.test(tag.raw)) continue;
+    const sourceTag = tag.raw;
+    const sourceMatch = sourceTag.match(/\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
     if (!sourceMatch) continue;
-    const altMatch = tag.match(/\balt\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
+    const altMatch = sourceTag.match(/\balt\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
     matches.push({
-      index: match.index,
+      index: tag.index,
       source: sourceMatch[1] ?? sourceMatch[2] ?? sourceMatch[3],
       alt: altMatch ? (altMatch[1] ?? altMatch[2] ?? altMatch[3]) : ''
     });
@@ -192,9 +294,10 @@ function imageSourcesFromHtml(html) {
 }
 
 function portableImageSources(markdown) {
+  const maskedMarkdown = maskMarkdownCode(markdown);
   return [
-    ...imageSourcesFromMarkdown(markdown),
-    ...imageSourcesFromHtml(markdown)
+    ...imageSourcesFromMarkdown(maskedMarkdown),
+    ...imageSourcesFromHtml(maskedMarkdown)
   ].sort((left, right) => left.index - right.index);
 }
 
@@ -255,7 +358,7 @@ export async function buildDistributionPackage({
   imageStore,
   codeTheme,
   displaySettings,
-  prepareWechatContent = async ({ renderedHTML: html }) => ({ html, imageFailures: [] }),
+  prepareWechatContent,
   now = Date.now
 }) {
   const createdAt = now();
@@ -265,6 +368,9 @@ export async function buildDistributionPackage({
   const normalizedRenderedHtml = String(renderedHtml || '');
   const portableMarkdown = toPortableMarkdown(normalizedMarkdown);
   const semanticHtml = toSemanticHtml(normalizedRenderedHtml);
+  if (typeof prepareWechatContent !== 'function') {
+    throw contractError(ARTICLE_INVALID, 'prepareWechatContent must be a function');
+  }
   const prepared = await prepareWechatContent({
     renderedHTML: normalizedRenderedHtml,
     styleConfig,
@@ -274,10 +380,14 @@ export async function buildDistributionPackage({
     imagePolicy: 'defer-local',
     showToast: () => {}
   });
+  if (!prepared || typeof prepared !== 'object' || Array.isArray(prepared)
+    || typeof prepared.html !== 'string' || !Array.isArray(prepared.imageFailures)) {
+    throw contractError(ARTICLE_INVALID, 'Invalid WeChat preparation result');
+  }
   if (prepared?.imageFailures?.length) {
     throw contractError(IMAGE_READ_FAILED, 'WeChat image preparation failed');
   }
-  const wechatHtml = typeof prepared === 'string' ? prepared : (prepared?.html ?? prepared?.wechatHtml ?? '');
+  const wechatHtml = prepared.html;
   const imageOccurrences = [
     ...portableImageSources(portableMarkdown),
     ...imageSourcesFromHtml(semanticHtml),

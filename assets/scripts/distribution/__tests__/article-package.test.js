@@ -50,6 +50,36 @@ describe('article distribution contract', () => {
     ].join('\n'));
   });
 
+  it('keeps card-like examples in matched fenced and indented code', () => {
+    const markdown = [
+      '正文前',
+      '````markdown',
+      ':::ogzh-card',
+      '<!-- xhs-page -->',
+      ':::',
+      '```',
+      ':::ogzh-card',
+      '<!-- xhs-page -->',
+      ':::',
+      '````',
+      '~~~markdown',
+      ':::ogzh-card',
+      '<!-- xhs-page -->',
+      ':::',
+      '```',
+      ':::ogzh-card',
+      '<!-- xhs-page -->',
+      ':::',
+      '~~~',
+      '    :::ogzh-card',
+      '    <!-- xhs-page -->',
+      '    :::',
+      '正文后'
+    ].join('\n');
+
+    expect(toPortableMarkdown(markdown)).toBe(markdown);
+  });
+
   it('normalizes image references, unwraps OpenGZH containers, and preserves table semantics', () => {
     const html = [
       '<section data-ogzh-card="accent-bar" class="card" style="color:red" id="card">',
@@ -170,6 +200,44 @@ describe('article distribution contract', () => {
     ]);
   });
 
+  it('does not inventory image examples inside markdown code', async () => {
+    const markdown = [
+      '```markdown',
+      '![fenced](img://missing)',
+      '<img src="img://missing">',
+      '```',
+      '`![inline](img://missing)`',
+      '    ![indented](img://missing)',
+      '    <img src="img://missing">',
+      `![real](<${pngDataUrl}>)`
+    ].join('\n');
+
+    const snapshot = await buildDistributionPackage({
+      documentId: 'doc-code-images',
+      title: '代码示例',
+      markdown,
+      renderedHtml: '<p>正文</p>',
+      imageStore: { getImageRecord: vi.fn(async () => null) },
+      prepareWechatContent: async () => ({ html: '<p>正文</p>', imageFailures: [] }),
+      now: () => 1787529600000
+    });
+
+    expect(snapshot.images).toEqual([{
+      ref: pngDataUrl,
+      kind: 'data-url',
+      dataUrl: pngDataUrl,
+      mimeType: 'image/png',
+      filename: 'generated-1.png',
+      alt: 'real'
+    }]);
+  });
+
+  it('uses quote-aware HTML tag boundaries and removes only xhs page comments', () => {
+    expect(toSemanticHtml(
+      '<!-- ordinary --><p title="A > B">正文</p><!-- XHS-PAGE -->'
+    )).toBe('<!-- ordinary --><p title="A > B">正文</p>');
+  });
+
   it('fails closed when an img protocol record is missing', async () => {
     await expect(buildDistributionPackage({
       documentId: 'doc-missing',
@@ -182,14 +250,46 @@ describe('article distribution contract', () => {
   });
 
   it('rejects non-base64 image data URLs as invalid article input', async () => {
-    await expect(buildDistributionPackage({
-      documentId: 'doc-invalid',
-      title: '非法',
-      markdown: '![bad](data:image/png,not-base64)',
-      renderedHtml: '<p>正文</p>',
-      imageStore: { getImageRecord: vi.fn() },
-      prepareWechatContent: async () => ({ html: '<p>正文</p>', imageFailures: [] })
-    })).rejects.toMatchObject({ code: ARTICLE_INVALID });
+    for (const ref of [
+      'data:image/png,not-base64',
+      'data:image/png evil;base64,cG5n',
+      'data:image/../../html;base64,cG5n'
+    ]) {
+      await expect(buildDistributionPackage({
+        documentId: 'doc-invalid',
+        title: '非法',
+        markdown: `![bad](<${ref}>)`,
+        renderedHtml: '<p>正文</p>',
+        imageStore: { getImageRecord: vi.fn() },
+        prepareWechatContent: async () => ({ html: '<p>正文</p>', imageFailures: [] }),
+        now: () => 1787529600000
+      })).rejects.toMatchObject({ code: ARTICLE_INVALID });
+    }
+  });
+
+  it('rejects missing or malformed WeChat preparation results', async () => {
+    const invalidPreparations = [
+      undefined,
+      null,
+      {},
+      'html',
+      async () => null,
+      async () => ({}),
+      async () => ({ html: '<p>正文</p>', imageFailures: null }),
+      async () => ({ wechatHtml: '<p>正文</p>', imageFailures: [] })
+    ];
+
+    for (const prepareWechatContent of invalidPreparations) {
+      await expect(buildDistributionPackage({
+        documentId: 'doc-invalid-prepare',
+        title: '准备结果非法',
+        markdown: '# 标题',
+        renderedHtml: '<p>正文</p>',
+        imageStore: { getImageRecord: vi.fn() },
+        prepareWechatContent,
+        now: () => 1787529600000
+      })).rejects.toMatchObject({ code: ARTICLE_INVALID });
+    }
   });
 
   it('fails closed when WeChat preparation reports image failures', async () => {
