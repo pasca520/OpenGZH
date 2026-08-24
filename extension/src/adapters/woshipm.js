@@ -282,6 +282,49 @@ function isExecutableScript(attributes) {
   return SCRIPT_TYPES.has(value);
 }
 
+function findTagEnd(source, start) {
+  let quote = '';
+  for (let index = start + 1; index < source.length; index += 1) {
+    const character = source[index];
+    if (quote) {
+      if (character === quote) quote = '';
+    } else if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === '>') {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function readScriptBlocks(html) {
+  const source = String(html);
+  const blocks = [];
+  const openingPattern = /<script\b/giu;
+  let match;
+  while ((match = openingPattern.exec(source))) {
+    const openingStart = match.index;
+    const openingEnd = findTagEnd(source, openingStart);
+    if (openingEnd < 0) {
+      blocks.push({ malformed: true });
+      break;
+    }
+    const closing = /<\/script\s*>/iu.exec(source.slice(openingEnd + 1));
+    if (!closing) {
+      blocks.push({ malformed: true });
+      break;
+    }
+    const closingStart = openingEnd + 1 + closing.index;
+    blocks.push({
+      attributes: source.slice(openingStart + '<script'.length, openingEnd),
+      source: source.slice(openingEnd + 1, closingStart),
+      malformed: false,
+    });
+    openingPattern.lastIndex = closingStart + closing[0].length;
+  }
+  return blocks;
+}
+
 function topLevelObjectAssignments(script, pattern) {
   if (/^\s*<!--/u.test(script)) return [];
   const masked = maskJavascript(script);
@@ -309,21 +352,29 @@ function topLevelObjectAssignments(script, pattern) {
 
 function extractPageAuth(html) {
   const result = { token: null, uid: null, sawUid: false, malformed: false };
-  const scriptPattern = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/giu;
-  for (const match of String(html).matchAll(scriptPattern)) {
-    if (!isExecutableScript(match[1])) continue;
-    const script = match[2];
+  for (const block of readScriptBlocks(html)) {
+    if (block.malformed) {
+      result.malformed = true;
+      continue;
+    }
+    if (!isExecutableScript(block.attributes)) continue;
+    const script = block.source;
     for (const assignment of topLevelObjectAssignments(script, /(?:^|[;}])\s*window\s*\.\s*settings\s*=\s*\{/giu)) {
       if (assignment.malformed) {
         result.malformed = true;
         continue;
       }
       const properties = parseObjectProperties(assignment.source);
+      if (!properties) {
+        result.malformed = true;
+        continue;
+      }
       const property = properties?.get('jltoken');
       if (!property) continue;
       const token = property.type === 'string' ? safeToken(property.value) : null;
       if (!token) result.malformed = true;
-      else result.token = result.token || token;
+      else if (result.token !== null) result.malformed = true;
+      else result.token = token;
     }
     for (const assignment of topLevelObjectAssignments(script, /(?:^|[;}])\s*var\s+userSettings\s*=\s*\{/giu)) {
       if (assignment.malformed) {
@@ -331,12 +382,17 @@ function extractPageAuth(html) {
         continue;
       }
       const properties = parseObjectProperties(assignment.source);
+      if (!properties) {
+        result.malformed = true;
+        continue;
+      }
       const property = properties?.get('uid');
       if (!property) continue;
       result.sawUid = true;
       const uid = normalizeUid(property.type === 'string' ? property.value : property.type === 'bare' ? property.value : null);
       if (!uid) result.malformed = true;
-      else result.uid = result.uid || uid;
+      else if (result.uid !== null) result.malformed = true;
+      else result.uid = uid;
     }
   }
   return result;

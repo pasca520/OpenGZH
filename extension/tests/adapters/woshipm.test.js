@@ -60,6 +60,46 @@ describe('Woshipm adapter', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it('reads quoted script attributes before classifying executable type', async () => {
+    for (const page of [
+      '<script data-label="> ; window.settings={\'jltoken\':\'double-token\'}; var userSettings={uid:\'1585\'}" type="text/plain"></script>',
+      "<script data-label='> ; window.settings={\"jltoken\":\"single-token\"}; var userSettings={uid:\"1585\"}' type='text/plain'></script>",
+    ]) {
+      const fetch = vi.fn()
+        .mockResolvedValueOnce(response(page))
+        .mockResolvedValueOnce(response(JSON.stringify(profile)));
+      await expect(createWoshipmAdapter().checkAuth({ fetch, withHeaderRules: withRules }))
+        .resolves.toEqual({ authenticated: false });
+      expect(fetch).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('fails closed on an unclosed script opening tag', async () => {
+    for (const page of [
+      '<script type="text/plain" data-label="unclosed window.settings={"jltoken":"bad"}; var userSettings={"uid":"1585"}</script>',
+      "<script type='text/plain' data-label='unclosed window.settings={\"jltoken\":\"bad\"}; var userSettings={\"uid\":\"1585\"}</script>",
+    ]) {
+      const fetch = vi.fn().mockResolvedValue(response(page));
+      await expect(createWoshipmAdapter().checkAuth({ fetch, withHeaderRules: withRules }))
+        .rejects.toMatchObject({ code: 'PLATFORM_CHANGED', retryable: false });
+      expect(fetch).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('rejects duplicate top-level auth assignments even when values match', async () => {
+    for (const page of [
+      '<script>window.settings={"jltoken":"same-token"}; window.settings={"jltoken":"same-token"}; var userSettings={"uid":"1585"};</script>',
+      '<script>window.settings={"jltoken":"same-token"}; var userSettings={"uid":"1585"};</script><script>window.settings={"jltoken":"same-token"}; var userSettings={"uid":"1585"};</script>',
+    ]) {
+      const fetch = vi.fn()
+        .mockResolvedValueOnce(response(page))
+        .mockResolvedValueOnce(response(JSON.stringify(profile)));
+      await expect(createWoshipmAdapter().checkAuth({ fetch, withHeaderRules: withRules }))
+        .rejects.toMatchObject({ code: 'PLATFORM_CHANGED', retryable: false });
+      expect(fetch).toHaveBeenCalledTimes(1);
+    }
+  });
+
   it('fails closed when a top-level uid has no valid token', async () => {
     const pages = [
       '<script>var userSettings={uid:"1585"};</script>',
