@@ -210,6 +210,18 @@ describe('content script page snapshot request', () => {
     expect(timeoutTarget.listenerCount('opengzh:distribution:ready')).toBe(0);
     expect(timeoutTarget.listenerCount('opengzh:distribution:error')).toBe(0);
   });
+
+  it('aborts an in-flight snapshot immediately and cleans all listeners', async () => {
+    const { requestSnapshot } = loadTestApi();
+    const target = new FakeEventTarget();
+    const controller = new AbortController();
+    const promise = requestSnapshot({ target, CustomEventCtor: FakeEvent, requestId: 'abort-me', signal: controller.signal, timeoutMs: 15000 });
+    expect(target.listenerCount('opengzh:distribution:ready')).toBe(1);
+    controller.abort();
+    await expect(promise).rejects.toMatchObject({ code: 'ARTICLE_INVALID' });
+    expect(target.listenerCount('opengzh:distribution:ready')).toBe(0);
+    expect(target.listenerCount('opengzh:distribution:error')).toBe(0);
+  });
 });
 
 describe('content script serial image responder', () => {
@@ -365,22 +377,28 @@ describe('content script shadow DOM UI', () => {
     expect(parent.children[1]).toBe(ui.host);
     expect(ui.host.shadowRoot).toBe(ui.shadow);
     expect(ui.rows.get('weixin').row.children[1].className).toBe('platform-icon');
+    expect(ui.rows.get('weixin').row.children[1].textContent).toBe('微');
+    expect(ui.rows.get('weixin').row.children[1].attributes.get('aria-hidden')).toBe('true');
+    expect(ui.rows.get('zhihu').row.children[1].textContent).toBe('知');
+    expect(ui.rows.get('juejin').row.children[1].textContent).toBe('掘');
+    expect(ui.rows.get('woshipm').row.children[1].textContent).toBe('人');
     expect(ui.rows.get('woshipm').row.children[2].className).toBe('opengzh-platform-details');
     expect(ui.rows.get('woshipm').row.children[2].children[0].textContent).toBe('人人都是产品经理');
     expect(ui.rows.get('woshipm').row.children[3].className).toBe('opengzh-platform-actions');
     expect(createUi({ document: doc, anchor, port, storage })).toMatchObject({ existing: true, host: ui.host });
     await ui.openPanel();
-    expect(messages[0]).toEqual({ type: 'CHECK_AUTH', platformIds: allPlatforms });
+    expect(messages[0]).toMatchObject({ type: 'CHECK_AUTH', platformIds: allPlatforms, requestId: expect.any(String) });
     ui.state.taskId = 'task-1';
+    ui.state.operationId = 'operation-1';
     ui.state.busy = true;
-    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-1', platformId: 'weixin', status: 'success', draftUrl: 'https://mp.weixin.qq.com/draft/1' });
+    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-1', operationId: 'operation-1', platformId: 'weixin', status: 'success', draftUrl: 'https://mp.weixin.qq.com/draft/1' });
     expect(ui.rows.get('weixin').draft.href).toBe('https://mp.weixin.qq.com/draft/1');
     expect(ui.rows.get('weixin').draft.textContent).toBe('打开草稿');
-    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-1', platformId: 'weixin', status: 'auth-required' });
+    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-1', operationId: 'operation-1', platformId: 'weixin', status: 'auth-required' });
     ui.state.busy = false;
     ui.state.retryTaskId = 'task-1';
     ui.rows.get('weixin').retry.dispatchEvent(new FakeEvent('click'));
-    expect(messages.at(-1)).toEqual({ type: 'RETRY_PLATFORM', taskId: 'task-1', platformId: 'weixin' });
+    expect(messages.at(-1)).toMatchObject({ type: 'RETRY_PLATFORM', taskId: 'task-1', operationId: expect.any(String), platformId: 'weixin' });
   });
 });
 
@@ -410,7 +428,7 @@ describe('locked distribution protocol integration', () => {
     await ui.ready;
     await ui.openPanel();
     await ui.startBatch();
-    expect(batchMessages.at(-1)).toEqual({ type: 'START_BATCH', taskId: 'task-1', platformIds: allPlatforms, article });
+    expect(batchMessages.at(-1)).toMatchObject({ type: 'START_BATCH', taskId: 'task-1', operationId: expect.any(String), platformIds: allPlatforms, article });
     expect(batchMessages.at(-1).snapshot).toBeUndefined();
   });
 });
@@ -486,7 +504,7 @@ describe('async extension selection storage and selected-only auth', () => {
     ui.rows.get('weixin').checkbox.checked = true;
     ui.rows.get('weixin').checkbox.dispatchEvent(new FakeEvent('change'));
     await ui.openPanel();
-    expect(messages.at(-1)).toEqual({ type: 'CHECK_AUTH', platformIds: ['weixin'] });
+    expect(messages.at(-1)).toMatchObject({ type: 'CHECK_AUTH', requestId: expect.any(String), platformIds: ['weixin'] });
     expect(ui.alert.textContent).toBe('');
   });
 
@@ -505,7 +523,7 @@ describe('async extension selection storage and selected-only auth', () => {
     expect(messages).toEqual([]);
     resolveGet({ 'opengzh.selectedPlatformIds': ['woshipm', 'weixin'] });
     await ui.ready;
-    expect(messages[0]).toEqual({ type: 'CHECK_AUTH', platformIds: ['weixin', 'woshipm'] });
+    expect(messages[0]).toMatchObject({ type: 'CHECK_AUTH', requestId: expect.any(String), platformIds: ['weixin', 'woshipm'] });
     expect(ui.rows.get('zhihu').checkbox.checked).toBe(false);
     for (const id of ['weixin', 'woshipm']) {
       ui.rows.get(id).checkbox.checked = false;
@@ -515,9 +533,11 @@ describe('async extension selection storage and selected-only auth', () => {
     expect(ui.state.selected).toEqual([]);
     ui.rows.get('weixin').checkbox.checked = true;
     ui.rows.get('weixin').checkbox.dispatchEvent(new FakeEvent('change'));
-    ui.onMessage({ type: 'AUTH_RESULT', platformId: 'weixin', authenticated: false });
+    await ui.openPanel();
+    const authRequestId = messages.at(-1).requestId;
+    ui.onMessage({ type: 'AUTH_RESULT', requestId: authRequestId, platformId: 'weixin', authenticated: false });
     ui.rows.get('weixin').retry.dispatchEvent(new FakeEvent('click'));
-    expect(messages.at(-1)).toEqual({ type: 'CHECK_AUTH', platformIds: ['weixin'] });
+    expect(messages.at(-1)).toMatchObject({ type: 'CHECK_AUTH', requestId: expect.any(String), platformIds: ['weixin'] });
   });
 });
 
@@ -531,22 +551,29 @@ describe('batch lifecycle, status progress, and connectivity', () => {
     await ui.openPanel();
     expect(ui.rows.get('weixin').status.textContent).toBe('检测登录中');
     expect(ui.rows.get('zhihu').status.textContent).toBe('未选择');
+    ui.onMessage({ type: 'AUTH_RESULT', requestId: messages.at(-1).requestId, platformId: 'weixin', authenticated: true });
     ui.state.taskId = 'task-9';
+    ui.state.operationId = 'operation-9';
     ui.state.busy = true;
-    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-9', platformId: 'weixin', status: 'failed', error: { message: '平台拒绝' } });
-    ui.onMessage({ type: 'BATCH_COMPLETE', taskId: 'task-9' });
+    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-9', operationId: 'operation-9', platformId: 'weixin', status: 'failed', error: { message: '平台拒绝' } });
+    ui.onMessage({ type: 'BATCH_COMPLETE', taskId: 'task-9', operationId: 'operation-9' });
     expect(ui.state.taskId).toBe(null);
     expect(ui.state.retryTaskId).toBe('task-9');
     expect(ui.state.busy).toBe(false);
     ui.rows.get('weixin').retry.dispatchEvent(new FakeEvent('click'));
-    expect(messages.at(-1)).toEqual({ type: 'RETRY_PLATFORM', taskId: 'task-9', platformId: 'weixin' });
-    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-9', platformId: 'weixin', status: 'uploading-images', completed: 2, total: 5 });
+    expect(messages.at(-1)).toMatchObject({ type: 'RETRY_PLATFORM', taskId: 'task-9', operationId: expect.any(String), platformId: 'weixin' });
+    const retryOperationId = messages.at(-1).operationId;
+    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-9', operationId: retryOperationId, platformId: 'weixin', status: 'uploading-images', completed: 2, total: 5 });
     expect(ui.rows.get('weixin').status.textContent).toContain('2/5');
-    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-9', platformId: 'weixin', status: 'failed', error: { message: '平台拒绝' } });
+    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-9', operationId: retryOperationId, platformId: 'weixin', status: 'failed', error: { message: '平台拒绝' } });
     expect(ui.rows.get('weixin').status.textContent).toBe('平台拒绝');
-    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-9', platformId: 'weixin', status: 'unknown' });
+    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-9', operationId: retryOperationId, platformId: 'weixin', status: 'unknown' });
     expect(ui.rows.get('weixin').status.textContent).toBe('请检查平台草稿箱');
-    ui.onMessage({ type: 'AUTH_RESULT', platformId: 'weixin', authenticated: true });
+    ui.state.busy = false;
+    ui.state.taskId = null;
+    ui.state.operationId = null;
+    await ui.openPanel();
+    ui.onMessage({ type: 'AUTH_RESULT', requestId: messages.at(-1).requestId, platformId: 'weixin', authenticated: true });
     expect(ui.rows.get('weixin').status.textContent).toBe('已登录');
     expect(ui.rows.get('weixin').login.hidden).toBe(true);
   });
@@ -572,6 +599,154 @@ describe('batch lifecycle, status progress, and connectivity', () => {
 });
 
 describe('Task5 quality runtime contracts', () => {
+  it('correlates and debounces auth checks, ignoring stale or busy results', async () => {
+    const { createUi } = loadTestApi();
+    const { doc, anchor } = makeUiDom();
+    const messages = [];
+    const authIdFactory = vi.fn().mockReturnValueOnce('auth-1').mockReturnValueOnce('auth-2');
+    const ui = createUi({
+      document: doc,
+      anchor,
+      storage: { get: async () => ({ 'opengzh.selectedPlatformIds': ['weixin'] }), set: async () => {}, remove: async () => {} },
+      port: { postMessage: (message) => messages.push(message) },
+      authIdFactory,
+    });
+    await ui.ready;
+    await ui.openPanel();
+    expect(messages[0]).toEqual({ type: 'CHECK_AUTH', requestId: 'auth-1', platformIds: ['weixin'] });
+    await ui.openPanel();
+    expect(messages.filter((message) => message.type === 'CHECK_AUTH')).toHaveLength(1);
+    ui.onMessage({ type: 'AUTH_RESULT', requestId: 'old-auth', platformId: 'weixin', authenticated: false });
+    expect(ui.rows.get('weixin').status.textContent).toBe('检测登录中');
+    ui.onMessage({ type: 'AUTH_RESULT', requestId: 'auth-1', platformId: 'zhihu', authenticated: true });
+    expect(ui.rows.get('zhihu').status.textContent).toBe('未选择');
+    ui.onMessage({ type: 'AUTH_RESULT', requestId: 'auth-1', platformId: 'weixin', authenticated: false });
+    expect(ui.rows.get('weixin').status.textContent).toBe('需要登录');
+    await ui.openPanel();
+    expect(messages.at(-1)).toEqual({ type: 'CHECK_AUTH', requestId: 'auth-2', platformIds: ['weixin'] });
+    ui.state.busy = true;
+    ui.onMessage({ type: 'AUTH_RESULT', requestId: 'auth-2', platformId: 'weixin', authenticated: true });
+    expect(ui.rows.get('weixin').status.textContent).toBe('检测登录中');
+  });
+
+  it('correlates operation id with task context for states, completion, and fatal errors', async () => {
+    const { createUi } = loadTestApi();
+    const { doc, anchor } = makeUiDom();
+    const messages = [];
+    const ui = createUi({
+      document: doc,
+      anchor,
+      storage: { get: async () => ({ 'opengzh.selectedPlatformIds': ['weixin'] }), set: async () => {}, remove: async () => {} },
+      port: { postMessage: (message) => messages.push(message) },
+      snapshotRequest: async () => snapshot(),
+      idFactory: vi.fn().mockReturnValue('task-1'),
+      operationIdFactory: vi.fn().mockReturnValueOnce('operation-1').mockReturnValueOnce('operation-2'),
+    });
+    await ui.ready;
+    await ui.startBatch();
+    expect(messages.at(-1)).toMatchObject({ type: 'START_BATCH', taskId: 'task-1', operationId: 'operation-1' });
+    expect(ui.state.activeTaskId).toBe('task-1');
+    expect(ui.state.activeOperationId).toBe('operation-1');
+    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-1', operationId: 'old-operation', platformId: 'weixin', status: 'success', draftUrl: 'https://mp.weixin.qq.com/draft/old' });
+    expect(ui.rows.get('weixin').status.textContent).toBe('检测登录中');
+    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-1', operationId: 'operation-1', platformId: 'zhihu', status: 'success', draftUrl: 'https://zhuanlan.zhihu.com/p/1' });
+    expect(ui.rows.get('zhihu').draft.hidden).toBe(true);
+    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-1', operationId: 'operation-1', platformId: 'weixin', status: 'failed', error: { message: '平台拒绝' } });
+    ui.onMessage({ type: 'BATCH_COMPLETE', taskId: 'task-1', operationId: 'old-operation' });
+    expect(ui.state.busy).toBe(true);
+    ui.onMessage({ type: 'BATCH_COMPLETE', taskId: 'task-1', operationId: 'operation-1' });
+    expect(ui.state.busy).toBe(false);
+    expect(ui.state.activeTaskId).toBe(null);
+    ui.rows.get('weixin').retry.dispatchEvent(new FakeEvent('click'));
+    expect(messages.at(-1)).toEqual({ type: 'RETRY_PLATFORM', taskId: 'task-1', operationId: 'operation-2', platformId: 'weixin' });
+    expect(ui.state.activeOperationId).toBe('operation-2');
+    ui.onMessage({ type: 'FATAL_ERROR', taskId: 'task-1', operationId: 'old-operation', message: '旧失败' });
+    expect(ui.state.busy).toBe(true);
+    ui.onMessage({ type: 'FATAL_ERROR', taskId: 'task-1', operationId: 'operation-2', message: '当前失败' });
+    expect(ui.state.busy).toBe(false);
+  });
+
+  it('correlates auth fatal errors and invalidates auth when starting a batch', async () => {
+    const { createUi } = loadTestApi();
+    const { doc, anchor } = makeUiDom();
+    const messages = [];
+    const ui = createUi({
+      document: doc,
+      anchor,
+      storage: { get: async () => ({ 'opengzh.selectedPlatformIds': ['weixin'] }), set: async () => {}, remove: async () => {} },
+      port: { postMessage: (message) => messages.push(message) },
+      snapshotRequest: async () => snapshot(),
+      authIdFactory: () => 'auth-pending',
+      idFactory: () => 'task-new',
+      operationIdFactory: () => 'operation-new',
+    });
+    await ui.ready;
+    await ui.openPanel();
+    expect(ui.state.authRequestId).toBe('auth-pending');
+    ui.onMessage({ type: 'FATAL_ERROR', requestId: 'old-auth', message: '旧鉴权失败' });
+    expect(ui.alert.textContent).toBe('');
+    await ui.startBatch();
+    expect(ui.state.authRequestId).toBe(null);
+    ui.onMessage({ type: 'AUTH_RESULT', requestId: 'auth-pending', platformId: 'weixin', authenticated: false });
+    expect(ui.rows.get('weixin').status.textContent).toBe('检测登录中');
+  });
+
+  it('passes AbortSignal to snapshots and aborts on finish or dispose', async () => {
+    const { createUi } = loadTestApi();
+    const { doc, anchor } = makeUiDom();
+    let aborted = false;
+    const snapshotRequest = vi.fn(({ signal }) => new Promise((resolve, reject) => {
+      signal?.addEventListener('abort', () => { aborted = true; reject(new Error('aborted')); }, { once: true });
+    }));
+    const ui = createUi({
+      document: doc,
+      anchor,
+      storage: { get: async () => ({}), set: async () => {}, remove: async () => {} },
+      port: { postMessage: () => {} },
+      snapshotRequest,
+      idFactory: () => 'task-abort',
+    });
+    await ui.ready;
+    const start = ui.startBatch();
+    await Promise.resolve();
+    expect(snapshotRequest).toHaveBeenCalledWith(expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    ui.dispose();
+    await start;
+    expect(aborted).toBe(true);
+    expect(ui.alert.textContent).toBe('');
+  });
+
+  it('clears every row draft, status, and map entry before a new selected batch', async () => {
+    const { createUi } = loadTestApi();
+    const { doc, anchor } = makeUiDom();
+    const ui = createUi({
+      document: doc,
+      anchor,
+      storage: { get: async () => ({}), set: async () => {}, remove: async () => {} },
+      port: { postMessage: () => {} },
+      snapshotRequest: async () => snapshot(),
+      idFactory: () => 'task-new',
+      operationIdFactory: () => 'operation-new',
+    });
+    await ui.ready;
+    ui.state.taskId = 'task-old';
+    ui.state.operationId = 'operation-old';
+    ui.state.busy = true;
+    for (const platformId of allPlatforms) {
+      ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-old', operationId: 'operation-old', platformId, status: 'success', draftUrl: `https://${platformId === 'weixin' ? 'mp.weixin.qq.com' : platformId === 'zhihu' ? 'zhuanlan.zhihu.com' : platformId === 'juejin' ? 'juejin.cn' : 'www.woshipm.com'}/draft/old` });
+    }
+    ui.state.busy = false;
+    ui.state.selected = ['weixin'];
+    ui.rows.get('weixin').checkbox.checked = true;
+    for (const platformId of allPlatforms.slice(1)) ui.rows.get(platformId).checkbox.checked = false;
+    await ui.startBatch();
+    expect([...ui.state.draftUrls]).toHaveLength(0);
+    for (const platformId of allPlatforms) {
+      const row = ui.rows.get(platformId);
+      expect(row.draft.hidden).toBe(true);
+      expect(row.status.textContent).toBe(platformId === 'weixin' ? '检测登录中' : '未选择');
+    }
+  });
   it('gates pending snapshots and ignores stale protocol events by active task generation', async () => {
     const { createUi } = loadTestApi();
     const { doc, anchor } = makeUiDom();
@@ -595,9 +770,9 @@ describe('Task5 quality runtime contracts', () => {
     expect(ui.state.busy).toBe(true);
     expect(ui.state.taskId).toBe('task-a');
     ui.onMessage({ type: 'BATCH_COMPLETE', taskId: 'stale-task' });
-    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'stale-task', platformId: 'weixin', status: 'success' });
+    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'stale-task', operationId: 'stale-operation', platformId: 'weixin', status: 'success' });
     expect(ui.state.busy).toBe(true);
-    ui.onMessage({ type: 'FATAL_ERROR', taskId: 'task-a', message: '当前批次失败' });
+    ui.onMessage({ type: 'FATAL_ERROR', taskId: 'task-a', operationId: ui.state.operationId, message: '当前批次失败' });
     expect(ui.state.busy).toBe(false);
     expect(ui.state.taskId).toBe(null);
 
@@ -628,20 +803,23 @@ describe('Task5 quality runtime contracts', () => {
     await ui.ready;
     await ui.openPanel();
     ui.state.taskId = 'task-9';
+    ui.state.operationId = 'operation-9';
     ui.state.busy = true;
-    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-9', platformId: 'weixin', status: 'failed', error: { message: '平台拒绝' } });
-    ui.onMessage({ type: 'BATCH_COMPLETE', taskId: 'task-9' });
+    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-9', operationId: 'operation-9', platformId: 'weixin', status: 'failed', error: { message: '平台拒绝' } });
+    ui.onMessage({ type: 'BATCH_COMPLETE', taskId: 'task-9', operationId: 'operation-9' });
     expect(ui.state.taskId).toBe(null);
     expect(ui.state.retryTaskId).toBe('task-9');
     expect(ui.rows.get('weixin').canRetry).toBe(true);
     ui.rows.get('weixin').retry.dispatchEvent(new FakeEvent('click'));
     ui.rows.get('weixin').retry.dispatchEvent(new FakeEvent('click'));
-    expect(messages.filter((message) => message.type === 'RETRY_PLATFORM')).toEqual([{ type: 'RETRY_PLATFORM', taskId: 'task-9', platformId: 'weixin' }]);
+    expect(messages.filter((message) => message.type === 'RETRY_PLATFORM')).toHaveLength(1);
+    expect(messages.at(-1)).toMatchObject({ type: 'RETRY_PLATFORM', taskId: 'task-9', operationId: expect.any(String), platformId: 'weixin' });
     expect(ui.state.busy).toBe(true);
     expect(ui.state.taskId).toBe('task-9');
-    ui.onMessage({ type: 'FATAL_ERROR', taskId: 'other-task', message: '旧错误' });
+    const retryOperationId = messages.at(-1).operationId;
+    ui.onMessage({ type: 'FATAL_ERROR', taskId: 'other-task', operationId: retryOperationId, message: '旧错误' });
     expect(ui.state.busy).toBe(true);
-    ui.onMessage({ type: 'FATAL_ERROR', taskId: 'task-9', message: '重试失败' });
+    ui.onMessage({ type: 'FATAL_ERROR', taskId: 'task-9', operationId: retryOperationId, message: '重试失败' });
     expect(ui.state.busy).toBe(false);
     expect(ui.state.taskId).toBe(null);
     expect(ui.state.retryTaskId).toBe('task-9');
@@ -658,7 +836,8 @@ describe('Task5 quality runtime contracts', () => {
     });
     await ui.ready;
     await ui.openPanel();
-    ui.onMessage({ type: 'AUTH_RESULT', results: [
+    const authRequestId = ui.state.authRequestId;
+    ui.onMessage({ type: 'AUTH_RESULT', requestId: authRequestId, results: [
       { platformId: 'weixin', authenticated: false },
       { platformId: 'zhihu', authenticated: true },
     ] });
@@ -684,8 +863,9 @@ describe('Task5 quality runtime contracts', () => {
     await ui.ready;
     await ui.openPanel();
     ui.state.taskId = 'task-draft';
+    ui.state.operationId = 'operation-draft';
     ui.state.busy = true;
-    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-draft', platformId: 'weixin', status: 'success', draftUrl: 'https://evil.example/draft?token=secret' });
+    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-draft', operationId: 'operation-draft', platformId: 'weixin', status: 'success', draftUrl: 'https://evil.example/draft?token=secret' });
     expect(ui.rows.get('weixin').draft.hidden).toBe(true);
     expect(ui.rows.get('weixin').retry.disabled).toBe(true);
     expect(ui.rows.get('weixin').status.textContent).toBe('请检查平台草稿箱');
@@ -698,7 +878,7 @@ describe('Task5 quality runtime contracts', () => {
     };
     ui.state.selected = allPlatforms.slice();
     for (const platformId of allPlatforms) {
-      ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-draft', platformId, status: 'success', draftUrl: validUrls[platformId] });
+      ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-draft', operationId: 'operation-draft', platformId, status: 'success', draftUrl: validUrls[platformId] });
       expect(ui.rows.get(platformId).draft.hidden).toBe(false);
       expect(ui.rows.get(platformId).draft.href).not.toMatch(/token|ticket|csrf|session_token/i);
       expect(ui.rows.get(platformId).retry.disabled).toBe(true);
@@ -717,15 +897,16 @@ describe('Task5 quality runtime contracts', () => {
     await ui.ready;
     await ui.openPanel();
     ui.state.taskId = 'task-1';
+    ui.state.operationId = 'operation-1';
     ui.state.busy = true;
-    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-1', platformId: 'weixin', status: 'success', draftUrl: 'https://mp.weixin.qq.com/draft/1' });
+    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-1', operationId: 'operation-1', platformId: 'weixin', status: 'success', draftUrl: 'https://mp.weixin.qq.com/draft/1' });
     expect(ui.rows.get('weixin').retry.disabled).toBe(true);
     expect(ui.rows.get('weixin').draft.hidden).toBe(false);
-    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-1', platformId: 'weixin', status: 'unknown' });
+    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-1', operationId: 'operation-1', platformId: 'weixin', status: 'unknown' });
     expect(ui.rows.get('weixin').retry.disabled).toBe(true);
     expect(ui.rows.get('weixin').draft.hidden).toBe(true);
     ui.state.busy = false;
-    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-1', platformId: 'weixin', status: 'auth-required' });
+    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-1', operationId: 'operation-1', platformId: 'weixin', status: 'auth-required' });
     expect(ui.rows.get('weixin').retry.disabled).toBe(false);
   });
 
@@ -750,6 +931,32 @@ describe('Task5 quality runtime contracts', () => {
     ui.panel.dispatchEvent(backward);
     expect(backward.defaultPrevented).toBe(true);
     expect(doc.activeElement).toBe(ui.start);
+  });
+
+  it('uses shadow activeElement to move between controls instead of resetting every Tab to close', async () => {
+    const { createUi } = loadTestApi();
+    const { doc, anchor } = makeUiDom();
+    const ui = createUi({
+      document: doc,
+      anchor,
+      storage: { get: async () => ({}), set: async () => {}, remove: async () => {} },
+      port: { postMessage: () => {} },
+    });
+    await ui.ready;
+    await ui.openPanel();
+    const checkbox = ui.rows.get('weixin').checkbox;
+    const login = ui.rows.get('weixin').login;
+    checkbox.focus();
+    ui.shadow.activeElement = checkbox;
+    const forward = new FakeEvent('keydown', { key: 'Tab' });
+    ui.panel.dispatchEvent(forward);
+    expect(forward.defaultPrevented).toBe(true);
+    expect(doc.activeElement).toBe(login);
+    ui.shadow.activeElement = login;
+    const backward = new FakeEvent('keydown', { key: 'Tab', shiftKey: true });
+    ui.panel.dispatchEvent(backward);
+    expect(backward.defaultPrevented).toBe(true);
+    expect(doc.activeElement).toBe(checkbox);
   });
 
   it('reports selection persistence failures without blocking the panel', async () => {
@@ -854,6 +1061,8 @@ describe('content script mount lifecycle', () => {
     expect(port.onMessage.removeListener).toHaveBeenCalledTimes(1);
     expect(port.onDisconnect.removeListener).toHaveBeenCalledTimes(1);
     expect(port.disconnect).toHaveBeenCalledTimes(1);
+    expect(host.parentNode).toBe(null);
+    expect(ui.trigger.listenerCount('click')).toBe(0);
   });
 });
 

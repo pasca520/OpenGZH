@@ -8,6 +8,7 @@
     juejin: Object.freeze({ name: '掘金', loginUrl: 'https://juejin.cn/login' }),
     woshipm: Object.freeze({ name: '人人都是产品经理', loginUrl: 'https://www.woshipm.com/login.html' }),
   });
+  const PLATFORM_ICONS = Object.freeze({ weixin: '微', zhihu: '知', juejin: '掘', woshipm: '人' });
   const SUBTITLE = '微信公众号、知乎、掘金、人人都是产品经理文章同步助手';
   const PORT_NAME = 'opengzh-distribution-v1';
   const STORAGE_KEY = 'opengzh.selectedPlatformIds';
@@ -237,7 +238,7 @@
     return contractError(code, message);
   }
 
-  function requestSnapshot({ target = root.document, timeoutMs = 15000, CustomEventCtor = defaultEventCtor(), requestId = randomId() } = {}) {
+  function requestSnapshot({ target = root.document, timeoutMs = 15000, CustomEventCtor = defaultEventCtor(), requestId = randomId(), signal } = {}) {
     return new Promise((resolve, reject) => {
       if (!target || typeof target.addEventListener !== 'function' || typeof target.dispatchEvent !== 'function') {
         reject(contractError(ARTICLE_INVALID, '页面快照请求不可用'));
@@ -245,10 +246,12 @@
       }
       let settled = false;
       let timer;
+      let onAbort;
       const cleanup = () => {
         if (timer) clearTimeout(timer);
         target.removeEventListener(PAGE_EVENTS.ready, onReady);
         target.removeEventListener(PAGE_EVENTS.error, onError);
+        signal?.removeEventListener?.('abort', onAbort);
       };
       const settle = (callback, value) => {
         if (settled) return;
@@ -274,8 +277,14 @@
           settle(reject, contractError(ARTICLE_INVALID, '文章快照生成失败'));
         }
       };
+      onAbort = () => settle(reject, contractError(ARTICLE_INVALID, '文章快照生成失败'));
+      if (signal?.aborted) {
+        onAbort();
+        return;
+      }
       target.addEventListener(PAGE_EVENTS.ready, onReady);
       target.addEventListener(PAGE_EVENTS.error, onError);
+      signal?.addEventListener?.('abort', onAbort, { once: true });
       timer = setTimeout(() => settle(reject, contractError(ARTICLE_INVALID, '文章快照生成失败')), timeoutMs);
       try {
         target.dispatchEvent(new CustomEventCtor(PAGE_EVENTS.request, { detail: { requestId } }));
@@ -525,6 +534,9 @@
     storage = defaultStorage(),
     snapshotRequest = requestSnapshot,
     idFactory = randomId,
+    authIdFactory = randomId,
+    operationIdFactory = randomId,
+    AbortControllerCtor = root.AbortController,
     windowObject = root,
   } = {}) {
     if (!doc || !anchor || !anchor.parentNode) return null;
@@ -541,8 +553,21 @@
       taskId: null,
       retryTaskId: null,
       generation: 0,
+      authRequestId: null,
+      authPlatforms: [],
+      authCompleted: new Set(),
+      operationId: null,
       draftUrls: new Map(),
     };
+    Object.defineProperties(state, {
+      activeTaskId: { get: () => state.taskId, set: (value) => { state.taskId = value; } },
+      activeOperationId: { get: () => state.operationId, set: (value) => { state.operationId = value; } },
+    });
+    const listenerDisposers = [];
+    function listen(target, type, handler) {
+      target?.addEventListener?.(type, handler);
+      if (target?.removeEventListener) listenerDisposers.push(() => target.removeEventListener(type, handler));
+    }
 
     const shell = doc.createElement('div');
     shell.className = 'opengzh-extension-shell';
@@ -573,8 +598,9 @@
       checkbox.type = 'checkbox';
       checkbox.checked = true;
       checkbox.dataset.platformId = platformId;
-      const icon = textElement(doc, 'span', '', 'platform-icon');
+      const icon = textElement(doc, 'span', PLATFORM_ICONS[platformId], 'platform-icon');
       icon.dataset.platformId = platformId;
+      icon.setAttribute('aria-hidden', 'true');
       const name = textElement(doc, 'span', PLATFORMS[platformId].name, 'opengzh-platform-name');
       const status = textElement(doc, 'span', '未知状态', 'opengzh-platform-status');
       status.setAttribute('aria-live', 'polite');
@@ -599,26 +625,28 @@
       row.append(checkbox, icon, details, actions);
       rows.append(row);
       rowMap.set(platformId, { row, checkbox, status, login, retry, draft, canRetry: false, statusKey: 'unknown' });
-      checkbox.addEventListener('change', () => {
+      listen(checkbox, 'change', () => {
         if (state.busy) return;
+        invalidateAuth();
         state.selected = PLATFORM_IDS.filter((id) => rowMap.get(id).checkbox.checked);
         persistSelection(storage, state.selected).catch(() => setAlert('选择未保存'));
       });
-      login.addEventListener('click', () => {
+      listen(login, 'click', () => {
         windowObject.open?.(PLATFORMS[platformId].loginUrl, '_blank', 'noopener');
       });
-      retry.addEventListener('click', () => {
+      listen(retry, 'click', () => {
         if (state.busy || !rowMap.get(platformId).canRetry) return;
         if (state.retryTaskId) {
           state.busy = true;
           state.taskId = state.retryTaskId;
+          state.operationId = operationIdFactory();
           state.generation += 1;
           setStatus(platformId, 'checking-auth');
           setLocked(true);
-          post({ type: 'RETRY_PLATFORM', taskId: state.taskId, platformId });
+          post({ type: 'RETRY_PLATFORM', taskId: state.taskId, operationId: state.operationId, platformId });
           return;
         }
-        post({ type: 'CHECK_AUTH', platformIds: [platformId] });
+        sendCheckAuth([platformId]);
       });
     }
     const alert = textElement(doc, 'p', '', 'opengzh-alert');
@@ -654,6 +682,32 @@
     shadow.append(style, shell);
 
     const imageResponder = createImageResponder({ port });
+    let snapshotController = null;
+    function createSnapshotController() {
+      if (typeof AbortControllerCtor === 'function') return new AbortControllerCtor();
+      let aborted = false;
+      const listeners = new Set();
+      const signal = {
+        get aborted() { return aborted; },
+        addEventListener(type, listener) { if (type === 'abort') listeners.add(listener); },
+        removeEventListener(type, listener) { if (type === 'abort') listeners.delete(listener); },
+      };
+      return {
+        signal,
+        abort() {
+          if (aborted) return;
+          aborted = true;
+          for (const listener of [...listeners]) listener();
+          listeners.clear();
+        },
+      };
+    }
+
+    function abortSnapshot() {
+      snapshotController?.abort?.();
+      snapshotController = null;
+    }
+
     function post(message) {
       if (!port || typeof port.postMessage !== 'function') {
         finishTask('无法连接同步服务');
@@ -687,6 +741,12 @@
 
     function setAlert(message) {
       alert.textContent = message || '';
+    }
+
+    function invalidateAuth() {
+      state.authRequestId = null;
+      state.authPlatforms = [];
+      state.authCompleted.clear();
     }
 
     function clearDraft(row) {
@@ -748,23 +808,34 @@
     }
 
     function finishTask(message = '', { clearTask = true, clearRetry = false } = {}) {
+      abortSnapshot();
       state.busy = false;
-      if (clearTask) state.taskId = null;
+      if (clearTask) {
+        state.taskId = null;
+        state.operationId = null;
+      }
       if (clearRetry) state.retryTaskId = null;
       setLocked(false);
       if (message) setAlert(message);
     }
 
-    function sendCheckAuth() {
+    function sendCheckAuth(platformIds = state.selected.slice()) {
+      if (state.busy || state.authRequestId) return false;
       for (const platformId of PLATFORM_IDS) {
-        setStatus(platformId, state.selected.includes(platformId) ? 'checking-auth' : 'unselected');
+        setStatus(platformId, platformIds.includes(platformId) ? 'checking-auth' : 'unselected');
       }
-      if (!state.selected.length) {
+      if (!platformIds.length) {
+        invalidateAuth();
         setAlert('至少选择一个平台');
         return false;
       }
+      const requestId = authIdFactory();
+      state.authRequestId = requestId;
+      state.authPlatforms = platformIds.slice();
+      state.authCompleted.clear();
       setAlert('');
-      post({ type: 'CHECK_AUTH', platformIds: state.selected.slice() });
+      if (!post({ type: 'CHECK_AUTH', requestId, platformIds: platformIds.slice() })) invalidateAuth();
+      return true;
     }
 
     async function startBatch() {
@@ -774,22 +845,35 @@
         setAlert('至少选择一个平台');
         return;
       }
+      abortSnapshot();
+      invalidateAuth();
       const generation = state.generation + 1;
       const taskId = idFactory();
+      const operationId = operationIdFactory();
       state.generation = generation;
       state.taskId = taskId;
+      state.operationId = operationId;
       state.retryTaskId = null;
       state.draftUrls.clear();
       state.busy = true;
+      snapshotController = createSnapshotController();
+      state.authCompleted.clear();
+      for (const platformId of PLATFORM_IDS) {
+        const row = rowMap.get(platformId);
+        clearDraft(row);
+        state.draftUrls.delete(platformId);
+        setStatus(platformId, state.selected.includes(platformId) ? 'checking-auth' : 'unselected');
+      }
       for (const platformId of state.selected) setStatus(platformId, 'checking-auth');
       setLocked(true);
       setAlert('正在读取文章');
       try {
-        const article = await snapshotRequest({ target: doc });
+        const article = await snapshotRequest({ target: doc, signal: snapshotController.signal });
         if (!state.busy || state.taskId !== taskId || state.generation !== generation) return;
-        post({ type: 'START_BATCH', taskId, platformIds: state.selected.slice(), article });
+        post({ type: 'START_BATCH', taskId, operationId, platformIds: state.selected.slice(), article });
       } catch (error) {
         if (state.taskId !== taskId || state.generation !== generation) return;
+        if (state.disposed) return;
         finishTask(error?.message || '文章快照生成失败');
       }
     }
@@ -826,12 +910,13 @@
       if (!controls.length) return;
       const first = controls[0];
       const last = controls[controls.length - 1];
-      const current = doc.activeElement;
-      if ((event.shiftKey && (current === first || !controls.includes(current)))
-        || (!event.shiftKey && (current === last || !controls.includes(current)))) {
-        event.preventDefault?.();
-        (event.shiftKey ? last : first).focus();
-      }
+      const current = shadow.activeElement || doc.activeElement;
+      const index = controls.indexOf(current);
+      const next = index < 0
+        ? (event.shiftKey ? last : first)
+        : controls[(index + (event.shiftKey ? -1 : 1) + controls.length) % controls.length];
+      event.preventDefault?.();
+      next.focus();
     }
 
     function onMessage(message) {
@@ -840,20 +925,25 @@
         return;
       }
       if (message?.type === 'AUTH_RESULT') {
+        if (state.busy || !state.authRequestId || message.requestId !== state.authRequestId) return;
         const results = Array.isArray(message.results)
           ? message.results
           : (message.platforms && typeof message.platforms === 'object'
             ? PLATFORM_IDS.map((platformId) => ({ platformId, ...message.platforms[platformId] }))
             : (message.platformId ? [message] : []));
         for (const result of results) {
-          if (!state.selected.includes(result.platformId)) continue;
+          if (!state.authPlatforms.includes(result.platformId) || !state.selected.includes(result.platformId)
+            || state.authCompleted.has(result.platformId)) continue;
           const authenticated = result.authenticated ?? result.loggedIn ?? result.ok;
           setAuthStatus(result.platformId, Boolean(authenticated));
+          state.authCompleted.add(result.platformId);
         }
+        if (state.authPlatforms.every((platformId) => state.authCompleted.has(platformId))) invalidateAuth();
         return;
       }
       if (message?.type === 'PLATFORM_STATE') {
-        if (!state.taskId || message.taskId !== state.taskId) return;
+        if (!state.taskId || !state.operationId || message.taskId !== state.taskId
+          || message.operationId !== state.operationId || !state.selected.includes(message.platformId)) return;
         const status = message.status || message.state || 'unknown';
         setStatus(message.platformId, status, message);
         const draftUrl = sanitizeDraftUrl(message.platformId, message.draftUrl);
@@ -862,13 +952,17 @@
         return;
       }
       if (message?.type === 'BATCH_COMPLETE') {
-        if (!state.taskId || message.taskId !== state.taskId) return;
+        if (!state.taskId || !state.operationId || message.taskId !== state.taskId || message.operationId !== state.operationId) return;
         state.retryTaskId = state.taskId;
         finishTask();
         return;
       }
       if (message?.type === 'FATAL_ERROR') {
-        if (state.busy && message.taskId !== state.taskId) return;
+        if (state.busy && (message.taskId !== state.taskId || message.operationId !== state.operationId)) return;
+        if (!state.busy && state.authRequestId) {
+          if (message.requestId !== state.authRequestId) return;
+          invalidateAuth();
+        }
         finishTask(typeof message.message === 'string' ? message.message : '同步失败');
       }
     }
@@ -876,17 +970,17 @@
     const onPortDisconnect = () => finishTask('无法连接同步服务', { clearRetry: true });
     port?.onMessage?.addListener?.(onMessage);
     port?.onDisconnect?.addListener?.(onPortDisconnect);
-    trigger.addEventListener('click', openPanel);
-    close.addEventListener('click', closePanel);
-    backdrop.addEventListener('click', (event) => {
+    listen(trigger, 'click', openPanel);
+    listen(close, 'click', closePanel);
+    listen(backdrop, 'click', (event) => {
       if (event.target === backdrop) closePanel();
     });
     const onDocumentKeydown = (event) => {
       if (event.key === 'Escape' && !backdrop.hidden) closePanel();
     };
-    doc.addEventListener?.('keydown', onDocumentKeydown);
-    panel.addEventListener('keydown', onPanelKeydown);
-    start.addEventListener('click', startBatch);
+    listen(doc, 'keydown', onDocumentKeydown);
+    listen(panel, 'keydown', onPanelKeydown);
+    listen(start, 'click', startBatch);
     renderSelection();
     const ready = restoreSelection(storage).then((persisted) => {
       state.selected = normalizeSelection(persisted);
@@ -900,10 +994,17 @@
     function dispose() {
       if (disposed) return;
       disposed = true;
+      state.disposed = true;
+      abortSnapshot();
+      invalidateAuth();
+      state.busy = false;
+      state.taskId = null;
+      state.operationId = null;
+      setAlert('');
+      for (const remove of listenerDisposers.splice(0)) remove();
       port?.onMessage?.removeListener?.(onMessage);
       port?.onDisconnect?.removeListener?.(onPortDisconnect);
-      doc.removeEventListener?.('keydown', onDocumentKeydown);
-      panel.removeEventListener?.('keydown', onPanelKeydown);
+      if (host.parentNode) host.parentNode.removeChild(host);
     }
 
     return {
