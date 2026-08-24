@@ -691,6 +691,49 @@ describe('Task5 quality runtime contracts', () => {
     expect(ui.rows.get('weixin').status.textContent).toBe('检测登录中');
   });
 
+  it('ignores fatal errors without an active task or pending auth request', async () => {
+    const { createUi } = loadTestApi();
+    const { doc, anchor } = makeUiDom();
+    const ui = createUi({
+      document: doc,
+      anchor,
+      storage: { get: async () => ({}), set: async () => {}, remove: async () => {} },
+      port: { postMessage: () => {} },
+    });
+    await ui.ready;
+    ui.onMessage({ type: 'FATAL_ERROR', message: '无关联错误' });
+    expect(ui.alert.textContent).toBe('');
+    ui.onMessage({ type: 'FATAL_ERROR', taskId: 'old-task', operationId: 'old-operation', message: '旧错误' });
+    expect(ui.alert.textContent).toBe('');
+  });
+
+  it('does not act on open or start after dispose while selection restore is pending', async () => {
+    const { createUi } = loadTestApi();
+    const { doc, anchor } = makeUiDom();
+    let resolveSelection;
+    const messages = [];
+    const ui = createUi({
+      document: doc,
+      anchor,
+      storage: {
+        get: () => new Promise((resolve) => { resolveSelection = resolve; }),
+        set: async () => {},
+        remove: async () => {},
+      },
+      port: { postMessage: (message) => messages.push(message) },
+      snapshotRequest: async () => snapshot(),
+    });
+    const opening = ui.openPanel();
+    const starting = ui.startBatch();
+    ui.dispose();
+    resolveSelection({});
+    await Promise.all([opening, starting]);
+    expect(messages).toEqual([]);
+    expect(ui.state.busy).toBe(false);
+    expect(ui.state.taskId).toBe(null);
+    expect(ui.backdrop.hidden).toBe(true);
+  });
+
   it('passes AbortSignal to snapshots and aborts on finish or dispose', async () => {
     const { createUi } = loadTestApi();
     const { doc, anchor } = makeUiDom();

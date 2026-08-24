@@ -709,6 +709,7 @@
     }
 
     function post(message) {
+      if (state.disposed) return false;
       if (!port || typeof port.postMessage !== 'function') {
         finishTask('无法连接同步服务');
         return false;
@@ -820,7 +821,7 @@
     }
 
     function sendCheckAuth(platformIds = state.selected.slice()) {
-      if (state.busy || state.authRequestId) return false;
+      if (state.disposed || state.busy || state.authRequestId) return false;
       for (const platformId of PLATFORM_IDS) {
         setStatus(platformId, platformIds.includes(platformId) ? 'checking-auth' : 'unselected');
       }
@@ -840,6 +841,7 @@
 
     async function startBatch() {
       await ready;
+      if (state.disposed) return;
       if (state.busy) return;
       if (!state.selected.length) {
         setAlert('至少选择一个平台');
@@ -880,6 +882,7 @@
 
     async function openPanel() {
       await ready;
+      if (state.disposed) return;
       panel.hidden = false;
       backdrop.hidden = false;
       trigger.setAttribute('aria-expanded', 'true');
@@ -920,6 +923,7 @@
     }
 
     function onMessage(message) {
+      if (state.disposed) return;
       if (message?.type === 'IMAGE_REQUIRED') {
         imageResponder.handleMessage(message);
         return;
@@ -962,6 +966,8 @@
         if (!state.busy && state.authRequestId) {
           if (message.requestId !== state.authRequestId) return;
           invalidateAuth();
+        } else if (!state.busy) {
+          return;
         }
         finishTask(typeof message.message === 'string' ? message.message : '同步失败');
       }
