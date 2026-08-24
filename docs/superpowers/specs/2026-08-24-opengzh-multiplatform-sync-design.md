@@ -362,7 +362,9 @@ http://127.0.0.1/*
 - `storage`
 - `declarativeNetRequestWithHostAccess`
 
-平台域名放入 `optional_host_permissions`，首次选择对应平台时按需申请。MVP 只声明以下模式：
+权限方案使用一次安装授权，不使用运行时申请：Chrome Content Script 不能直接调用 `chrome.permissions`，而 [`permissions.request()` 必须在调用它的扩展上下文用户手势内执行](https://developer.chrome.com/docs/extensions/reference/api/permissions)。Chrome 没有保证 Content Script 的点击经 `runtime.Port` 转发后仍为 Service Worker 保留用户手势，因此不把该转发链路作为发布依赖。
+
+MVP 将以下十个精确模式放入 required `host_permissions`，由用户在 Chrome 安装权限界面一次确认：
 
 ```text
 https://mp.weixin.qq.com/*
@@ -376,6 +378,10 @@ https://imagex.bytedanceapi.com/*
 https://*.volces.com/*
 https://www.woshipm.com/*
 ```
+
+Content Script 不调用 `chrome.permissions.contains()` 或 `chrome.permissions.request()`。Service Worker 在 `CHECK_AUTH`、`START_BATCH` 和单平台重试前，只接受经白名单校验的 `platformId`，从不可变的 `platformId → origins` 映射派生待检查域名，并在受信任的 Service Worker 上下文调用 `chrome.permissions.contains()`。如果用户或企业策略已撤回/扣留某个 required host，必须在发出任何平台网络请求前以 `PERMISSION_DENIED` 失败关闭，提示用户在 Chrome 扩展详情中恢复站点访问后重试。
+
+这一技术修正的权衡是：将原本的分平台首次提示改为安装时一次展示所有目标域名，换取可执行、可验收的 MV3 权限路径。平台勾选仍只决定执行哪些适配器，不作为授权边界。插件不得请求消息中传入的 origin，也不得在运行时动态扩大权限。
 
 掘金返回的临时上传地址必须属于 `*.volces.com`；知乎上传地址必须为 `zhihu-pics-upload.zhimg.com`。响应返回其他上传 host 时按 `PLATFORM_CHANGED` 失败关闭，不能临时扩大权限。
 
@@ -412,6 +418,7 @@ UNKNOWN_REMOTE_STATE
 处理原则：
 
 - `401/403`、登录页重定向或平台登录错误码映射为 `AUTH_REQUIRED`。
+- Service Worker 的固定域名授权预检失败时映射为 `PERMISSION_DENIED`，不发出平台请求；恢复站点访问后允许用户显式重试。
 - 响应结构不再包含预期字段时映射为 `PLATFORM_CHANGED`，并保留 HTTP 状态与已脱敏响应摘要。
 - 图片上传失败可重试该平台，因为草稿尚未创建。
 - 创建草稿请求明确返回失败时可以重试。
@@ -437,7 +444,8 @@ UNKNOWN_REMOTE_STATE
 - `article-package`：标题、Markdown、语义 HTML、微信 HTML 和图片清单一致。
 - 专属标记清理：卡片与小红书分页标记不会泄漏到掘金。
 - 图片预检：本地图片、Data URL、平台 CDN、普通外链分别得到正确结论。
-- Manifest：不存在 `<all_urls>`、`cookies`、`unlimitedStorage` 和全站 Content Script。
+- Manifest：`host_permissions` 精确等于十个锁定模式，不存在 `optional_host_permissions`、`<all_urls>`、`cookies`、`unlimitedStorage` 和全站 Content Script。
+- Content Script/Service Worker：Content Script 源码不包含 `chrome.permissions`；Service Worker 只从固定平台 ID 派生 origins，`contains()` 返回 false 时产生 `PERMISSION_DENIED`。
 - 四个适配器：登录成功、登录失效、图片上传失败、草稿成功、响应字段变化。
 - 任务调度：串行执行、部分成功、已成功平台不重复、未知状态不自动重试。
 - 日志脱敏：token、ticket、CSRF、AccessKey 和 SessionToken 不出现在日志文本。
@@ -461,6 +469,7 @@ UNKNOWN_REMOTE_STATE
 4. 单个平台失败、其余平台继续成功。
 5. 草稿页标题、正文结构和图片数量与 OpenGZH 快照一致。
 6. 草稿中不存在 `img://`、`blob:` 或未批准的外链图片。
+7. 安装态扩展详情只显示十个锁定 host；在一个可丢弃 Chrome Profile 中通过站点访问控制或企业策略扣留一个 host 时，预检返回 `PERMISSION_DENIED` 且无平台网络请求。
 
 真实验收必须在 `chrome://extensions` 重新加载最新构建后的插件；仅检查源码或构建目录不算安装态验收。
 
