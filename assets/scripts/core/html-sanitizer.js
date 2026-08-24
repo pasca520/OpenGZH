@@ -15,7 +15,7 @@ const ALLOWED_TAGS = new Set([
 const DROP_CONTENT_TAGS = new Set(['script', 'iframe', 'object', 'embed', 'link', 'meta', 'base', 'form']);
 const URL_ATTRIBUTES = new Set(['href', 'src', 'xlink:href', 'action', 'formaction', 'poster']);
 const DATA_ATTRIBUTES = new Set([
-  'data-image-id', 'data-code-block', 'data-language', 'data-formula-source',
+  'data-image-id', 'data-code-block', 'data-language', 'data-formula-source', 'data-ogzh-card',
   'data-field', 'data-field-line', 'data-line-height', 'data-media-ref', 'data-page-id'
 ]);
 const SAFE_ATTRIBUTES = new Set([

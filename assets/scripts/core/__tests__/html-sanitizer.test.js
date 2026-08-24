@@ -19,7 +19,7 @@ describe('html sanitizer', () => {
 
   it('keeps legal article markup, formulas, cards, and image protocols', () => {
     const result = sanitizeHtml(`
-      <section class="ogzh-card" data-code-block="true" style="color: #123456; margin: 0 1px">
+      <section data-ogzh-card="soft-fill" data-code-block="true" style="color: #123456; margin: 0 1px">
         <h2 id="title">标题</h2><table><thead><tr><th>列</th></tr></thead><tbody><tr><td>值</td></tr></tbody></table>
         <span class="katex" aria-hidden="true"><span class="mord">x</span></span>
         <img src="img://local-id" data-image-id="local-id" alt="图片">
@@ -27,7 +27,7 @@ describe('html sanitizer', () => {
       </section>
     `);
 
-    expect(result).toContain('class="ogzh-card"');
+    expect(result).toContain('data-ogzh-card="soft-fill"');
     expect(result).toContain('data-code-block="true"');
     expect(result).toContain('class="katex"');
     expect(result).toContain('src="img://local-id"');
