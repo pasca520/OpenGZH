@@ -3,8 +3,18 @@ import { PLATFORM_IDS, assertAdapter } from '../core/adapter-contract.js';
 import { validateArticle } from '../core/article-validator.js';
 import { createPortImageBroker, createRequestRuntime } from '../core/request-runtime.js';
 import { PlatformError, serializeError } from '../core/platform-errors.js';
+import { createWeixinAdapter } from '../adapters/weixin.js';
+import { createZhihuAdapter } from '../adapters/zhihu.js';
+import { createJuejinAdapter } from '../adapters/juejin.js';
+import { createWoshipmAdapter } from '../adapters/woshipm.js';
 
 const PORT_NAME = 'opengzh-distribution-v1';
+export const ADAPTER_FACTORIES = Object.freeze({
+  weixin: createWeixinAdapter,
+  zhihu: createZhihuAdapter,
+  juejin: createJuejinAdapter,
+  woshipm: createWoshipmAdapter,
+});
 const DRAFT_HOSTS = Object.freeze({
   weixin: 'mp.weixin.qq.com',
   zhihu: 'zhuanlan.zhihu.com',
@@ -134,7 +144,7 @@ function messageCorrelation(message) {
   };
 }
 
-export function registerServiceWorker(chromeApi = globalThis.chrome, adapterFactories = {}) {
+export function registerServiceWorker(chromeApi = globalThis.chrome, adapterFactories = ADAPTER_FACTORIES) {
   if (!chromeApi?.runtime?.onConnect?.addListener) return null;
   chromeApi.runtime.onConnect.addListener((port) => {
     if (port.name !== PORT_NAME || !isAllowedSender(port.sender)) {
@@ -282,4 +292,4 @@ export function registerServiceWorker(chromeApi = globalThis.chrome, adapterFact
   return true;
 }
 
-if (globalThis.chrome?.runtime?.onConnect) registerServiceWorker(globalThis.chrome, {});
+if (globalThis.chrome?.runtime?.onConnect) registerServiceWorker(globalThis.chrome, ADAPTER_FACTORIES);

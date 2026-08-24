@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { assertHostPermissions, isAllowedSender, openSuccessfulDrafts, registerServiceWorker, sanitizeBatchForSession } from '../src/background/service-worker.js';
+import { ADAPTER_FACTORIES, assertHostPermissions, isAllowedSender, openSuccessfulDrafts, registerServiceWorker, sanitizeBatchForSession } from '../src/background/service-worker.js';
 
 function portFixture() {
   const messages = [];
@@ -23,6 +23,11 @@ const article = {
 };
 
 describe('service worker boundary', () => {
+  it('registers exactly the four approved adapters in fixed order', () => {
+    expect(Object.keys(ADAPTER_FACTORIES)).toEqual(['weixin', 'zhihu', 'juejin', 'woshipm']);
+    expect(Object.isFrozen(ADAPTER_FACTORIES)).toBe(true);
+  });
+
   it.each([
     [{ url: 'https://opengzh.pasca.fun/', frameId: 0 }, true],
     [{ url: 'http://localhost:8080/', frameId: 0 }, true],

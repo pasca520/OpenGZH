@@ -1,0 +1,10 @@
+{
+  "CODE": 200,
+  "RESULT": {
+    "userInfoVo": {
+      "uid": 1585,
+      "nickName": "测试用户",
+      "avartar": "https://image.woshipm.com/test-avatar.png"
+    }
+  }
+}
