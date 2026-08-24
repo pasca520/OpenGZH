@@ -14,6 +14,15 @@ jobs:
       - name: Run tests
         run: npm ci && npm test
 
+      - name: Prepare staging directory
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.REMOTE_HOST }}
+          username: ${{ secrets.REMOTE_USER }}
+          port: ${{ secrets.REMOTE_PORT }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: mkdir -p /opt/opengzh-staging
+
       - name: Deploy to server
         uses: easingthemes/ssh-deploy@main
         with:
