@@ -1,0 +1,53 @@
+{
+  "manifest_version": 3,
+  "name": "OpenGZH",
+  "short_name": "OpenGZH",
+  "description": "微信公众号、知乎、掘金、人人都是产品经理文章同步助手",
+  "version": "0.1.0",
+  "minimum_chrome_version": "116",
+  "icons": {
+    "16": "assets/icon-16.png",
+    "48": "assets/icon-48.png",
+    "128": "assets/icon-128.png"
+  },
+  "action": {
+    "default_title": "OpenGZH 文章同步助手",
+    "default_icon": {
+      "16": "assets/icon-16.png",
+      "48": "assets/icon-48.png",
+      "128": "assets/icon-128.png"
+    }
+  },
+  "permissions": [
+    "storage",
+    "declarativeNetRequestWithHostAccess"
+  ],
+  "host_permissions": [
+    "https://mp.weixin.qq.com/*",
+    "https://www.zhihu.com/*",
+    "https://zhuanlan.zhihu.com/*",
+    "https://api.zhihu.com/*",
+    "https://zhihu-pics-upload.zhimg.com/*",
+    "https://juejin.cn/*",
+    "https://api.juejin.cn/*",
+    "https://imagex.bytedanceapi.com/*",
+    "https://*.volces.com/*",
+    "https://www.woshipm.com/*"
+  ],
+  "background": {
+    "service_worker": "src/background/service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://opengzh.pasca.fun/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": ["src/content/open-gzh.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}
