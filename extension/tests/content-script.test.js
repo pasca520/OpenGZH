@@ -18,6 +18,7 @@ class FakeEventTarget {
   }
 
   dispatchEvent(event) {
+    event.target = this;
     this.events.push(event);
     for (const listener of [...(this.listeners.get(event.type) || [])]) listener(event);
     return true;
@@ -49,6 +50,7 @@ class FakeElement extends FakeEventTarget {
     this.textContent = '';
     this.className = '';
     this.nextSibling = null;
+    this.ownerDocument = null;
   }
 
   setAttribute(name, value) {
@@ -72,7 +74,12 @@ class FakeElement extends FakeEventTarget {
 
   attachShadow() {
     this.shadowRoot = new FakeElement('shadow-root');
+    this.shadowRoot.ownerDocument = this.ownerDocument;
     return this.shadowRoot;
+  }
+
+  focus() {
+    if (this.ownerDocument) this.ownerDocument.activeElement = this;
   }
 }
 
@@ -81,9 +88,15 @@ class FakeDocument extends FakeEventTarget {
     super();
     this.anchor = anchor;
     this.readyState = 'complete';
+    this.activeElement = null;
+    anchor.ownerDocument = this;
   }
 
-  createElement(tagName) { return new FakeElement(tagName); }
+  createElement(tagName) {
+    const element = new FakeElement(tagName);
+    element.ownerDocument = this;
+    return element;
+  }
 
   querySelector(selector) {
     if (selector === '[data-opengzh-copy-button]') return this.anchor;
@@ -316,7 +329,7 @@ describe('content script shadow DOM UI', () => {
     expect(ui.rows.get('weixin').row.children[1].className).toBe('platform-icon');
     expect(ui.rows.get('woshipm').row.children[2].textContent).toBe('人人都是产品经理');
     expect(createUi({ document: doc, anchor, port, storage })).toMatchObject({ existing: true, host: ui.host });
-    ui.trigger.dispatchEvent(new FakeEvent('click'));
+    await ui.openPanel();
     expect(messages[0]).toEqual({ type: 'CHECK_AUTH', platformIds: allPlatforms });
     ui.onMessage({ type: 'PLATFORM_STATE', taskId: null, platformId: 'weixin', status: 'success', draftUrl: 'https://draft.test/1' });
     expect(ui.rows.get('weixin').draft.href).toBe('https://draft.test/1');
@@ -324,5 +337,176 @@ describe('content script shadow DOM UI', () => {
     ui.state.taskId = 'task-1';
     ui.rows.get('weixin').retry.dispatchEvent(new FakeEvent('click'));
     expect(messages.at(-1)).toEqual({ type: 'RETRY_PLATFORM', taskId: 'task-1', platformId: 'weixin' });
+  });
+});
+
+describe('locked distribution protocol integration', () => {
+  it('sends article in START_BATCH and passes the complete image object through serial responder', async () => {
+    const { createImageResponder, createUi } = loadTestApi();
+    const image = { ref: 'img://one', kind: 'indexed-db', imageId: 'one', mimeType: 'image/png', filename: 'one.png', alt: '' };
+    const sent = [];
+    const readImageData = vi.fn(async (value) => `data:image/png;base64,${value.imageId === 'one' ? 'AA==' : 'AQ=='}`);
+    const responder = createImageResponder({ port: { postMessage: (message) => sent.push(message) }, readImageData });
+    responder.handleMessage({ type: 'IMAGE_REQUIRED', taskId: 'task-1', platformId: 'weixin', requestId: 'req-1', image });
+    await responder.drain();
+    expect(readImageData).toHaveBeenCalledWith(image);
+    expect(sent[0]).toEqual({ type: 'IMAGE_DATA', taskId: 'task-1', platformId: 'weixin', requestId: 'req-1', ref: image.ref, dataUrl: 'data:image/png;base64,AA==' });
+
+    const { doc, anchor } = makeUiDom();
+    const batchMessages = [];
+    const article = snapshot();
+    const ui = createUi({
+      document: doc,
+      anchor,
+      port: { postMessage: (message) => batchMessages.push(message) },
+      storage: { get: async () => ({}), set: async () => {}, remove: async () => {} },
+      snapshotRequest: async () => article,
+      idFactory: () => 'task-1',
+    });
+    await ui.ready;
+    await ui.openPanel();
+    await ui.startBatch();
+    expect(batchMessages.at(-1)).toEqual({ type: 'START_BATCH', taskId: 'task-1', platformIds: allPlatforms, article });
+    expect(batchMessages.at(-1).snapshot).toBeUndefined();
+  });
+});
+
+describe('locked Data URL validation', () => {
+  it('accepts only allowlisted MIME/base64 data URLs and rejects malformed or mismatched variants', async () => {
+    const { validateSnapshot, readImageData } = loadTestApi();
+    const valid = (dataUrl, mimeType) => ({ ref: dataUrl, kind: 'data-url', dataUrl, mimeType, filename: 'image.bin', alt: '' });
+    for (const [dataUrl, mimeType] of [
+      ['data:image/png;base64,AA==', 'image/png'],
+      ['data:image/jpeg;base64,/w==', 'image/jpeg'],
+      ['data:image/jpg;base64,/w==', 'image/jpg'],
+      ['data:image/gif;base64,R0lGODlhAQ==', 'image/gif'],
+      ['data:image/webp;base64,UklGRg==', 'image/webp'],
+      ['data:image/avif;base64,AAAA', 'image/avif'],
+      ['data:image/svg+xml;base64,PHN2Zy8+', 'image/svg+xml'],
+    ]) expect(() => validateSnapshot(snapshot({ images: [valid(dataUrl, mimeType)] }))).not.toThrow();
+    for (const image of [
+      valid('data:image/bmp;base64,AA==', 'image/bmp'),
+      valid('data:image/png,AA==', 'image/png'),
+      valid('data:image/png;base64,not base64', 'image/png'),
+      valid('data:image/png;base64,AA==', 'image/jpeg'),
+      { ref: 'data:image/png;base64,AA==', kind: 'data-url', dataUrl: 'data:image/png;base64,AA=', mimeType: 'image/png', filename: 'image.png', alt: '' },
+    ]) expect(() => validateSnapshot(snapshot({ images: [image] }))).toThrowError(/ARTICLE_INVALID/);
+    await expect(readImageData('data:image/png,AA==')).rejects.toMatchObject({ code: 'IMAGE_READ_FAILED' });
+    await expect(readImageData('data:image/bmp;base64,AA==')).rejects.toMatchObject({ code: 'IMAGE_READ_FAILED' });
+  });
+});
+
+function makeUiDom() {
+  const parent = new FakeElement('div');
+  const anchor = new FakeElement('button');
+  anchor.dataset.opengzhCopyButton = '';
+  parent.append(anchor);
+  const doc = new FakeDocument(anchor);
+  return { doc, anchor, parent };
+}
+
+describe('async extension selection storage and selected-only auth', () => {
+  it('restores chrome.storage.local selection before opening and keeps empty selection transient', async () => {
+    const { createUi } = loadTestApi();
+    const { doc, anchor } = makeUiDom();
+    let resolveGet;
+    const storage = {
+      get: vi.fn(() => new Promise((resolve) => { resolveGet = resolve; })),
+      set: vi.fn(async () => {}),
+      remove: vi.fn(async () => {}),
+    };
+    const messages = [];
+    const ui = createUi({ document: doc, anchor, storage, port: { postMessage: (message) => messages.push(message) } });
+    ui.trigger.dispatchEvent(new FakeEvent('click'));
+    expect(messages).toEqual([]);
+    resolveGet({ 'opengzh.selectedPlatformIds': ['woshipm', 'weixin'] });
+    await ui.ready;
+    expect(messages[0]).toEqual({ type: 'CHECK_AUTH', platformIds: ['weixin', 'woshipm'] });
+    expect(ui.rows.get('zhihu').checkbox.checked).toBe(false);
+    for (const id of ['weixin', 'woshipm']) {
+      ui.rows.get(id).checkbox.checked = false;
+      ui.rows.get(id).checkbox.dispatchEvent(new FakeEvent('change'));
+    }
+    expect(storage.remove).toHaveBeenCalledWith('opengzh.selectedPlatformIds');
+    expect(ui.state.selected).toEqual([]);
+    ui.state.taskId = null;
+    ui.rows.get('weixin').retry.dispatchEvent(new FakeEvent('click'));
+    expect(messages.at(-1)).toEqual({ type: 'CHECK_AUTH', platformIds: ['weixin'] });
+  });
+});
+
+describe('batch lifecycle, status progress, and connectivity', () => {
+  it('only checks selected rows, retains taskId after batch complete, and retries the failed platform', async () => {
+    const { createUi } = loadTestApi();
+    const { doc, anchor } = makeUiDom();
+    const messages = [];
+    const ui = createUi({ document: doc, anchor, storage: { get: async () => ({ 'opengzh.selectedPlatformIds': ['weixin'] }), set: async () => {}, remove: async () => {} }, port: { postMessage: (message) => messages.push(message) } });
+    await ui.ready;
+    await ui.openPanel();
+    expect(ui.rows.get('weixin').status.textContent).toBe('检测登录中');
+    expect(ui.rows.get('zhihu').status.textContent).toBe('未选择');
+    ui.state.taskId = 'task-9';
+    ui.state.busy = true;
+    ui.onMessage({ type: 'BATCH_COMPLETE', taskId: 'task-9' });
+    expect(ui.state.taskId).toBe('task-9');
+    expect(ui.state.busy).toBe(false);
+    ui.rows.get('weixin').retry.dispatchEvent(new FakeEvent('click'));
+    expect(messages.at(-1)).toEqual({ type: 'RETRY_PLATFORM', taskId: 'task-9', platformId: 'weixin' });
+    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-9', platformId: 'weixin', status: 'uploading-images', completed: 2, total: 5 });
+    expect(ui.rows.get('weixin').status.textContent).toContain('2/5');
+    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-9', platformId: 'weixin', status: 'failed', error: { message: '平台拒绝' } });
+    expect(ui.rows.get('weixin').status.textContent).toBe('平台拒绝');
+    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-9', platformId: 'weixin', status: 'unknown' });
+    expect(ui.rows.get('weixin').status.textContent).toBe('请检查平台草稿箱');
+    ui.onMessage({ type: 'AUTH_RESULT', platformId: 'weixin', authenticated: true });
+    expect(ui.rows.get('weixin').status.textContent).toBe('已登录');
+    expect(ui.rows.get('weixin').login.hidden).toBe(true);
+  });
+
+  it('unlocks and reports when there is no port or the port disconnects', async () => {
+    const { createUi } = loadTestApi();
+    const { doc, anchor } = makeUiDom();
+    const ui = createUi({ document: doc, anchor, storage: { get: async () => ({}), set: async () => {}, remove: async () => {} }, snapshotRequest: async () => snapshot(), idFactory: () => 'task-no-port' });
+    await ui.ready;
+    await ui.openPanel();
+    await ui.startBatch();
+    expect(ui.state.busy).toBe(false);
+    expect(ui.alert.textContent).toBe('无法连接同步服务');
+    const disconnect = { addListener: vi.fn() };
+    const ui2Dom = makeUiDom();
+    const ui2 = createUi({ document: ui2Dom.doc, anchor: ui2Dom.anchor, port: { postMessage: () => { throw new Error('gone'); }, onDisconnect: disconnect }, storage: { get: async () => ({}), set: async () => {}, remove: async () => {} } });
+    await ui2.ready;
+    expect(disconnect.addListener).toHaveBeenCalled();
+    disconnect.addListener.mock.calls[0][0]();
+    expect(ui2.state.busy).toBe(false);
+    expect(ui2.alert.textContent).toBe('无法连接同步服务');
+  });
+});
+
+describe('Shadow DOM CSS, accessibility, and focus contract', () => {
+  it('has fixed responsive styles, accessible controls, live status, and focus restoration', async () => {
+    const { createUi } = loadTestApi();
+    const { doc, anchor } = makeUiDom();
+    const ui = createUi({ document: doc, anchor, storage: { get: async () => ({}), set: async () => {}, remove: async () => {} } });
+    expect(ui.shadow.children.some((child) => child.tagName === 'STYLE')).toBe(true);
+    expect(ui.trigger.attributes.get('aria-haspopup')).toBe('dialog');
+    expect(ui.panel.attributes.get('aria-labelledby')).toBe('opengzh-title');
+    expect(ui.rows.get('weixin').checkbox.attributes.get('aria-label')).toContain('微信公众号');
+    expect(ui.rows.get('weixin').login.attributes.get('aria-label')).toContain('微信公众号');
+    expect(ui.rows.get('weixin').retry.attributes.get('aria-label')).toContain('微信公众号');
+    expect(ui.rows.get('weixin').draft.attributes.get('aria-label')).toContain('微信公众号');
+    expect(ui.rows.get('weixin').status.attributes.get('aria-live')).toBe('polite');
+    await ui.openPanel();
+    expect(doc.activeElement).toBe(ui.close);
+    ui.close.dispatchEvent(new FakeEvent('click'));
+    expect(doc.activeElement).toBe(ui.trigger);
+    await ui.openPanel();
+    doc.dispatchEvent(new FakeEvent('keydown', { detail: undefined }));
+    doc.events.at(-1).key = 'Escape';
+    doc.dispatchEvent(doc.events.at(-1));
+    expect(doc.activeElement).toBe(ui.trigger);
+    await ui.openPanel();
+    ui.backdrop.dispatchEvent(new FakeEvent('click'));
+    expect(doc.activeElement).toBe(ui.trigger);
   });
 });
