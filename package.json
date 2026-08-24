@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:extension": "vitest run extension/tests scripts/__tests__/build-extension.test.js",
+    "build:extension": "node scripts/build-extension.mjs"
   },
   "devDependencies": {
     "vitest": "^3.1.1"
