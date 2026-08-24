@@ -13,6 +13,7 @@
 
 import { normalizeXhsSettings } from '../xhs/constants.js';
 import { normalizeStyleOverride } from '../core/style-override.js';
+import { clampNumber } from '../core/format-utils.js';
 import { DocumentStore, migrateFromLocalStorage } from './document-store.js';
 
 const KEY_STYLE = 'currentStyle';
@@ -129,14 +130,6 @@ function normalizeCodeBlockSettings(settings) {
     showCopyButton: settings.showCopyButton !== false,
     showMacDecorations: settings.showMacDecorations !== false
   };
-}
-
-function clampNumber(value, min, max, fallback, precision = 0) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return fallback;
-  const clamped = Math.min(max, Math.max(min, number));
-  if (precision <= 0) return Math.round(clamped);
-  return Number(clamped.toFixed(precision));
 }
 
 function normalizeHexColor(value, fallback = DEFAULT_DISPLAY_SETTINGS.imageShadowColor) {

@@ -7,45 +7,11 @@
   <meta name="description" content="OpenGZH 是一个面向微信公众号写作的 Markdown 编辑器，支持实时预览、代码块主题、图片粘贴和富文本复制。">
   <meta name="keywords" content="公众号编辑器,Markdown编辑器,微信排版,Markdown转公众号,富文本复制,OpenGZH">
   <meta name="author" content="OpenGZH">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-eval'; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'self'">
 
   <link rel="icon" type="image/svg+xml" href="assets/images/logo.svg?v=1">
-  <script>
-    (() => {
-      // ponytail: synchronous two-state bootstrap prevents a saved dark theme from flashing light.
-      // If app themes grow beyond light/dark, replace this with a shared blocking bootstrap file.
-      let theme = 'light';
-      try {
-        theme = localStorage.getItem('opengzh-app-theme') === 'dark' ? 'dark' : 'light';
-      } catch (_error) {
-        // Storage can be unavailable; light remains the product default.
-      }
-      document.documentElement.dataset.appTheme = theme;
-    })();
-  </script>
-  <link rel="stylesheet" href="assets/styles/base.css?v=4">
-  <link rel="stylesheet" href="assets/styles/editor.css?v=18">
-  <link rel="stylesheet" href="assets/styles/panel.css?v=2">
-  <link rel="stylesheet" href="assets/styles/cover.css?v=2">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.25/dist/katex.min.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/markdown-it-texmath@1.0.0/css/texmath.min.css">
-
-  <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.0.0/dist/markdown-it.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.25/dist/katex.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/markdown-it-texmath@1.0.0/texmath.min.js"></script>
-  <script>
-    window.MathJax = {
-      startup: { typeset: false },
-      svg: { fontCache: 'none' }
-    };
-  </script>
-  <script id="mathjax-script" defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg-full.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/highlight.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/turndown@7.2.0/dist/turndown.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/vue@3.4.15/dist/vue.global.prod.js"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;500;600;700&family=LXGW+WenKai:wght@400;700&family=ZCOOL+XiaoWei&family=ZCOOL+KuaiLe&family=ZCOOL+QingKe+HuangYou&family=Ma+Shan+Zheng&family=Liu+Jian+Mao+Cao&family=Long+Cang&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/styles/xhs.css?v=8">
+  <script src="assets/scripts/ui/app-theme-bootstrap.js"></script>
+  <script src="assets/scripts/ui/asset-loader.js"></script>
 </head>
 <body>
   <div id="app">
@@ -1209,6 +1175,6 @@
     </template>
   </div>
 
-  <script type="module" src="assets/scripts/main.js?v=17"></script>
+  <script src="assets/scripts/ui/main-loader.js"></script>
 </body>
 </html>

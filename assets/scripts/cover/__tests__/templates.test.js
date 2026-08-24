@@ -177,23 +177,23 @@ describe('cover templates', () => {
   });
 
   it('uses the requested type and author defaults for initialization and reset', () => {
-    const mainSource = readFileSync(new URL('../../main.js', import.meta.url), 'utf8');
-    expect(mainSource.match(/tag: '技术分享'/g)).toHaveLength(2);
-    expect(mainSource.match(/author: 'AI产品零度'/g)).toHaveLength(2);
+    const coverEditorSource = readFileSync(new URL('../use-cover-editor.js', import.meta.url), 'utf8');
+    expect(coverEditorSource.match(/tag: '技术分享'/g)).toHaveLength(2);
+    expect(coverEditorSource.match(/author: 'AI产品零度'/g)).toHaveLength(2);
     expect(DEFAULT_COVER_CONTENT).toMatchObject({ tag: '技术分享', author: 'AI产品零度' });
   });
 
   it('wires background selection into rendering, history and the editor UI', () => {
-    const mainSource = readFileSync(new URL('../../main.js', import.meta.url), 'utf8');
+    const coverEditorSource = readFileSync(new URL('../use-cover-editor.js', import.meta.url), 'utf8');
     const indexSource = readFileSync(new URL('../../../../index.html', import.meta.url), 'utf8');
     const cssSource = readFileSync(new URL('../../../../assets/styles/cover.css', import.meta.url), 'utf8');
 
-    expect(mainSource).toContain("const coverBackgroundId = ref('midnight-prism')");
-    expect(mainSource).toContain('const currentTemplateBackgrounds = computed');
-    expect(mainSource).toContain('backgroundId: coverBackgroundId.value');
-    expect(mainSource).toContain('function selectCoverBackground(id)');
-    expect(mainSource).toContain('backgroundId: coverBackgroundId.value,');
-    expect(mainSource).toContain('state.backgroundId');
+    expect(coverEditorSource).toContain("const coverBackgroundId = ref('midnight-prism')");
+    expect(coverEditorSource).toContain('const currentTemplateBackgrounds = computed');
+    expect(coverEditorSource).toContain('backgroundId: coverBackgroundId.value');
+    expect(coverEditorSource).toContain('function selectCoverBackground(id)');
+    expect(coverEditorSource).toContain('backgroundId: coverBackgroundId.value,');
+    expect(coverEditorSource).toContain('state.backgroundId');
     expect(indexSource).toContain('class="cover-background-grid"');
     expect(indexSource).toContain('role="radiogroup"');
     expect(indexSource).toContain('v-for="background in currentTemplateBackgrounds"');

@@ -64,8 +64,8 @@ export function createEditHistory({
     openTxn = null;
   };
 
-  const open = (kind, before) => {
-    openTxn = { kind, before, caret: before.start, lastAt: now() };
+  const open = (kind, before, caret = before.start) => {
+    openTxn = { kind, before, caret, lastAt: now() };
     // 新事务开始,重做分支失效(与 push 语义一致)
     redoStack.length = 0;
     emit();
@@ -129,7 +129,7 @@ export function createEditHistory({
           return;
         }
         commitOpen();
-        open('insert', before);
+        open('insert', before, before.start + data.length);
         return;
       }
 
@@ -148,7 +148,11 @@ export function createEditHistory({
           return;
         }
         commitOpen();
-        open('delete', before);
+        open(
+          'delete',
+          before,
+          inputType === 'deleteContentBackward' ? before.start - 1 : before.start
+        );
         return;
       }
 
@@ -160,11 +164,14 @@ export function createEditHistory({
     /**
      * 程序化写入前调用:把当前内容记录为一次可撤销事务。
      * (写入方随后自行赋新值;恢复由 undo() 完成。)
+     * @param {string} [nextValue] 写入后的值,用于 beforeinput 缺失时的兜底。
      */
-    programmatic() {
+    programmatic(nextValue) {
       commitOpen();
       pendingBefore = null;
-      push(snapshot());
+      const before = snapshot();
+      push(before);
+      lastValue = nextValue !== undefined ? nextValue : before.value;
     },
 
     /** 撤销一次事务;返回是否真正执行。 */

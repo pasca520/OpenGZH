@@ -8,6 +8,7 @@ import { ImageCompressor } from './core/image-compressor.js';
 import { createMarkdownEngine } from './core/markdown-engine.js';
 import { createTurndownService, createPasteHandler } from './core/paste-handler.js';
 import { createEditHistory } from './core/edit-history.js';
+import { clampNumber, hexToRgba } from './core/format-utils.js';
 import { renderPipeline } from './core/render-pipeline.js';
 import {
   mergeTheme,
@@ -40,33 +41,9 @@ import { createToast } from './ui/toast.js';
 import { createPanelManager } from './ui/panel-manager.js';
 import { loadPreferences, savePreferences, debounceSaveContent, getDefaultCodeBlockSettings, getDefaultDisplaySettings } from './storage/preferences.js';
 import { createDefaultXhsSettings, normalizeXhsSettings } from './xhs/constants.js';
-import {
-  calculateXhsPreviewScale,
-  normalizeXhsPreviewMode,
-  resolveXhsPageSelection,
-  stepXhsPageSelection
-} from './xhs/preview-navigation.js';
-import {
-  XHS_FEATURE_ENABLED,
-  XHS_LOGICAL_WIDTH,
-  XHS_LOGICAL_HEIGHT,
-  XHS_UPLOAD_WARNING_LIMIT,
-  XHS_THEME_IDS,
-  XHS_DENSITIES
-} from './xhs/constants.js';
-import { insertPageMarker, removePageMarker } from './xhs/page-markers.js';
-import { parseXhsDocument } from './xhs/semantic-parser.js';
-import { paginateXhsDocument } from './xhs/paginator.js';
-import { createXhsDomMeasurer, renderXhsStack } from './xhs/renderer.js';
-import { summarizeXhsPages } from './xhs/page-summary.js';
-import { XHS_THEMES } from './xhs/themes.js';
-import { exportXhsPage, exportXhsSet } from './xhs/exporter.js';
+import { useXhsMode } from './xhs/use-xhs-mode.js';
+import { useCoverEditor } from './cover/use-cover-editor.js';
 import { STYLES } from '../styles/themes/index.js';
-import { COVER_TEMPLATES, TEMPLATE_META } from './cover/templates.js';
-import { renderCover, getTemplate, getTemplates, getCategories, DEFAULT_TYPOGRAPHY, DEFAULT_COVER_CONTENT } from './cover/renderer.js';
-import { exportCoverPng as doExportCoverPng } from './cover/export-png.js';
-import { DEFAULT_ILLUSTRATIONS, ILLUSTRATION_CATEGORIES, ILLUSTRATION_MARKETS, getIllustration, getIllustrationsByCategory, getAllIllustrations } from './cover/illustration-registry.js';
-import { loadIllustrationSvg, replaceIllustrationColor, extractPrimaryColor } from './cover/illustration-color.js';
 import {
   createDirectoryFileSource,
   createFileMapSource,
@@ -118,39 +95,10 @@ function switchAppTheme() {
   appTheme.value = applyAppTheme(toggleAppTheme(appTheme.value));
 }
 
-// ── XHS Image Mode (session-only state; contentOutputMode never persists) ──
-const contentOutputMode = ref('text');
-const xhsPages = ref([]);
-const xhsPageSummary = computed(() => summarizeXhsPages(xhsPages.value));
-const xhsRenderedPages = ref([]);
-const xhsIsPaginating = ref(false);
-const xhsIssues = ref([]);
-const xhsWarning = ref('');
-const xhsSelectedPageId = ref(null);
-const xhsPreviewMode = ref('horizontal');
-const xhsPreviewScale = ref(1);
-const xhsCoverCandidates = ref([]);
-const xhsExportErrorPageIndexes = ref([]);
-const xhsShowCoverPanel = ref(false);
-const xhsExporting = ref(false);
-const XHS_DENSITY_LABELS = { relaxed: '舒展', standard: '标准', compact: '紧凑' };
-let xhsPaginationTimer = null;
-let xhsPaginationRevision = 0;
-let xhsScrollSelectionTimer = null;
 let renderTimer = null;
 let renderRevision = 0;
 let renderInFlight = null;
 let statsTimer = null;
-let xhsPreviewObserver = null;
-let xhsMeasureStageEl = null;
-const xhsPreviewUrlCache = new Map();
-const xhsSelectedPageIndex = computed(() => (
-  resolveXhsPageSelection(xhsPages.value, xhsSelectedPageId.value, 0).index
-));
-const xhsHasPreviousPage = computed(() => xhsSelectedPageIndex.value > 0);
-const xhsHasNextPage = computed(() => (
-  xhsSelectedPageIndex.value >= 0 && xhsSelectedPageIndex.value < xhsPages.value.length - 1
-));
 
 // ── Tab State ──
 const activeTab = ref('editor');
@@ -187,80 +135,6 @@ const quotePresetOptions = [
   { value: 'card', label: '底色卡片', meta: '浅色底+左线' },
   { value: 'top', label: '上边框', meta: '顶部粗线' }
 ];
-
-// ── Cover Editor State ──
-const coverTemplateId = ref('pure-white');
-const coverBackgroundId = ref('midnight-prism');
-const coverContent = reactive({
-  tag: '技术分享',
-  title: '用 AI 构建公众号封面工具',
-  subtitle: '开箱即用，亦可自由迭代',
-  author: 'AI产品零度',
-  issueNumber: 'No.01'
-});
-const coverTypography = reactive({
-  titleSize: 48,
-  subtitleSize: 40,
-  tagSize: 28,
-  authorSize: 14,
-  titleLineHeight: 1.3,
-  subtitleLineHeight: 1.4,
-  titleLetterSpacing: 0,
-  subtitleLetterSpacing: 0,
-  titleOffsetY: 0,
-  subtitleOffsetY: 0,
-  titleOffsetX: 0,
-  subtitleOffsetX: 0,
-  textAlign: 'center',
-  titleFontFamily: "system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif",
-  subtitleFontFamily: "system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif"
-});
-const coverSansFallback = "'PingFang SC', 'Microsoft YaHei', sans-serif";
-const coverSerifFallback = "'Songti SC', 'SimSun', serif";
-const coverFontOptions = [
-  { label: '系统默认', value: "system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif" },
-  { label: '思源黑体', value: `'Noto Sans SC', ${coverSansFallback}` },
-  { label: '思源宋体', value: `'Noto Serif SC', ${coverSerifFallback}` },
-  { label: '霞鹜文楷', value: `'LXGW WenKai', ${coverSansFallback}` },
-  { label: 'ZCOOL 小薇', value: `'ZCOOL XiaoWei', ${coverSansFallback}` },
-  { label: '站酷快乐体', value: `'ZCOOL KuaiLe', ${coverSansFallback}` },
-  { label: '站酷庆黄油', value: `'ZCOOL QingKe HuangYou', ${coverSansFallback}` },
-  { label: 'Ma Shan Zheng', value: `'Ma Shan Zheng', ${coverSansFallback}` },
-  { label: '刘健毛草', value: `'Liu Jian Mao Cao', ${coverSansFallback}` },
-  { label: '龙藏体', value: `'Long Cang', ${coverSansFallback}` },
-  { label: 'Fraunces', value: `'Fraunces', 'Noto Serif SC', ${coverSerifFallback}` },
-  { label: 'Plus Jakarta Sans', value: `'Plus Jakarta Sans', 'Noto Sans SC', ${coverSansFallback}` }
-];
-const coverUndoStack = ref([]);
-const coverRedoStack = ref([]);
-const coverLayerOrder = ref('text-top');
-const coverOpacity = ref(100);
-const coverIllustrationId = ref('');
-const coverIllustCategory = ref('tech');
-const coverIllustrationColor = ref('#6366F1');
-const coverIllustrationSvg = ref(''); // cached SVG string
-const coverSidebarCollapsed = ref(false);
-const coverInlineEdit = reactive({
-  active: false,
-  field: null,
-  value: '',
-  x: 0, y: 0, width: 0, minHeight: 0,
-  fontSize: '16px', fontFamily: 'inherit', fontWeight: 'normal',
-  color: '#000', textAlign: 'center',
-  letterSpacing: '0px', lineHeight: '1.3'
-});
-
-const coverFieldOffsets = reactive({
-  tag: { x: 0, y: 0 },
-  title: { x: 0, y: 0 },
-  subtitle: { x: 0, y: 0 },
-  author: { x: 0, y: 0 },
-  issueNumber: { x: 0, y: 0 }
-});
-
-// Drag tracking (plain variable for performance during rapid mousemove)
-let coverDrag = null;
-const DRAG_THRESHOLD = 3;
 
 const deviceGroups = [
   {
@@ -354,6 +228,11 @@ const editorSelection = ref({ start: 0, end: 0, direction: 'none' });
 const canUndo = ref(false);
 const canRedo = ref(false);
 
+function setMarkdown(value, { record = true } = {}) {
+  if (record) editorHistory.programmatic(value);
+  markdownInput.value = value;
+}
+
 /**
  * 主编辑器撤销/重做历史(自管理事务栈,覆盖智能粘贴、工具栏、图片插入等
  * 所有程序化写入路径,详见 core/edit-history.js)。
@@ -370,7 +249,7 @@ const editorHistory = createEditHistory({
     };
   },
   apply: (value, selection) => {
-    markdownInput.value = value;
+    setMarkdown(value, { record: false });
     const end = Math.min(selection.end ?? selection.start ?? 0, value.length);
     const start = Math.min(selection.start ?? 0, end);
     restoreEditorSelection(start, end);
@@ -502,6 +381,124 @@ let pasteHandler = null;
 let suppressEditorSync = false;
 let suppressTitleSync = false;
 let syncLock = false;
+
+const {
+  coverTemplateId,
+  coverBackgroundId,
+  coverContent,
+  coverTypography,
+  coverFontOptions,
+  coverUndoStack,
+  coverRedoStack,
+  coverLayerOrder,
+  coverOpacity,
+  coverSvgOutput,
+  coverCategories,
+  currentTemplateBackgrounds,
+  coverPreviewStyle,
+  selectCoverTemplate,
+  selectCoverBackground,
+  updateCoverTypo,
+  coverUndo,
+  coverRedo,
+  coverReset,
+  resetCoverToDefault,
+  toggleCoverLayerOrder,
+  exportCoverPngAction,
+  getCoverTemplatesByCategory,
+  getTemplateMeta,
+  renderCoverThumb,
+  coverTemplateSupports,
+  coverInlineEdit,
+  coverSidebarCollapsed,
+  coverFieldOffsets,
+  handleCoverTextClick,
+  handleCoverMouseDown,
+  applyInlineEdit,
+  cancelInlineEdit,
+  handleInlineEditKeydown,
+  toggleCoverSidebar,
+  resetCoverFieldOffsets,
+  coverIllustrationId,
+  coverIllustCategory,
+  coverIllustrationColor,
+  coverIllustrationSvg,
+  currentTemplateIllustFit,
+  filteredIllustrations,
+  illustrationCategories,
+  illustrationMarkets,
+  illustrationColorPresets,
+  ensureIllustrationRegistry,
+  selectIllustration,
+  clearIllustration,
+  updateIllustrationColor,
+  applyFieldOffsetsToDom: applyCoverFieldOffsetsToDom,
+  isRestoring: isCoverRestoring,
+  dispose: disposeCoverEditor
+} = useCoverEditor({ Vue: window.Vue, toast });
+
+const {
+  XHS_FEATURE_ENABLED,
+  XHS_THEME_IDS,
+  XHS_DENSITIES,
+  XHS_DENSITY_LABELS,
+  XHS_THEMES,
+  XHS_LOGICAL_WIDTH,
+  XHS_LOGICAL_HEIGHT,
+  XHS_UPLOAD_WARNING_LIMIT,
+  contentOutputMode,
+  xhsPages,
+  xhsPageSummary,
+  xhsRenderedPages,
+  xhsIsPaginating,
+  xhsIssues,
+  xhsWarning,
+  xhsSelectedPageId,
+  xhsSelectedPageIndex,
+  xhsHasPreviousPage,
+  xhsHasNextPage,
+  xhsPreviewMode,
+  xhsPreviewScale,
+  xhsCoverCandidates,
+  xhsExportErrorPageIndexes,
+  xhsShowCoverPanel,
+  xhsExporting,
+  activeXhsSettings,
+  setContentOutputMode,
+  setXhsPreviewMode,
+  scheduleXhsPagination,
+  selectXhsPage,
+  moveXhsSelectedPage,
+  handleXhsPreviewKeydown,
+  handleXhsRailScroll,
+  updateActiveXhsSettings,
+  insertXhsPageAtCursor,
+  insertXhsPageBeforeBlock,
+  removeXhsPageMarker,
+  selectXhsCoverImage,
+  handleXhsCoverUpload,
+  clearXhsCoverImage,
+  updateXhsFocalPoint,
+  exportSingleXhsPage,
+  exportAllXhsPages,
+  firstBlockId,
+  coverThumbUrl,
+  dispose: disposeXhsMode
+} = useXhsMode({
+  Vue: window.Vue,
+  getMarkdown: () => markdownInput.value,
+  setMarkdown,
+  getEditorSelection,
+  getTextarea,
+  getActiveDocument,
+  getMarkdownEngine: () => md,
+  getImageStore: () => imageStore,
+  resolveDocumentDisplayTitle,
+  schedulePersist: schedulePersistDocumentState,
+  handleImageUpload: (...args) => handleImageUpload(...args),
+  toast,
+  closeSettings: () => { showXhsSettings.value = false; }
+});
 
 const filteredDocuments = computed(() => {
   const keyword = documentSearch.value.trim().toLowerCase();
@@ -655,7 +652,7 @@ function syncEditorFromActiveDocument() {
   const activeDoc = getActiveDocument();
   suppressEditorSync = true;
   suppressTitleSync = true;
-  markdownInput.value = activeDoc ? activeDoc.content : '';
+  setMarkdown(activeDoc ? activeDoc.content : '', { record: false });
   editorHistory.reset(markdownInput.value);
   currentDocumentTitle.value = activeDoc ? (activeDoc.manualTitle || '') : '';
   editorSelection.value = { start: 0, end: 0 };
@@ -794,391 +791,6 @@ function handleBeforeUnload() {
 function handleVisibilityChange() {
   if (document.visibilityState === 'hidden') {
     flushOnLeave();
-  }
-}
-
-// ── XHS Image Mode ─────────────────────────────────────────────
-const activeXhsSettings = computed(() => getActiveDocument()?.xhs || createDefaultXhsSettings());
-
-function deepMergeXhsSettings(current, patch) {
-  const base = normalizeXhsSettings(current);
-  const next = patch && typeof patch === 'object' ? patch : {};
-  return {
-    ...base,
-    ...(next.themeId !== undefined ? { themeId: next.themeId } : {}),
-    ...(next.density !== undefined ? { density: next.density } : {}),
-    ...(next.tocEnabled !== undefined ? { tocEnabled: next.tocEnabled } : {}),
-    footer: { ...base.footer, ...(next.footer || {}) },
-    cover: {
-      ...base.cover,
-      ...(next.cover || {}),
-      focalPoint: { ...base.cover.focalPoint, ...(next.cover?.focalPoint || {}) }
-    }
-  };
-}
-
-function updateActiveXhsSettings(patch) {
-  const doc = getActiveDocument();
-  if (!doc) return;
-  doc.xhs = normalizeXhsSettings(deepMergeXhsSettings(doc.xhs, patch));
-  markCurrentDocumentDirty();
-  schedulePersistDocumentState();
-  scheduleXhsPagination(0);
-}
-
-function getXhsMeasureStage() {
-  if (xhsMeasureStageEl) return xhsMeasureStageEl;
-  xhsMeasureStageEl = document.createElement('div');
-  xhsMeasureStageEl.className = 'xhs-measure-stage';
-  xhsMeasureStageEl.setAttribute('aria-hidden', 'true');
-  document.body.appendChild(xhsMeasureStageEl);
-  return xhsMeasureStageEl;
-}
-
-function resolveXhsPreviewUrl(ref) {
-  if (!ref) return Promise.resolve(null);
-  if (ref.startsWith('img://')) {
-    const id = ref.slice('img://'.length);
-    if (xhsPreviewUrlCache.has(ref)) return Promise.resolve(xhsPreviewUrlCache.get(ref));
-    return imageStore.getImageBlob(id)
-      .then((blob) => {
-        if (!blob) return null;
-        const url = URL.createObjectURL(blob);
-        xhsPreviewUrlCache.set(ref, url);
-        return url;
-      })
-      .catch(() => null);
-  }
-  // http(s)/data: load directly in the preview; CORS is only enforced at export
-  return Promise.resolve(ref);
-}
-
-function revokeXhsPreviewUrls() {
-  for (const url of xhsPreviewUrlCache.values()) {
-    try {
-      URL.revokeObjectURL(url);
-    } catch (_error) {
-      // ignore
-    }
-  }
-  xhsPreviewUrlCache.clear();
-}
-
-async function hydrateXhsMediaRoot(root) {
-  if (!root) return;
-  const targets = Array.from(root.querySelectorAll('[data-media-ref]'));
-  await Promise.all(targets.map(async (element) => {
-    const ref = element.getAttribute('data-media-ref');
-    const url = await resolveXhsPreviewUrl(ref);
-    if (url) element.setAttribute('src', url);
-  }));
-}
-
-async function buildXhsPages(markdown, settings) {
-  if (!md) return { pages: [], meta: { title: '', summary: '' }, images: [], issues: [{ code: 'pagination-failed', pageIndex: 0, message: '编辑器尚未就绪，请稍后重试。', blockId: null }] };
-  const parsed = parseXhsDocument(markdown, md);
-  const measurer = createXhsDomMeasurer(getXhsMeasureStage(), settings, {
-    hydrateMedia: (root) => hydrateXhsMediaRoot(root)
-  });
-  try {
-    const pages = await paginateXhsDocument(parsed, settings, {
-      fits: (blocks) => measurer.fits(blocks),
-      measure: (blocks) => measurer.measure(blocks)
-    });
-    return { pages, meta: parsed.meta, images: parsed.images, issues: [] };
-  } catch (error) {
-    return {
-      pages: [],
-      meta: parsed.meta,
-      images: parsed.images,
-      issues: [{
-        code: error.code || 'pagination-failed',
-        pageIndex: 0,
-        message: error.message || '分页失败',
-        blockId: error.blockId || null
-      }]
-    };
-  } finally {
-    measurer.destroy();
-  }
-}
-
-async function refreshXhsCoverCandidates(images) {
-  const candidates = [...(images || [])];
-  const currentCoverRef = activeXhsSettings.value.cover.imageRef;
-  if (currentCoverRef && !candidates.some((image) => image.src === currentCoverRef)) {
-    candidates.unshift({ src: currentCoverRef, alt: '自定义封面' });
-  }
-  const hydrated = await Promise.all(candidates.map(async (image) => ({
-    ...image,
-    url: await resolveXhsPreviewUrl(image.src)
-  })));
-  xhsCoverCandidates.value = hydrated;
-}
-
-function setXhsPreviewMode(mode) {
-  xhsPreviewMode.value = normalizeXhsPreviewMode(mode);
-  nextTick(() => {
-    setupXhsPreviewObserver();
-    selectXhsPage(xhsSelectedPageId.value, { behavior: 'auto' });
-  });
-}
-
-function selectXhsPage(pageId, { scroll = true, behavior = 'smooth' } = {}) {
-  const selection = resolveXhsPageSelection(
-    xhsPages.value,
-    pageId,
-    xhsSelectedPageIndex.value
-  );
-  xhsSelectedPageId.value = selection.page?.id || null;
-  if (!scroll || !selection.page) return;
-
-  nextTick(() => {
-    const shell = document.querySelector(`.xhs-card-shell[data-page-id="${CSS.escape(selection.page.id)}"]`);
-    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    shell?.scrollIntoView({
-      behavior: reducedMotion && behavior === 'smooth' ? 'auto' : behavior,
-      block: 'nearest',
-      inline: xhsPreviewMode.value === 'horizontal' ? 'center' : 'nearest'
-    });
-  });
-}
-
-function moveXhsSelectedPage(delta) {
-  const selection = stepXhsPageSelection(
-    xhsPages.value,
-    xhsSelectedPageId.value,
-    delta
-  );
-  if (selection.page) selectXhsPage(selection.page.id);
-}
-
-function handleXhsPreviewKeydown(event) {
-  if (xhsPreviewMode.value !== 'horizontal') return;
-  if (event.target !== event.currentTarget && event.target?.closest?.('button, a, input, select, textarea')) return;
-  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-  event.preventDefault();
-  moveXhsSelectedPage(event.key === 'ArrowLeft' ? -1 : 1);
-}
-
-function syncXhsSelectedPageFromRail(rail) {
-  if (!rail || xhsPreviewMode.value !== 'horizontal') return;
-  const railRect = rail.getBoundingClientRect();
-  const railCenter = railRect.left + railRect.width / 2;
-  let closestShell = null;
-  let closestDistance = Infinity;
-
-  for (const shell of rail.querySelectorAll('.xhs-card-shell')) {
-    const rect = shell.getBoundingClientRect();
-    const distance = Math.abs(rect.left + rect.width / 2 - railCenter);
-    if (distance < closestDistance) {
-      closestDistance = distance;
-      closestShell = shell;
-    }
-  }
-
-  if (closestShell?.dataset.pageId) {
-    xhsSelectedPageId.value = closestShell.dataset.pageId;
-  }
-}
-
-function handleXhsRailScroll(event) {
-  if (xhsPreviewMode.value !== 'horizontal') return;
-  const rail = event.currentTarget;
-  clearTimeout(xhsScrollSelectionTimer);
-  xhsScrollSelectionTimer = setTimeout(() => {
-    syncXhsSelectedPageFromRail(rail);
-  }, 100);
-}
-
-function restoreSelectedXhsPage(fallbackIndex = 0) {
-  const selection = resolveXhsPageSelection(
-    xhsPages.value,
-    xhsSelectedPageId.value,
-    fallbackIndex
-  );
-  xhsSelectedPageId.value = selection.page?.id || null;
-  if (selection.page) {
-    selectXhsPage(selection.page.id, { behavior: 'auto' });
-  }
-}
-
-function scheduleXhsPagination(delay = 450) {
-  clearTimeout(xhsPaginationTimer);
-  if (contentOutputMode.value !== 'image') return;
-  xhsIsPaginating.value = true;
-  const revision = ++xhsPaginationRevision;
-  xhsPaginationTimer = setTimeout(async () => {
-    const previousSelectedIndex = xhsSelectedPageIndex.value;
-    const result = await buildXhsPages(markdownInput.value, activeXhsSettings.value);
-    if (revision !== xhsPaginationRevision) return;
-    xhsPages.value = result.pages;
-    xhsRenderedPages.value = renderXhsStack(result.pages, activeXhsSettings.value, { meta: result.meta });
-    xhsIssues.value = result.issues;
-    const summary = summarizeXhsPages(result.pages);
-    xhsWarning.value = result.pages.length > XHS_UPLOAD_WARNING_LIMIT
-      ? `当前共 ${result.pages.length} 张，可能超出当前客户端单篇上传能力，建议拆分为系列内容。仍可完整导出。`
-      : summary.needsSeriesSuggestion
-        ? `当前共 ${result.pages.length} 张，为了更好的滑动阅读体验，建议按章节拆成系列内容。仍可完整导出。`
-        : '';
-    xhsExportErrorPageIndexes.value = [];
-    xhsIsPaginating.value = false;
-    await refreshXhsCoverCandidates(result.images);
-    await nextTick();
-    setupXhsPreviewObserver();
-    await hydrateXhsMediaRoot(document.querySelector('.xhs-image-stack'));
-    restoreSelectedXhsPage(previousSelectedIndex);
-  }, delay);
-}
-
-function setupXhsPreviewObserver() {
-  teardownXhsPreviewObserver();
-  const container = document.querySelector('.xhs-image-stack');
-  if (!container || typeof ResizeObserver === 'undefined') return;
-  const update = () => {
-    const reservedWidth = xhsPreviewMode.value === 'horizontal'
-      ? Math.min(112, Math.max(48, container.clientWidth * 0.18))
-      : 32;
-    const containerStyle = getComputedStyle(container);
-    const shellStyle = getComputedStyle(container.querySelector('.xhs-card-shell'));
-    const reservedHeight = ['paddingTop', 'paddingBottom']
-      .reduce((total, key) => total + (parseFloat(containerStyle[key]) || 0), 0)
-      + ['paddingTop', 'paddingBottom']
-        .reduce((total, key) => total + (parseFloat(shellStyle[key]) || 0), 0);
-    xhsPreviewScale.value = calculateXhsPreviewScale({
-      mode: xhsPreviewMode.value,
-      containerWidth: container.clientWidth,
-      containerHeight: container.clientHeight,
-      reservedWidth,
-      reservedHeight
-    });
-  };
-  xhsPreviewObserver = new ResizeObserver(update);
-  xhsPreviewObserver.observe(container);
-  update();
-}
-
-function teardownXhsPreviewObserver() {
-  if (xhsPreviewObserver) {
-    xhsPreviewObserver.disconnect();
-    xhsPreviewObserver = null;
-  }
-}
-
-function setContentOutputMode(mode) {
-  if (mode !== 'text' && mode !== 'image') return;
-  showXhsSettings.value = false;
-  contentOutputMode.value = mode;
-  if (mode === 'image') {
-    nextTick(() => {
-      setupXhsPreviewObserver();
-      scheduleXhsPagination(0);
-    });
-  } else {
-    teardownXhsPreviewObserver();
-    clearTimeout(xhsPaginationTimer);
-    clearTimeout(xhsScrollSelectionTimer);
-    xhsIsPaginating.value = false;
-    xhsWarning.value = '';
-    xhsShowCoverPanel.value = false;
-    revokeXhsPreviewUrls();
-    xhsCoverCandidates.value = [];
-  }
-}
-
-function insertXhsPageAtCursor() {
-  const result = insertPageMarker(markdownInput.value, editorSelection.value.start);
-  editorHistory.programmatic();
-  markdownInput.value = result.markdown;
-  nextTick(() => getTextarea()?.focus());
-}
-
-function insertXhsPageBeforeBlock(blockId) {
-  const block = xhsPages.value.flatMap((page) => page.blocks).find((item) => item.id === blockId);
-  if (!block) return;
-  editorHistory.programmatic();
-  markdownInput.value = insertPageMarker(markdownInput.value, block.sourceStart).markdown;
-}
-
-function removeXhsPageMarker(markerStart) {
-  editorHistory.programmatic();
-  markdownInput.value = removePageMarker(markdownInput.value, markerStart).markdown;
-}
-
-function selectXhsCoverImage(ref) {
-  updateActiveXhsSettings({ cover: { imageRef: ref } });
-}
-
-function clearXhsCoverImage() {
-  updateActiveXhsSettings({ cover: { imageRef: null } });
-}
-
-function updateXhsFocalPoint(x, y) {
-  updateActiveXhsSettings({ cover: { focalPoint: { x, y } } });
-}
-
-function markXhsExportErrors(issues) {
-  console.error('[xhs] export blocked:', issues.map((issue) => `${issue.pageIndex}:${issue.code}:${issue.blockId || '-'}`).join(', '));
-  xhsExportErrorPageIndexes.value = issues.map((issue) => issue.pageIndex).filter((index) => index != null);
-  const first = issues[0];
-  if (first) {
-    toast.show(first.message || '导出失败', 'error', 6000);
-  }
-}
-
-function firstBlockId(page) {
-  return page.blocks[0]?.id || null;
-}
-
-function coverThumbUrl(ref) {
-  return xhsCoverCandidates.value.find((candidate) => candidate.src === ref)?.url || '';
-}
-
-async function exportSingleXhsPage(pageId) {
-  const page = xhsPages.value.find((item) => item.id === pageId);
-  if (!page) return;
-  const card = document.querySelector(`.xhs-card[data-page-id="${CSS.escape(pageId)}"]`);
-  if (!card) return;
-  xhsExportErrorPageIndexes.value = [];
-  xhsExporting.value = true;
-  try {
-    const result = await exportXhsPage(card, page, {
-      validateRuntime: { imageStore },
-      rasterizeOptions: { mediaOptions: { imageStore } }
-    });
-    if (!result.ok) {
-      markXhsExportErrors(result.issues);
-      return;
-    }
-    toast.show(`已导出第 ${page.pageNumber} 张图片`, 'success');
-  } catch (error) {
-    toast.show(error.message || '单页导出失败', 'error');
-  } finally {
-    xhsExporting.value = false;
-  }
-}
-
-async function exportAllXhsPages() {
-  const cards = Array.from(document.querySelectorAll('.xhs-image-stack .xhs-card'));
-  if (!cards.length) return;
-  xhsExportErrorPageIndexes.value = [];
-  xhsExporting.value = true;
-  const doc = getActiveDocument();
-  const title = resolveDocumentDisplayTitle(doc);
-  try {
-    const result = await exportXhsSet(cards, { articleTitle: title }, {
-      validateRuntime: { imageStore },
-      rasterizeOptions: { mediaOptions: { imageStore } }
-    });
-    if (!result.ok) {
-      markXhsExportErrors(result.issues);
-      return;
-    }
-    toast.show(`已导出 ${cards.length} 张图片${result.warning ? '（' + result.warning + '）' : ''}`, 'success', 6000);
-  } catch (error) {
-    toast.show(error.message || '整组导出失败', 'error');
-  } finally {
-    xhsExporting.value = false;
   }
 }
 
@@ -1515,10 +1127,7 @@ function initPasteHandler() {
     handleImageUpload,
     showToast: (message, type) => toast.show(message, type),
     getInput: () => markdownInput.value,
-    setInput: (value) => {
-      editorHistory.programmatic();
-      markdownInput.value = value;
-    },
+    setInput: (value) => setMarkdown(value),
     nextTick
   });
 }
@@ -1821,48 +1430,14 @@ async function exportHTML() {
 }
 
 function resetEditor() {
-  editorHistory.programmatic();
-  markdownInput.value = '';
+  setMarkdown('');
   persistDocumentState();
   toast.show('已清空编辑器内容', 'info');
 }
 
 function resetToDefault() {
-  editorHistory.programmatic();
-  markdownInput.value = loadDefaultExample();
-  coverTemplateId.value = 'pure-white';
-  coverBackgroundId.value = 'midnight-prism';
-  Object.assign(coverContent, {
-    tag: '技术分享',
-    title: '用 AI 构建公众号封面工具',
-    subtitle: '开箱即用，亦可自由迭代',
-    author: 'AI产品零度',
-    issueNumber: 'No.01'
-  });
-  Object.assign(coverTypography, {
-    titleSize: 48,
-    subtitleSize: 40,
-    tagSize: 28,
-    authorSize: 14,
-    titleLineHeight: 1.3,
-    subtitleLineHeight: 1.4,
-    titleLetterSpacing: 0,
-    subtitleLetterSpacing: 0,
-    titleOffsetY: 0,
-    subtitleOffsetY: 0,
-    titleOffsetX: 0,
-    subtitleOffsetX: 0,
-    textAlign: 'center',
-    titleFontFamily: "'Noto Sans SC', sans-serif",
-    subtitleFontFamily: "'Noto Sans SC', sans-serif"
-  });
-  coverIllustrationId.value = '';
-  coverIllustrationSvg.value = '';
-  coverIllustrationColor.value = '#6366F1';
-  coverLayerOrder.value = 'text-top';
-  coverOpacity.value = 100;
-  coverUndoStack.value = [];
-  coverRedoStack.value = [];
+  setMarkdown(loadDefaultExample());
+  resetCoverToDefault();
   persistDocumentState();
   toast.show('已恢复默认设置', 'info');
 }
@@ -1906,14 +1481,6 @@ function selectCodeTheme(key) {
     // ignore
   }
   flushRenderNow();
-}
-
-function clampNumber(value, min, max, fallback, precision = 0) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return fallback;
-  const clamped = Math.min(max, Math.max(min, number));
-  if (precision <= 0) return Math.round(clamped);
-  return Number(clamped.toFixed(precision));
 }
 
 function updateDisplaySettings(nextSettings) {
@@ -2273,14 +1840,7 @@ function setTableZebra(enabled) {
     return;
   }
   const accent = mergedThemeConfig()?.gzh?.accent || '#2563EB';
-  patchMultiElement([selector], 'background', `${hexToRgbaLocal(accent, 0.05)} !important`);
-}
-
-function hexToRgbaLocal(hex, opacity) {
-  let h = String(hex).replace('#', '');
-  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
-  if (!/^[0-9a-fA-F]{6}$/.test(h)) return `rgba(0, 0, 0, ${opacity})`;
-  return `rgba(${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)}, ${opacity})`;
+  patchMultiElement([selector], 'background', `${hexToRgba(accent, 0.05)} !important`);
 }
 
 /** 分割线组 */
@@ -2378,8 +1938,7 @@ function applyStyleBrush() {
   const head = full.slice(0, lineStart);
   const rest = lineEnd >= full.length ? '' : full.slice(lineEnd + 1);
   const joined = rest ? `\n${rest}` : '\n';
-  editorHistory.programmatic();
-  markdownInput.value = head + base + suffix + joined;
+  setMarkdown(head + base + suffix + joined);
 
   brushApplying.value = false;
   brushSource.value = '';
@@ -2616,8 +2175,7 @@ async function applySelectedCard(styleId) {
     return reportCardEditFailure(result.reason, Boolean(existing));
   }
 
-  editorHistory.programmatic();
-  markdownInput.value = result.markdown;
+  setMarkdown(result.markdown);
   cardTargetState.value = { ok: true, existing: result.kind === 'replace', reason: '' };
   toast.show('已应用卡片样式', 'success');
   suppressCardPopoverEvents = true;
@@ -2640,8 +2198,7 @@ async function removeSelectedCard() {
     return reportCardEditFailure(result.reason, true);
   }
 
-  editorHistory.programmatic();
-  markdownInput.value = result.markdown;
+  setMarkdown(result.markdown);
   cardTargetState.value = { ok: true, existing: false, reason: '' };
   toast.show('已移除卡片样式', 'success');
   suppressCardPopoverEvents = true;
@@ -2661,8 +2218,7 @@ function insertAtCursor(text, options = {}) {
   const before = markdownInput.value.slice(0, start);
   const after = markdownInput.value.slice(end);
 
-  editorHistory.programmatic();
-  markdownInput.value = `${before}${text}${after}`;
+  setMarkdown(`${before}${text}${after}`);
 
   nextTick(() => {
     const target = textarea || getTextarea();
@@ -2683,8 +2239,7 @@ function wrapSelection(before, after, placeholder = '文本') {
   const selected = markdownInput.value.substring(start, end) || placeholder;
   const text = `${before}${selected}${after}`;
 
-  editorHistory.programmatic();
-  markdownInput.value = `${markdownInput.value.substring(0, start)}${text}${markdownInput.value.substring(end)}`;
+  setMarkdown(`${markdownInput.value.substring(0, start)}${text}${markdownInput.value.substring(end)}`);
 
   nextTick(() => {
     if (!textarea) return;
@@ -2739,8 +2294,7 @@ function applyListToSelection(type = 'unordered') {
     })
     .join('\n');
 
-  editorHistory.programmatic();
-  markdownInput.value = `${source.slice(0, blockStart)}${nextBlock}${source.slice(blockEnd)}`;
+  setMarkdown(`${source.slice(0, blockStart)}${nextBlock}${source.slice(blockEnd)}`);
 
   nextTick(() => {
     const target = textarea || getTextarea();
@@ -2770,8 +2324,7 @@ function insertCodeBlock() {
   const selected = markdownInput.value.substring(start, end);
   const snippet = `\`\`\`\n${selected}\n\`\`\``;
 
-  editorHistory.programmatic();
-  markdownInput.value = `${markdownInput.value.substring(0, start)}${snippet}${markdownInput.value.substring(end)}`;
+  setMarkdown(`${markdownInput.value.substring(0, start)}${snippet}${markdownInput.value.substring(end)}`);
 
   nextTick(() => {
     if (!textarea) return;
@@ -2801,22 +2354,6 @@ function handleToolbarImageUpload(event) {
   if (!file) return;
   handleImageUpload(file, getTextarea());
   event.target.value = '';
-}
-
-async function handleXhsCoverUpload(event) {
-  const input = event.target;
-  const file = input.files?.[0];
-  if (!file) return;
-  const imageRef = await handleImageUpload(file, null, { insert: false });
-  input.value = '';
-  if (!imageRef) return;
-
-  const url = await resolveXhsPreviewUrl(imageRef);
-  xhsCoverCandidates.value = [
-    { src: imageRef, url, alt: file.name.replace(/\.[^/.]+$/, '') || '自定义封面' },
-    ...xhsCoverCandidates.value.filter((candidate) => candidate.src !== imageRef)
-  ];
-  selectXhsCoverImage(imageRef);
 }
 
 function handleKeydown(event) {
@@ -3063,426 +2600,6 @@ function initResizeHandles() {
   });
 }
 
-// ═══ Cover Editor Logic ═══
-
-// ── Inline Text Editing ──
-
-function handleCoverTextClick(event) {
-  const target = event.target.closest('[data-field]');
-  if (!target) return;
-
-  const svg = target.closest('svg');
-  if (!svg) return;
-
-  const field = target.getAttribute('data-field');
-  if (!['tag', 'title', 'subtitle', 'author', 'issueNumber'].includes(field)) return;
-
-  const allLines = svg.querySelectorAll(`[data-field="${field}"]`);
-  if (allLines.length === 0) return;
-
-  const previewArea = document.querySelector('.cover-preview-area');
-  if (!previewArea) return;
-
-  const previewAreaRect = previewArea.getBoundingClientRect();
-
-  const svgRect = svg.getBoundingClientRect();
-  const svgToScreenX = svgRect.width / 1200;
-  const svgToScreenY = svgRect.height / 510;
-
-  const firstEl = allLines[0];
-  const textAnchor = firstEl.getAttribute('text-anchor') || 'start';
-  const svgFontSize = parseFloat(firstEl.getAttribute('font-size')) || 48;
-  const svgLetterSpacing = parseFloat(firstEl.getAttribute('letter-spacing')) || 0;
-  const rawLineHeight = parseFloat(firstEl.getAttribute('data-line-height')) || svgFontSize * 1.3;
-
-  // Compute left, top, width, height from SVG attributes — avoiding
-  // getBoundingClientRect which is unreliable for SVG <text> in Chromium.
-  let leftSvg = Infinity, topSvg = Infinity, bottomSvg = -Infinity, maxTextLen = 0;
-  allLines.forEach(el => {
-    const tx = parseFloat(el.getAttribute('x')) || 0;
-    const ty = parseFloat(el.getAttribute('y')) || 0;
-    const fs = parseFloat(el.getAttribute('font-size')) || svgFontSize;
-    const textLen = el.getComputedTextLength();
-    maxTextLen = Math.max(maxTextLen, textLen);
-
-    let lineLeft;
-    if (textAnchor === 'middle') lineLeft = tx - textLen / 2;
-    else if (textAnchor === 'end') lineLeft = tx - textLen;
-    else lineLeft = tx;
-
-    leftSvg = Math.min(leftSvg, lineLeft);
-    topSvg = Math.min(topSvg, ty - fs);       // y is baseline; top ≈ y - font-size
-    bottomSvg = Math.max(bottomSvg, ty + fs * 0.2);
-  });
-
-  const relX = svgRect.left + (leftSvg + (coverFieldOffsets[field]?.x || 0)) * svgToScreenX - previewAreaRect.left;
-  const relY = svgRect.top + (topSvg + (coverFieldOffsets[field]?.y || 0)) * svgToScreenY - previewAreaRect.top;
-  const textW = maxTextLen * svgToScreenX;
-  const boxH = (bottomSvg - topSvg) * svgToScreenY;
-
-  const textAlignMap = { start: 'left', middle: 'center', end: 'right' };
-
-  Object.assign(coverInlineEdit, {
-    active: true,
-    field,
-    value: coverContent[field] || '',
-    x: relX,
-    y: relY,
-    width: textW,
-    minHeight: boxH,
-    fontSize: (svgFontSize * Math.min(svgToScreenX, svgToScreenY)) + 'px',
-    fontFamily: firstEl.getAttribute('font-family') || 'inherit',
-    fontWeight: firstEl.getAttribute('font-weight') || 'normal',
-    color: firstEl.getAttribute('fill') || '#000',
-    textAlign: textAlignMap[textAnchor] || 'left',
-    letterSpacing: (svgLetterSpacing * svgToScreenX) + 'px',
-    lineHeight: (rawLineHeight / svgFontSize).toFixed(2)
-  });
-
-  nextTick(() => {
-    const input = document.querySelector('.cover-inline-editor textarea');
-    if (input) {
-      input.style.height = 'auto';
-      input.style.height = input.scrollHeight + 'px';
-      input.focus();
-      input.select();
-    }
-  });
-}
-
-function applyInlineEdit() {
-  if (!coverInlineEdit.active) return;
-  pushCoverUndo();
-  coverContent[coverInlineEdit.field] = coverInlineEdit.value;
-  coverInlineEdit.active = false;
-}
-
-function cancelInlineEdit() {
-  coverInlineEdit.active = false;
-}
-
-// ── Cover Text Drag ──
-
-function applyFieldOffsetsToDom() {
-  const svg = document.querySelector('.cover-preview-frame svg');
-  if (!svg) return;
-  for (const [field, offset] of Object.entries(coverFieldOffsets)) {
-    const els = svg.querySelectorAll(`[data-field="${field}"]`);
-    els.forEach(el => {
-      if (offset.x === 0 && offset.y === 0) {
-        el.removeAttribute('transform');
-      } else {
-        el.setAttribute('transform', `translate(${offset.x}, ${offset.y})`);
-      }
-    });
-  }
-}
-
-function handleCoverMouseDown(event) {
-  const target = event.target.closest('[data-field]');
-  if (!target) return;
-  const field = target.getAttribute('data-field');
-  if (!['tag', 'title', 'subtitle', 'author', 'issueNumber'].includes(field)) return;
-
-  event.preventDefault();
-  coverDrag = {
-    field,
-    startMouseX: event.clientX,
-    startMouseY: event.clientY,
-    startOffset: { x: coverFieldOffsets[field].x, y: coverFieldOffsets[field].y },
-    moved: false
-  };
-  document.addEventListener('mousemove', onDragMouseMove);
-  document.addEventListener('mouseup', onDragMouseUp);
-}
-
-function onDragMouseMove(event) {
-  if (!coverDrag) return;
-  const dx = event.clientX - coverDrag.startMouseX;
-  const dy = event.clientY - coverDrag.startMouseY;
-
-  if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
-
-  if (!coverDrag.moved) {
-    coverDrag.moved = true;
-    coverInlineEdit.active = false;
-  }
-
-  const svg = document.querySelector('.cover-preview-frame svg');
-  if (!svg) return;
-  const svgRect = svg.getBoundingClientRect();
-  const svgToScreenX = svgRect.width / 1200;
-  const svgToScreenY = svgRect.height / 510;
-
-  const offsetX = coverDrag.startOffset.x + dx / svgToScreenX;
-  const offsetY = coverDrag.startOffset.y + dy / svgToScreenY;
-
-  const els = svg.querySelectorAll(`[data-field="${coverDrag.field}"]`);
-  els.forEach(el => {
-    el.setAttribute('transform', `translate(${offsetX}, ${offsetY})`);
-  });
-}
-
-function onDragMouseUp(event) {
-  document.removeEventListener('mousemove', onDragMouseMove);
-  document.removeEventListener('mouseup', onDragMouseUp);
-
-  if (!coverDrag) return;
-  const drag = coverDrag;
-  coverDrag = null;
-
-  if (drag.moved) {
-    pushCoverUndo();
-    const svg = document.querySelector('.cover-preview-frame svg');
-    if (svg) {
-      const svgRect = svg.getBoundingClientRect();
-      const svgToScreenX = svgRect.width / 1200;
-      const svgToScreenY = svgRect.height / 510;
-      const dx = event.clientX - drag.startMouseX;
-      const dy = event.clientY - drag.startMouseY;
-      coverFieldOffsets[drag.field].x = Math.round(drag.startOffset.x + dx / svgToScreenX);
-      coverFieldOffsets[drag.field].y = Math.round(drag.startOffset.y + dy / svgToScreenY);
-    }
-    applyFieldOffsetsToDom();
-  } else {
-    handleCoverTextClick(event);
-  }
-}
-
-function resetCoverFieldOffsets() {
-  for (const key of Object.keys(coverFieldOffsets)) {
-    coverFieldOffsets[key].x = 0;
-    coverFieldOffsets[key].y = 0;
-  }
-}
-
-function handleInlineEditKeydown(event) {
-  if (event.key === 'Enter' && !event.shiftKey) {
-    event.preventDefault();
-    applyInlineEdit();
-  } else if (event.key === 'Escape') {
-    event.preventDefault();
-    cancelInlineEdit();
-  }
-}
-
-function toggleCoverSidebar() {
-  coverSidebarCollapsed.value = !coverSidebarCollapsed.value;
-}
-
-// ── Cover SVG Output ──
-
-const coverSvgOutput = computed(() => {
-  return renderCover(
-    coverTemplateId.value,
-    {
-      ...coverContent,
-      backgroundId: coverBackgroundId.value,
-      illustrationSvg: coverIllustrationSvg.value,
-      illustrationOpacity: coverOpacity.value / 100,
-      layerOrder: coverLayerOrder.value
-    },
-    { ...coverTypography }
-  );
-});
-
-const coverCategories = computed(() => getCategories());
-const currentTemplateBackgrounds = computed(() => getTemplate(coverTemplateId.value)?.backgrounds || []);
-
-const coverPreviewStyle = computed(() => {
-  return { aspectRatio: '900 / 383' };
-});
-
-function getCoverTemplatesByCategory(category) {
-  return getTemplates(category);
-}
-
-function renderCoverThumb(templateId) {
-  return renderCover(templateId, { tag: '标签', title: '标题预览', subtitle: '副标题', author: '作者' }, { ...DEFAULT_TYPOGRAPHY, titleSize: 36, subtitleSize: 16, tagSize: 10, authorSize: 10 });
-}
-
-function getTemplateMeta(templateId) {
-  return TEMPLATE_META[templateId] || null;
-}
-
-function coverTemplateSupports(field) {
-  const tpl = COVER_TEMPLATES.find(t => t.id === coverTemplateId.value);
-  return tpl ? tpl.elements[field] : false;
-}
-
-const currentTemplateIllustFit = computed(() => {
-  const tpl = COVER_TEMPLATES.find(t => t.id === coverTemplateId.value);
-  return tpl?.illustFit || null;
-});
-
-const filteredIllustrations = computed(() => {
-  let list = getIllustrationsByCategory(coverIllustCategory.value);
-  const fit = currentTemplateIllustFit.value;
-  if (fit) {
-    list = list.filter(item => item.fit && item.fit.includes(fit));
-  }
-  return list;
-});
-
-const illustrationColorPresets = [
-  '#6366F1', '#8B5CF6', '#EC4899', '#F43F5E', '#F97316',
-  '#EAB308', '#22C55E', '#14B8A6', '#06B6D4', '#3B82F6',
-  '#1E293B', '#64748B'
-];
-
-async function selectIllustration(id) {
-  pushCoverUndo();
-  coverIllustrationId.value = id;
-  const illust = getIllustration(id);
-  if (illust) {
-    coverIllustrationColor.value = illust.defaultColor || '#6366F1';
-    const svgStr = await loadIllustrationSvg(illust.path);
-    coverIllustrationSvg.value = svgStr;
-  }
-}
-
-function clearIllustration() {
-  pushCoverUndo();
-  coverIllustrationId.value = '';
-  coverIllustrationSvg.value = '';
-}
-
-async function updateIllustrationColor(color) {
-  coverIllustrationColor.value = color;
-  if (coverIllustrationId.value) {
-    const illust = getIllustration(coverIllustrationId.value);
-    if (illust) {
-      const originalSvg = await loadIllustrationSvg(illust.path);
-      coverIllustrationSvg.value = replaceIllustrationColor(originalSvg, color);
-    }
-  }
-}
-
-function getCoverStateSnapshot() {
-  return {
-    templateId: coverTemplateId.value,
-    backgroundId: coverBackgroundId.value,
-    content: { ...coverContent },
-    typography: { ...coverTypography },
-    fieldOffsets: JSON.parse(JSON.stringify(coverFieldOffsets)),
-    illustrationId: coverIllustrationId.value,
-    illustrationColor: coverIllustrationColor.value,
-    layerOrder: coverLayerOrder.value,
-    opacity: coverOpacity.value
-  };
-}
-
-let _restoringCover = false;
-
-function restoreCoverState(state) {
-  _restoringCover = true;
-  // Fall back to a known template if the saved one no longer exists
-  // (e.g. a template was removed in a newer version)
-  const savedTpl = COVER_TEMPLATES.find(t => t.id === state.templateId);
-  coverTemplateId.value = savedTpl ? state.templateId : 'pure-white';
-  const savedBackgrounds = savedTpl?.backgrounds || [];
-  coverBackgroundId.value = savedBackgrounds.some(item => item.id === state.backgroundId)
-    ? state.backgroundId
-    : (savedBackgrounds[0]?.id || 'midnight-prism');
-  Object.assign(coverContent, state.content || DEFAULT_COVER_CONTENT);
-  Object.assign(coverTypography, state.typography || DEFAULT_TYPOGRAPHY);
-  if (state.fieldOffsets) {
-    for (const [key, val] of Object.entries(state.fieldOffsets)) {
-      if (coverFieldOffsets[key]) Object.assign(coverFieldOffsets[key], val);
-    }
-  } else {
-    resetCoverFieldOffsets();
-  }
-  coverIllustrationId.value = state.illustrationId || '';
-  coverIllustrationColor.value = state.illustrationColor || coverIllustrationColor.value;
-  coverLayerOrder.value = state.layerOrder || 'text-top';
-  coverOpacity.value = Number.isFinite(Number(state.opacity)) ? Number(state.opacity) : 100;
-
-  if (coverIllustrationId.value) {
-    const illust = getIllustration(coverIllustrationId.value);
-    if (illust) {
-      loadIllustrationSvg(illust.path).then(svg => {
-        coverIllustrationSvg.value = replaceIllustrationColor(svg, coverIllustrationColor.value);
-      });
-    }
-  } else {
-    coverIllustrationSvg.value = '';
-  }
-
-  // Safety: clear flag after render even if coverSvgOutput watcher didn't fire
-  nextTick(() => { _restoringCover = false; });
-}
-
-function pushCoverUndo() {
-  coverUndoStack.value.push(getCoverStateSnapshot());
-  if (coverUndoStack.value.length > 50) coverUndoStack.value.shift();
-  coverRedoStack.value = [];
-}
-
-function selectCoverTemplate(id) {
-  const template = getTemplate(id);
-  if (!template) return;
-  pushCoverUndo();
-  coverTemplateId.value = id;
-  if (template.backgrounds?.length && !template.backgrounds.some(item => item.id === coverBackgroundId.value)) {
-    coverBackgroundId.value = template.backgrounds[0].id;
-  }
-}
-
-function selectCoverBackground(id) {
-  if (id === coverBackgroundId.value || !currentTemplateBackgrounds.value.some(item => item.id === id)) return;
-  pushCoverUndo();
-  coverBackgroundId.value = id;
-}
-
-function updateCoverTypo(field, value) {
-  pushCoverUndo();
-  coverTypography[field] = Number(value);
-}
-
-function coverUndo() {
-  if (coverUndoStack.value.length === 0) return;
-  coverRedoStack.value.push(getCoverStateSnapshot());
-  const state = coverUndoStack.value.pop();
-  restoreCoverState(state);
-}
-
-function coverRedo() {
-  if (coverRedoStack.value.length === 0) return;
-  coverUndoStack.value.push(getCoverStateSnapshot());
-  const state = coverRedoStack.value.pop();
-  restoreCoverState(state);
-}
-
-function coverReset() {
-  pushCoverUndo();
-  coverTemplateId.value = 'pure-white';
-  coverBackgroundId.value = 'midnight-prism';
-  Object.assign(coverContent, DEFAULT_COVER_CONTENT);
-  Object.assign(coverTypography, DEFAULT_TYPOGRAPHY);
-  resetCoverFieldOffsets();
-  coverLayerOrder.value = 'text-top';
-  coverOpacity.value = 100;
-  coverIllustrationId.value = '';
-  coverIllustrationSvg.value = '';
-}
-
-function toggleCoverLayerOrder() {
-  coverLayerOrder.value = coverLayerOrder.value === 'text-top' ? 'image-top' : 'text-top';
-}
-
-async function exportCoverPngAction() {
-  const svg = coverSvgOutput.value;
-  if (!svg) return;
-  try {
-    await doExportCoverPng(svg, coverContent.title || 'cover');
-    toast.show('封面已导出', 'success');
-  } catch (err) {
-    console.error('导出失败:', err);
-    toast.show('导出失败: ' + err.message, 'error');
-  }
-}
-
 const app = createApp({
   setup() {
     watch(markdownInput, (value) => {
@@ -3533,16 +2650,23 @@ const app = createApp({
       persistDocumentState();
     }, { deep: true });
 
+    watch(activeTab, (tab) => {
+      if (tab !== 'cover') return;
+      ensureIllustrationRegistry().catch((error) => {
+        console.error('插画注册表加载失败:', error);
+        toast.show('插画库加载失败，请检查本地资源', 'error');
+      });
+    });
+
     // Cancel inline editing when template switches (prevents stale editor)
     watch(coverTemplateId, () => {
       coverInlineEdit.active = false;
-      if (!_restoringCover) resetCoverFieldOffsets();
+      if (!isCoverRestoring()) resetCoverFieldOffsets();
     });
 
     watch(coverSvgOutput, () => {
       nextTick(() => {
-        applyFieldOffsetsToDom();
-        _restoringCover = false;
+        applyCoverFieldOffsetsToDom();
       });
     });
 
@@ -3683,6 +2807,8 @@ const app = createApp({
     });
 
     onBeforeUnmount(() => {
+      disposeXhsMode();
+      disposeCoverEditor();
       window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       document.removeEventListener('keydown', handleDocumentKeydown);
@@ -3774,8 +2900,8 @@ const app = createApp({
       coverIllustrationSvg,
       currentTemplateIllustFit,
       filteredIllustrations,
-      illustrationCategories: ILLUSTRATION_CATEGORIES,
-      illustrationMarkets: ILLUSTRATION_MARKETS,
+      illustrationCategories,
+      illustrationMarkets,
       illustrationColorPresets,
       selectIllustration,
       clearIllustration,

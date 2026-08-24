@@ -2,6 +2,16 @@
 
 > 本文件定义 OpenGZH 的视觉风格、排版规范和交互模式。AI 修改 UI 时应遵循本文档。
 
+## 工程约束
+
+- 本项目刻意保持无构建流程：静态 HTML + CDN/本地 vendor + 原生 ES Modules，发布直接同步文件目录。
+- 业务逻辑按 `core/`、`cover/`、`xhs/`、`storage/`、`export/`、`ui/` 分域；新增跨域状态或 DOM 逻辑前，优先放入对应模块，避免继续扩大 `main.js`。
+- 依赖本地化或升级时必须同步更新资源引用，并通过 `npm test`、`node --check` 和 `git diff --check`；不要以手工散落的版本号作为唯一缓存策略。
+- 静态入口通过 `assets/scripts/ui/asset-loader.js` 集中维护发布版本；新增入口资源应加入 loader 清单，不在 HTML 中散落 `?v=`。
+- 插画注册表是封面域的按需资源：`registry.json` 只在首次进入封面 Tab 时加载，首屏不解析整份注册表。
+- 所有 Markdown HTML 在进入 `v-html`、复制和导出共用的渲染下游前先经过 `html-sanitizer.js`；保留 `html: true` 是产品能力，不是安全边界。
+- CSP 保留 `'unsafe-eval'` 是当前“无构建 + Vue 浏览器模板编译”的明确代价；切到预编译模板时必须删除它。
+
 ## 视觉风格
 
 极简 + 功能导向。编辑器工具的视觉服务于写作效率，不喧宾夺主。

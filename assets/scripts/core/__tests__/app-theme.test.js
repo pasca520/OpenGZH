@@ -7,6 +7,8 @@ const read = (path) => readFileSync(`${root}${path}`, 'utf8');
 const baseCss = read('assets/styles/base.css');
 const html = read('index.html');
 const mainSource = read('assets/scripts/main.js');
+const themeBootstrap = read('assets/scripts/ui/app-theme-bootstrap.js');
+const assetLoader = read('assets/scripts/ui/asset-loader.js');
 
 function tokenFromBlock(block, name) {
   const match = block.match(new RegExp(`${name}:\\s*(#[0-9A-Fa-f]{6})\\s*;`));
@@ -139,12 +141,13 @@ describe('application theme palettes', () => {
   });
 
   it('restores the saved theme before application styles load', () => {
-    const bootstrapIndex = html.indexOf("localStorage.getItem('opengzh-app-theme')");
-    const stylesheetIndex = html.indexOf('assets/styles/base.css');
+    const bootstrapIndex = html.indexOf('assets/scripts/ui/app-theme-bootstrap.js');
+    const stylesheetIndex = html.indexOf('assets/scripts/ui/asset-loader.js');
     expect(bootstrapIndex).toBeGreaterThan(-1);
     expect(bootstrapIndex).toBeLessThan(stylesheetIndex);
-    expect(html).toContain("let theme = 'light'");
-    expect(html).toContain('document.documentElement.dataset.appTheme = theme');
+    expect(assetLoader).toContain("'assets/styles/base.css'");
+    expect(themeBootstrap).toContain("let theme = 'light'");
+    expect(themeBootstrap).toContain('document.documentElement.dataset.appTheme = theme');
   });
 
   it('keeps app theme and article preview controls distinct', () => {

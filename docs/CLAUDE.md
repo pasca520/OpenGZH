@@ -19,15 +19,17 @@ python -m http.server 8080   # 或 ./start.sh
 入口是 `index.html`，加载 `assets/scripts/main.js` 启动 Vue 应用。
 
 ```
-main.js          →  应用入口。Vue 实例、状态管理、文档生命周期、工具栏交互
-core/            →  不依赖 UI 的基础能力（渲染、图片、粘贴、高亮）
+main.js          →  应用入口与跨域胶水（Vue 实例、文档生命周期、工具栏交互）
+cover/           →  封面编辑器组合式状态、模板渲染、插画按需加载与导出
+xhs/             →  小红书图文模式组合式状态、分页、光栅化与导出
+core/            →  不依赖 UI 的基础能力（渲染、图片、粘贴、高亮、历史与清洗）
 export/          →  复制/导出策略（公众号、X/Twitter、公式各一个文件）
-storage/         →  localStorage 读写（偏好设置）
+storage/         →  偏好设置与文档持久化（localStorage / IndexedDB）
 ui/              →  界面逻辑（主题管理、面板、Toast、代码主题）
 styles/          →  CSS（base、editor、panel、about、themes/）
 ```
 
-改功能时先定位到对应目录，不要在 main.js 里堆逻辑。
+改功能时先定位到对应目录，不要在 main.js 里堆逻辑。封面与 XHS 的状态/DOM 逻辑分别进入 `cover/use-cover-editor.js`、`xhs/use-xhs-mode.js`；`main.js` 只负责组装依赖和生命周期。
 
 ## 改动时要注意的
 

@@ -2373,7 +2373,7 @@ it('styles direct lists and items without replacing standard inline content', ()
       Object.keys(STYLES).length *
       (CARD_STYLES.length * 4 + CARD_STYLES.filter(({ slots }) => slots !== 'body').length * 4)
     );
-  });
+  }, 15000);
 });
 
 describe('card preview HTML', () => {

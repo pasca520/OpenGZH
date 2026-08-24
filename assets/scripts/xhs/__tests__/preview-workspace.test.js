@@ -4,26 +4,27 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
 const main = readFileSync(`${root}/assets/scripts/main.js`, 'utf8');
+const xhsMode = readFileSync(`${root}/assets/scripts/xhs/use-xhs-mode.js`, 'utf8');
 const html = readFileSync(`${root}/index.html`, 'utf8');
 const css = readFileSync(`${root}/assets/styles/xhs.css`, 'utf8');
 const editorCss = readFileSync(`${root}/assets/styles/editor.css`, 'utf8');
 
 describe('xhs preview workspace contract', () => {
   it('defaults to horizontal without persisting the view choice', () => {
-    expect(main).toContain("const xhsPreviewMode = ref('horizontal')");
-    const setterStart = main.indexOf('function setXhsPreviewMode');
-    const setterEnd = main.indexOf('function selectXhsPage');
+    expect(xhsMode).toContain("const xhsPreviewMode = ref('horizontal')");
+    const setterStart = xhsMode.indexOf('function setXhsPreviewMode');
+    const setterEnd = xhsMode.indexOf('function selectXhsPage');
     expect(setterStart).toBeGreaterThan(-1);
     expect(setterEnd).toBeGreaterThan(setterStart);
-    const setter = main.slice(setterStart, setterEnd);
+    const setter = xhsMode.slice(setterStart, setterEnd);
     expect(setter).not.toContain('schedulePersistDocumentState');
     expect(setter).not.toContain('scheduleXhsPagination');
   });
 
   it('re-attaches preview measurement after paginated cards enter the DOM', () => {
-    const paginationStart = main.indexOf('function scheduleXhsPagination');
-    const observerStart = main.indexOf('function setupXhsPreviewObserver');
-    const pagination = main.slice(paginationStart, observerStart);
+    const paginationStart = xhsMode.indexOf('function scheduleXhsPagination');
+    const observerStart = xhsMode.indexOf('function setupXhsPreviewObserver');
+    const pagination = xhsMode.slice(paginationStart, observerStart);
     expect(pagination).toContain('setupXhsPreviewObserver();');
   });
 
@@ -61,10 +62,10 @@ describe('xhs preview workspace contract', () => {
 
   it('keeps image-mode warnings out of the text preview', () => {
     expect(html).toContain('v-if="contentOutputMode === \'image\' && xhsWarning"');
-    const setterStart = main.indexOf('function setContentOutputMode');
-    const setterEnd = main.indexOf('function insertXhsPageAtCursor');
-    const setter = main.slice(setterStart, setterEnd);
-    expect(setter).toMatch(/else\s*\{[\s\S]*?xhsWarning\.value\s*=\s*''/);
+    const setterStart = xhsMode.indexOf('function setContentOutputMode');
+    const setterEnd = xhsMode.indexOf('function insertXhsPageAtCursor');
+    const setter = xhsMode.slice(setterStart, setterEnd);
+    expect(setter).toContain("xhsWarning.value = ''");
   });
 
   it('offers cover editing and a dedicated cover image upload from the cover card', () => {
@@ -72,7 +73,7 @@ describe('xhs preview workspace contract', () => {
     expect(html).toContain('编辑封面');
     expect(html).toContain('ref="xhsCoverImageUpload"');
     expect(html).toContain('@change="handleXhsCoverUpload"');
-    expect(main).toContain('async function handleXhsCoverUpload');
+    expect(xhsMode).toContain('async function handleXhsCoverUpload');
     expect(main).toContain('handleXhsCoverUpload,');
   });
 

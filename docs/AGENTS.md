@@ -44,7 +44,9 @@ OpenGZH 是一个面向微信公众号排版的纯前端 Markdown 编辑器。
 
 ## 代码结构速览
 
-- `assets/scripts/main.js`：应用状态、文档管理、保存、交互入口
+- `assets/scripts/main.js`：跨域应用胶水、文档管理、保存、交互入口
+- `assets/scripts/cover/use-cover-editor.js`：封面状态、内联编辑、拖拽、撤销/重做与导出
+- `assets/scripts/xhs/use-xhs-mode.js`：小红书状态、分页、预览、光栅化与导出
 - `assets/scripts/core/`：Markdown 渲染、粘贴处理、图片存储与压缩
 - `assets/scripts/export/clipboard-exporter.js`：复制到公众号相关处理
 - `assets/scripts/storage/preferences.js`：本地持久化与防抖保存

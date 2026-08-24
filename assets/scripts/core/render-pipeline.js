@@ -2,6 +2,8 @@ import { applyCodeHighlighting } from './code-highlight.js';
 import { applyCardStyles } from './card-styles.js';
 import { applyGzhStructure, applyEndDivider } from './gzh-structure.js';
 import { mergeTheme, applyBlockStyles } from './style-override.js';
+import { clampNumber, hexToRgba } from './format-utils.js';
+import { sanitizeHtml } from './html-sanitizer.js';
 
 /**
  * Render pipeline.
@@ -15,6 +17,7 @@ export async function renderPipeline({ markdown, md, imageStore, styleConfig, co
   const processedContent = preprocessMarkdown(markdown);
 
   let html = md.render(processedContent);
+  html = sanitizeHtml(html);
 
   if (imageStore) {
     html = await processImageProtocol(html, imageStore);
@@ -233,11 +236,11 @@ function applyImageDisplaySettings(doc, displaySettings) {
   const isCustom = displaySettings.imageStyleMode === 'custom';
   if (!preset && !isCustom) return;
 
-  const marginTop = preset?.marginTop ?? clampNumber(displaySettings.imageMarginTop, 0, 200, 24);
-  const marginBottom = preset?.marginBottom ?? clampNumber(displaySettings.imageMarginBottom, 0, 200, 32);
+  const marginTop = preset?.marginTop ?? clampNumber(displaySettings.imageMarginTop, 0, 200, 24, null);
+  const marginBottom = preset?.marginBottom ?? clampNumber(displaySettings.imageMarginBottom, 0, 200, 32, null);
   const radius = preset?.radius ?? (displaySettings.imageRadiusMode === 'circle'
     ? '50%'
-    : `${clampNumber(displaySettings.imageRadius, 0, 360, 8)}px`);
+    : `${clampNumber(displaySettings.imageRadius, 0, 360, 8, null)}px`);
   const shadow = preset?.shadow ?? buildShadowValue(displaySettings);
   const border = preset?.border || 'none';
   const filter = preset?.filter || 'none';
@@ -353,36 +356,14 @@ function applyFontFamilyOverride(doc, fontStyle) {
   });
 }
 
-function clampNumber(value, min, max, fallback) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return fallback;
-  return Math.min(max, Math.max(min, number));
-}
-
 function buildShadowValue(displaySettings) {
-  const x = clampNumber(displaySettings.imageShadowX, -80, 80, 0);
-  const y = clampNumber(displaySettings.imageShadowY, -80, 80, 12);
-  const blur = clampNumber(displaySettings.imageShadowBlur, 0, 120, 28);
-  const spread = clampNumber(displaySettings.imageShadowSpread, -40, 80, 0);
-  const opacity = clampNumber(displaySettings.imageShadowOpacity, 0, 1, 0.18);
+  const x = clampNumber(displaySettings.imageShadowX, -80, 80, 0, null);
+  const y = clampNumber(displaySettings.imageShadowY, -80, 80, 12, null);
+  const blur = clampNumber(displaySettings.imageShadowBlur, 0, 120, 28, null);
+  const spread = clampNumber(displaySettings.imageShadowSpread, -40, 80, 0, null);
+  const opacity = clampNumber(displaySettings.imageShadowOpacity, 0, 1, 0.18, null);
   const color = hexToRgba(displaySettings.imageShadowColor, opacity);
   return `${x}px ${y}px ${blur}px ${spread}px ${color}`;
-}
-
-function hexToRgba(hex, opacity) {
-  const normalized = String(hex || '').trim().replace('#', '');
-  const fullHex = normalized.length === 3
-    ? normalized.split('').map((char) => char + char).join('')
-    : normalized;
-
-  if (!/^[0-9a-fA-F]{6}$/.test(fullHex)) {
-    return `rgba(0, 0, 0, ${opacity})`;
-  }
-
-  const red = parseInt(fullHex.slice(0, 2), 16);
-  const green = parseInt(fullHex.slice(2, 4), 16);
-  const blue = parseInt(fullHex.slice(4, 6), 16);
-  return `rgba(${red}, ${green}, ${blue}, ${opacity})`;
 }
 
 function assignHeadingIds(doc) {
