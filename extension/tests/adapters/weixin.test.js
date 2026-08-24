@@ -44,6 +44,18 @@ describe('WeChat adapter', () => {
   });
 
   it.each([
+    ['single and double quoted strings', `const single = 'window.wx = { data: { t: "bad-token" } }'; const double = "window.wx = { ticket: 'bad-ticket' }";`],
+    ['template strings', 'const template = `window.wx = { data: { t: "bad-token" }, ticket: "bad-ticket", user_name: "bad-user" }`;'],
+    ['line and block comments', '// window.wx = { data: { t: "bad-token" }, ticket: "bad-ticket", user_name: "bad-user" };\n/* window.wx = { data: { t: "bad-token" }, ticket: "bad-ticket", user_name: "bad-user" } */'],
+  ])('ignores %s before the real bootstrap assignment', async (_label, decoy) => {
+    const valid = 'window.wx = { data: { t: "test-token-123" }, ticket: "test-ticket-456", user_name: "test-user-789", nick_name: "测试账号", time: "1787529600" };';
+    const html = `<script>${decoy}\n${valid}</script>`;
+    const adapter = createWeixinAdapter();
+    await expect(adapter.checkAuth(runtimeFor(vi.fn(async () => response(html)))))
+      .resolves.toEqual({ authenticated: true, userId: 'test-user-789', username: '测试账号' });
+  });
+
+  it.each([
     ['login page', response('<html>login</html>')],
     ['401', response('', { status: 401 })],
     ['403', response('', { status: 403 })],
@@ -94,6 +106,7 @@ describe('WeChat adapter', () => {
     'https://mmbiz.qlogo.cn/test-avatar.png',
     'http://mmbiz.qpic.cn/test.png',
     'https://user:pass@mmbiz.qpic.cn/test.png',
+    'https://mmbiz.qpic.cn:443/test.png',
     'https://mmbiz.qpic.cn:8443/test.png',
     'https://mmbiz.qpic.cn.evil.example/test.png',
   ])('rejects an upload result outside the exact HTTPS mmbiz.qpic.cn CDN host: %s', async (cdnUrl) => {
@@ -140,7 +153,7 @@ describe('WeChat adapter', () => {
     expect(result.draftUrl).toContain('appmsgid=draft-1');
     expect(result.draftUrl).toContain('token=test-token-123');
     const body = fetch.mock.calls[1][1].body;
-    expect(body.get('content0')).toBe('<p>外链<a href="https://mp.weixin.qq.com/cgi-bin/appmsg?t=media">内部</a><a href="https://sub.weixin.qq.com/path">子域内部</a>伪内部<img src="https://mmbiz.qpic.cn/test.png"></p>');
+    expect(body.get('content0')).toBe('<p>外链<a href="https://mp.weixin.qq.com/cgi-bin/appmsg?t=media">内部</a>子域内部伪内部<img src="https://mmbiz.qpic.cn/test.png"></p>');
     expect(body.get('count')).toBe('1');
     expect(body.get('title0')).toBe('标题');
     expect(calls[0][0].id).toBe(1001);
@@ -158,7 +171,43 @@ describe('WeChat adapter', () => {
       wechatHtml: '<p><a data-href="https://evil.example">数据属性</a><a href="https://evil.example">真实外链</a></p>',
     }, new Map());
     expect(fetch.mock.calls[1][1].body.get('content0'))
-      .toBe('<p><a data-href="https://evil.example">数据属性</a>真实外链</p>');
+      .toBe('<p>数据属性真实外链</p>');
+  });
+
+  it.each([
+    ['unquoted external href', '<p><a href=https://evil.example/path>外链</a></p>', '<p>外链</p>'],
+    ['missing href', '<p><a>无链接</a></p>', '<p>无链接</p>'],
+    ['malformed href', '<p><a href="https://[bad">坏链接</a></p>', '<p>坏链接</p>'],
+    ['malformed closing tag', '<p><a href=https://evil.example>坏闭合</a onclick="evil()"></p>', '<p>坏闭合</p>'],
+    ['explicit default port', '<p><a href="https://mp.weixin.qq.com:443/path">默认端口</a></p>', '<p>默认端口</p>'],
+    ['unclosed anchor', '<p><a href="https://evil.example">未闭合</p>', '<p>未闭合</p>'],
+    ['unterminated opening tag', '<p><a href=https://evil.example', '<p> href=https://evil.example'],
+    ['nested unsafe anchors', '<p><a href="https://evil.example"><a href="https://evil-2.example">嵌套</a></a></p>', '<p>嵌套</p>'],
+    ['anchor-like text inside another tag attribute', '<div data-value="<a href=https://evil.example>属性</a>">保留</div>', '<div data-value="<a href=https://evil.example>属性</a>">保留</div>'],
+  ])('fails closed for %s while retaining text', async (_label, html, expected) => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(response(home))
+      .mockResolvedValueOnce(response(JSON.stringify({ appMsgId: 'draft-anchor', base_resp: { ret: 0 } })));
+    const adapter = createWeixinAdapter();
+    const runtime = runtimeFor(fetch);
+    await adapter.checkAuth(runtime);
+    await adapter.saveDraft(runtime, { title: '标题', wechatHtml: html }, new Map());
+    expect(fetch.mock.calls[1][1].body.get('content0')).toBe(expected);
+  });
+
+  it('rebuilds only an exact HTTPS WeChat anchor and strips event attributes', async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(response(home))
+      .mockResolvedValueOnce(response(JSON.stringify({ appMsgId: 'draft-safe-anchor', base_resp: { ret: 0 } })));
+    const adapter = createWeixinAdapter();
+    const runtime = runtimeFor(fetch);
+    await adapter.checkAuth(runtime);
+    await adapter.saveDraft(runtime, {
+      title: '标题',
+      wechatHtml: '<p><a class="unsafe" href=https://mp.weixin.qq.com/path?x=1&y=2 onclick="evil()">内部</a><a href=https://mp.weixin.qq.com/path/>尾斜杠</a><a href="https://sub.weixin.qq.com/path">子域</a></p>',
+    }, new Map());
+    expect(fetch.mock.calls[1][1].body.get('content0'))
+      .toBe('<p><a href="https://mp.weixin.qq.com/path?x=1&amp;y=2">内部</a><a href="https://mp.weixin.qq.com/path/">尾斜杠</a>子域</p>');
   });
 
   it('marks an interrupted create request as unknown remote state and does not retry', async () => {
@@ -171,11 +220,41 @@ describe('WeChat adapter', () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
+  it('maps cleanup failure after a deterministic draft result to unknown remote state', async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(response(home))
+      .mockResolvedValueOnce(response(JSON.stringify({ appMsgId: 'draft-cleanup', base_resp: { ret: 0 } })));
+    const runtime = {
+      fetch,
+      withHeaderRules: vi.fn(async (_rules, work) => {
+        await work();
+        throw new Error('DNR cleanup failed');
+      }),
+    };
+    const adapter = createWeixinAdapter();
+    await adapter.checkAuth(runtime);
+    await expect(adapter.saveDraft(runtime, { title: '标题', wechatHtml: '<p>正文</p>' }, new Map()))
+      .rejects.toMatchObject({ code: 'UNKNOWN_REMOTE_STATE', draftId: 'draft-cleanup', retryable: false });
+  });
+
+  it('preserves a header-rule add failure before the request', async () => {
+    const addError = new Error('DNR add failed');
+    const runtime = {
+      fetch: vi.fn().mockResolvedValue(response(home)),
+      withHeaderRules: vi.fn(async () => { throw addError; }),
+    };
+    const adapter = createWeixinAdapter();
+    await adapter.checkAuth(runtime);
+    await expect(adapter.saveDraft(runtime, { title: '标题', wechatHtml: '<p>正文</p>' }, new Map()))
+      .rejects.toBe(addError);
+  });
+
   it('fails closed when create response is malformed, non-OK, or loses appMsgId', async () => {
     const cases = [
       { body: '{"base_resp":{"ret":0}}', init: undefined, code: 'PLATFORM_CHANGED' },
       { body: '{"base_resp":{"ret":1,"err_msg":"token=test-token-123"}}', init: undefined, code: 'DRAFT_CREATE_FAILED' },
       { body: '{not-json', init: undefined, code: 'PLATFORM_CHANGED' },
+      { body: '{}', init: { status: 500 }, code: 'PLATFORM_CHANGED' },
       { body: '{"base_resp":{"ret":0}}', init: { status: 500 }, code: 'DRAFT_CREATE_FAILED' },
     ];
     for (const entry of cases) {
@@ -186,6 +265,22 @@ describe('WeChat adapter', () => {
       const error = await adapter.saveDraft(runtime, { title: '标题', wechatHtml: '<p>正文</p>' }, new Map(), {}).catch((value) => value);
       expect(error).toMatchObject({ code: entry.code });
       expect(JSON.stringify(error)).not.toContain('test-token-123');
+    }
+  });
+
+  it('redacts escaped credential keys in valid and malformed JSON summaries', async () => {
+    const responses = [
+      '{"to\\u006ben":"escaped-token","nested":{"ticket":"nested-ticket"}}',
+      '{"to\\u006ben":"escaped-token","nested":{"ticket":"nested-ticket"},',
+    ];
+    for (const body of responses) {
+      const fetch = vi.fn().mockResolvedValueOnce(response(home)).mockResolvedValueOnce(response(body));
+      const runtime = runtimeFor(fetch);
+      const adapter = createWeixinAdapter();
+      await adapter.checkAuth(runtime);
+      const error = await adapter.uploadImage(runtime, new Blob(['png']), 'hero.png').catch((value) => value);
+      expect(error).toMatchObject({ code: 'PLATFORM_CHANGED' });
+      expect(JSON.stringify(error)).not.toMatch(/escaped-token|nested-ticket/);
     }
   });
 });

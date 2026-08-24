@@ -1,5 +1,5 @@
 import { applyImageMap } from '../core/adapter-contract.js';
-import { PlatformError, remoteStateError, summarizeRemote } from '../core/platform-errors.js';
+import { PlatformError, redactSecrets, remoteStateError, summarizeRemote } from '../core/platform-errors.js';
 
 const HOME_URL = 'https://mp.weixin.qq.com/';
 const HEADER_RULES = Object.freeze([{
@@ -22,13 +22,19 @@ function networkError(message, httpStatus) {
   });
 }
 
-const REMOTE_CREDENTIAL_QUOTED = /(["']?(?:token|ticket|csrf|authorization|cookie|access[_-]?token)["']?\s*[:=]\s*)(["'])([\s\S]*?)\2/gi;
-const REMOTE_CREDENTIAL_UNQUOTED = /((?:["']?(?:token|ticket|csrf|authorization|cookie|access[_-]?token)["']?\s*[:=]\s*))([^"',}\]\r\n]+?)(?=\s*(?:["']?(?:token|ticket|csrf|authorization|cookie|access[_-]?token)["']?\s*[:=]|["',}\]\r\n]|$))/gi;
+function decodeUnicodeEscapes(value) {
+  return String(value).replace(/\\u([0-9a-f]{4})/gi, (_match, code) => String.fromCharCode(Number.parseInt(code, 16)));
+}
 
 function safeRemoteSummary(value) {
-  return summarizeRemote(value)
-    .replace(REMOTE_CREDENTIAL_QUOTED, (_match, prefix, quote) => `${prefix}${quote}[REDACTED]${quote}`)
-    .replace(REMOTE_CREDENTIAL_UNQUOTED, (_match, prefix) => `${prefix}[REDACTED]`);
+  const raw = String(value ?? '');
+  let redacted;
+  try {
+    redacted = JSON.stringify(redactSecrets(JSON.parse(raw)));
+  } catch (_error) {
+    redacted = redactSecrets(decodeUnicodeEscapes(raw));
+  }
+  return summarizeRemote(redacted ?? '');
 }
 
 function responseStatus(response) {
@@ -94,6 +100,61 @@ function balancedEnd(source, start) {
   return -1;
 }
 
+function maskJavascript(source) {
+  const masked = String(source).split('');
+  const mask = (index) => {
+    if (index < 0 || index >= masked.length) return;
+    if (masked[index] !== '\n' && masked[index] !== '\r') masked[index] = ' ';
+  };
+  let mode = 'code';
+  let quote = '';
+  for (let index = 0; index < masked.length; index += 1) {
+    const character = source[index];
+    const next = source[index + 1];
+    if (mode === 'line-comment') {
+      if (character === '\n' || character === '\r') mode = 'code';
+      else mask(index);
+      continue;
+    }
+    if (mode === 'block-comment') {
+      mask(index);
+      if (character === '*' && next === '/') {
+        mask(index + 1);
+        index += 1;
+        mode = 'code';
+      }
+      continue;
+    }
+    if (mode === 'string' || mode === 'template') {
+      mask(index);
+      if (character === '\\') {
+        mask(index + 1);
+        index += 1;
+      } else if (character === quote) {
+        mode = 'code';
+        quote = '';
+      }
+      continue;
+    }
+    if (character === '/' && next === '/') {
+      mask(index);
+      mask(index + 1);
+      index += 1;
+      mode = 'line-comment';
+    } else if (character === '/' && next === '*') {
+      mask(index);
+      mask(index + 1);
+      index += 1;
+      mode = 'block-comment';
+    } else if (character === '"' || character === "'" || character === '`') {
+      mask(index);
+      quote = character;
+      mode = character === '`' ? 'template' : 'string';
+    }
+  }
+  return masked.join('');
+}
+
 function skipWhitespace(source, start) {
   let index = start;
   while (/\s/.test(source[index] || '')) index += 1;
@@ -152,13 +213,17 @@ function* bootstrapObjects(html) {
   const scriptPattern = /<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi;
   for (const match of String(html).matchAll(scriptPattern)) {
     const script = match[1];
-    const assignment = /\bwindow\s*\.\s*wx\s*=\s*\{/i.exec(script);
-    if (!assignment) continue;
-    const objectStart = assignment.index + assignment[0].lastIndexOf('{');
-    const objectEnd = balancedEnd(script, objectStart);
-    if (objectEnd < 0) continue;
-    const properties = parseObjectProperties(script.slice(objectStart, objectEnd));
-    if (properties) yield properties;
+    const masked = maskJavascript(script);
+    const assignments = /(?:^|[^\w$.])window\s*\.\s*wx\s*=\s*\{/gi;
+    let assignment;
+    while ((assignment = assignments.exec(masked))) {
+      const objectStart = assignment.index + assignment[0].lastIndexOf('{');
+      const objectEnd = balancedEnd(masked, objectStart);
+      if (objectEnd < 0) continue;
+      const properties = parseObjectProperties(script.slice(objectStart, objectEnd));
+      if (properties) yield properties;
+      assignments.lastIndex = objectEnd;
+    }
   }
 }
 
@@ -186,19 +251,130 @@ function parseBootstrap(html) {
   return null;
 }
 
-function isInternalWeixinLink(href) {
+function safeWeixinHref(href) {
   try {
     const url = new URL(href);
-    return url.protocol === 'https:' && !url.port && !url.username && !url.password
-      && (url.hostname === 'mp.weixin.qq.com' || url.hostname.endsWith('.weixin.qq.com'));
+    if (url.protocol !== 'https:' || url.hostname !== 'mp.weixin.qq.com' || hasExplicitPort(href) || url.username || url.password) return null;
+    return url.href;
   } catch (_error) {
-    return false;
+    return null;
   }
 }
 
+function hasExplicitPort(value) {
+  const authority = String(value).match(/^[a-z][a-z\d+.-]*:\/\/([^/?#]*)/i)?.[1] || '';
+  return authority.slice(authority.lastIndexOf('@') + 1).includes(':');
+}
+
+function findTagEnd(source, start) {
+  let quote = '';
+  for (let index = start + 1; index < source.length; index += 1) {
+    const character = source[index];
+    if (quote) {
+      if (character === '\\') index += 1;
+      else if (character === quote) quote = '';
+    } else if (character === '"' || character === "'") quote = character;
+    else if (character === '>') return index + 1;
+    else if (character === '<') return -1;
+  }
+  return -1;
+}
+
+function findAnchorStart(source, from) {
+  let index = source.indexOf('<', from);
+  while (index >= 0) {
+    if (source.startsWith('<!--', index)) {
+      const commentEnd = source.indexOf('-->', index + 4);
+      if (commentEnd < 0) return -1;
+      index = source.indexOf('<', commentEnd + 3);
+      continue;
+    }
+    const candidate = source.slice(index);
+    if (/^<\s*\/\s*a(?:\s[^>]*)?>/i.test(candidate) || /^<\s*a(?=\s|\/?>)/i.test(candidate)) return index;
+    const end = findTagEnd(source, index);
+    if (end < 0) return -1;
+    index = source.indexOf('<', end);
+  }
+  return -1;
+}
+
+function readAnchorHref(tag) {
+  if (/^<\s*\/\s*a(?:\s[^>]*)?>/i.test(tag)) return { closing: true };
+  const rawBody = tag.slice(1, -1);
+  const body = /(?:\s|["'])\/\s*$/.test(rawBody) ? rawBody.replace(/\/\s*$/, '') : rawBody;
+  const name = /^\s*a(?=\s|$)/i.exec(body);
+  if (!name) return null;
+  let cursor = name[0].length;
+  let href = null;
+  while (cursor < body.length) {
+    while (/\s/.test(body[cursor] || '')) cursor += 1;
+    if (cursor >= body.length) break;
+    const start = cursor;
+    while (cursor < body.length && !/[\s=]/.test(body[cursor])) cursor += 1;
+    const attribute = body.slice(start, cursor).toLowerCase();
+    if (!attribute) return null;
+    while (/\s/.test(body[cursor] || '')) cursor += 1;
+    let value = null;
+    if (body[cursor] === '=') {
+      cursor = skipWhitespace(body, cursor + 1);
+      if (body[cursor] === '"' || body[cursor] === "'") {
+        const parsed = parseString(body, cursor);
+        if (!parsed) return null;
+        value = parsed.value;
+        cursor = parsed.next;
+      } else {
+        const valueStart = cursor;
+        while (cursor < body.length && !/\s/.test(body[cursor])) cursor += 1;
+        value = body.slice(valueStart, cursor);
+      }
+    }
+    if (attribute === 'href') {
+      if (href !== null || !value) return null;
+      href = value;
+    }
+  }
+  return href === null ? null : safeWeixinHref(href);
+}
+
+function escapeAttribute(value) {
+  return String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function stripExternalLinks(html) {
-  return String(html).replace(/<a\b([^>]*?)\s+href\s*=\s*(['"])(.*?)\2([^>]*)>([\s\S]*?)<\/a>/gi,
-    (match, before, _quote, href, after, content) => (isInternalWeixinLink(href) ? match : content));
+  const source = String(html);
+  let output = '';
+  let cursor = 0;
+  const anchors = [];
+  while (cursor < source.length) {
+    const start = findAnchorStart(source, cursor);
+    if (start < 0) {
+      output += source.slice(cursor);
+      break;
+    }
+    output += source.slice(cursor, start);
+    const end = findTagEnd(source, start);
+    if (end < 0) {
+      cursor = start + 2;
+      continue;
+    }
+    const tag = source.slice(start, end);
+    const parsed = readAnchorHref(tag);
+    if (parsed?.closing) {
+      const anchor = anchors.pop();
+      if (anchor?.safe) output += '</a>';
+    } else {
+      const safeHref = parsed;
+      const opening = safeHref ? `<a href="${escapeAttribute(safeHref)}">` : '';
+      anchors.push({ safe: Boolean(safeHref), opening, offset: output.length });
+      output += opening;
+    }
+    cursor = end;
+  }
+  for (let index = anchors.length - 1; index >= 0; index -= 1) {
+    const anchor = anchors[index];
+    if (anchor.safe) output = `${output.slice(0, anchor.offset)}${output.slice(anchor.offset + anchor.opening.length)}`;
+  }
+  return output;
 }
 
 function createDraftBody(title, content, token) {
@@ -217,6 +393,14 @@ function createDraftBody(title, content, token) {
     source_article_type0: '', reprint_recommend_title0: '', reprint_recommend_content0: '',
     share_page_type0: '0', share_imageinfo0: '{"list":[]}', share_video_id0: '', dot0: '{}',
     share_voice_id0: '', insert_ad_mode0: '', categories_list0: '[]',
+  });
+}
+
+function unknownRemoteAfterCleanup(result, error) {
+  return new PlatformError('UNKNOWN_REMOTE_STATE', '草稿请求已返回但请求头清理失败，请人工检查公众号草稿箱', {
+    draftId: safeRemoteSummary(result?.draftId || ''),
+    remoteSummary: safeRemoteSummary(error?.message || '请求头清理失败'),
+    retryable: false,
   });
 }
 
@@ -245,7 +429,7 @@ function validateCdnUrl(value) {
   if (typeof value !== 'string' || !value) return null;
   try {
     const url = new URL(value);
-    if (url.protocol !== 'https:' || url.hostname !== 'mmbiz.qpic.cn' || url.port || url.username || url.password || !url.pathname || url.pathname === '/') return null;
+    if (url.protocol !== 'https:' || url.hostname !== 'mmbiz.qpic.cn' || hasExplicitPort(value) || url.username || url.password || !url.pathname || url.pathname === '/') return null;
     return url.href;
   } catch (_error) {
     return null;
@@ -335,7 +519,9 @@ export function createWeixinAdapter() {
     async saveDraft(runtime, article, imageMap) {
       const current = requireSession();
       const content = stripExternalLinks(applyImageMap(article?.wechatHtml, imageMap));
-      return runtime.withHeaderRules(HEADER_RULES, async () => {
+      let completedDraft = null;
+      try {
+        return await runtime.withHeaderRules(HEADER_RULES, async () => {
         let response;
         try {
           response = await runtime.fetch(
@@ -356,23 +542,32 @@ export function createWeixinAdapter() {
         const baseResp = data.base_resp && typeof data.base_resp === 'object' && !Array.isArray(data.base_resp)
           ? data.base_resp
           : null;
+        if (!baseResp || !Number.isInteger(baseResp.ret)) {
+          throw new PlatformError('PLATFORM_CHANGED', '微信公众号草稿响应缺少 base_resp', { httpStatus: status, remoteSummary: safeRemoteSummary(text), retryable: false });
+        }
+        if (baseResp.ret !== 0) {
+          throw new PlatformError('DRAFT_CREATE_FAILED', safeRemoteSummary(baseResp.err_msg || '微信公众号草稿创建失败'), {
+            httpStatus: status, remoteSummary: safeRemoteSummary(text), retryable: true,
+          });
+        }
         if (isResponseNotOk(response)) {
           throw new PlatformError('DRAFT_CREATE_FAILED', `微信公众号草稿创建失败: ${status}`, {
             httpStatus: status, remoteSummary: safeRemoteSummary(text), retryable: true,
           });
         }
-        if (baseResp && Number.isInteger(baseResp.ret) && baseResp.ret !== 0) {
-          throw new PlatformError('DRAFT_CREATE_FAILED', safeRemoteSummary(baseResp.err_msg || '微信公众号草稿创建失败'), {
-            httpStatus: status, remoteSummary: safeRemoteSummary(text), retryable: true,
-          });
-        }
-        if (!baseResp || !Number.isInteger(baseResp.ret) || baseResp.ret !== 0 || (typeof data.appMsgId !== 'string' && typeof data.appMsgId !== 'number') || !String(data.appMsgId)) {
+        if ((typeof data.appMsgId !== 'string' && typeof data.appMsgId !== 'number') || !String(data.appMsgId).trim()) {
           throw new PlatformError('PLATFORM_CHANGED', '微信公众号草稿响应缺少 appMsgId', { httpStatus: status, remoteSummary: safeRemoteSummary(text), retryable: false });
         }
-        const draftId = String(data.appMsgId);
+        const draftId = String(data.appMsgId).trim();
+        if (!draftId) throw new PlatformError('PLATFORM_CHANGED', '微信公众号草稿响应缺少 appMsgId', { httpStatus: status, remoteSummary: safeRemoteSummary(text), retryable: false });
         const draftUrl = `https://mp.weixin.qq.com/cgi-bin/appmsg?t=media/appmsg_edit&action=edit&type=77&appmsgid=${encodeURIComponent(draftId)}&token=${encodeURIComponent(current.token)}&lang=zh_CN`;
-        return { draftId, draftUrl };
-      });
+        completedDraft = { draftId, draftUrl };
+        return completedDraft;
+        });
+      } catch (error) {
+        if (completedDraft) throw unknownRemoteAfterCleanup(completedDraft, error);
+        throw error;
+      }
     },
   };
 }

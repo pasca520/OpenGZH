@@ -120,6 +120,10 @@ export function createDistributionRunner({ adapterFactories = {}, runtimeFactory
       if (!PLATFORM_IDS.includes(platformId)) throw new PlatformError('ARTICLE_INVALID', '平台选择无效', { retryable: false });
       if (previous?.state === 'success') throw new PlatformError('ARTICLE_INVALID', '成功平台不会重复执行', { retryable: false });
       if (previous?.state === 'unknown') throw new PlatformError('UNKNOWN_REMOTE_STATE', '请先人工检查平台草稿箱', { retryable: false });
+      if (previous?.error?.retryable === false) {
+        const code = typeof previous.error.code === 'string' ? previous.error.code : 'PLATFORM_CHANGED';
+        throw new PlatformError(code, '该平台错误不可重试', { retryable: false });
+      }
       const article = validateArticle(input);
       validateSelectedPlatformImages(article, [platformId]);
       const result = await runPlatform({ taskId, operationId, article, platformId, previous });

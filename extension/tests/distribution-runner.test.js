@@ -114,6 +114,23 @@ describe('distribution runner', () => {
     expect(calls).toEqual([]);
   });
 
+  it('fails closed when a prior platform error is explicitly non-retryable', async () => {
+    const checkAuth = vi.fn(async () => ({ authenticated: true }));
+    const runner = createDistributionRunner({
+      adapterFactories: { weixin: () => ({ ...adapter('weixin', []), checkAuth }) },
+      runtimeFactory: () => ({ requestImage: async () => new Blob(['png']) }),
+      onState: vi.fn(), persist: vi.fn(async () => {}),
+    });
+    for (const previous of [
+      { state: 'failed', error: { code: 'PLATFORM_CHANGED', retryable: false } },
+      { state: 'auth-required', error: { code: 'AUTH_REQUIRED', retryable: false } },
+    ]) {
+      await expect(runner.retryPlatform({ taskId: 'task-nonretry', operationId: 'op-nonretry', article, platformId: 'weixin', previous }))
+        .rejects.toMatchObject({ code: previous.error.code, retryable: false });
+    }
+    expect(checkAuth).not.toHaveBeenCalled();
+  });
+
   it('fails closed for malformed adapter identity, auth, image, and draft responses', async () => {
     const makeRunner = (factory) => createDistributionRunner({
       adapterFactories: { weixin: factory },
