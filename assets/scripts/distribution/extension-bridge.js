@@ -19,21 +19,50 @@ function getSafeError(error) {
   return { code, message };
 }
 
+export function createDistributionBridgeLifecycle() {
+  let disposed = false;
+  let installed = false;
+  let disposeInstalled = null;
+
+  return {
+    install(installBridge) {
+      if (disposed || installed) return;
+      installed = true;
+      const disposer = installBridge();
+      if (disposed) {
+        disposer?.();
+        return;
+      }
+      disposeInstalled = typeof disposer === 'function' ? disposer : null;
+    },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      const disposer = disposeInstalled;
+      disposeInstalled = null;
+      disposer?.();
+    }
+  };
+}
+
 export function installDistributionBridge({
   target = document,
   createPackage,
   CustomEventCtor = CustomEvent
 }) {
+  let disposed = false;
   const onRequest = async (event) => {
     const requestId = event.detail?.requestId;
     if (typeof requestId !== 'string' || !requestId.trim()) return;
 
     try {
       const article = await createPackage();
+      if (disposed) return;
       target.dispatchEvent(new CustomEventCtor(PAGE_EVENTS.ready, {
         detail: { requestId, article }
       }));
     } catch (error) {
+      if (disposed) return;
       const { code, message } = getSafeError(error);
       target.dispatchEvent(new CustomEventCtor(PAGE_EVENTS.error, {
         detail: { requestId, code, message }
@@ -42,5 +71,9 @@ export function installDistributionBridge({
   };
 
   target.addEventListener(PAGE_EVENTS.request, onRequest);
-  return () => target.removeEventListener(PAGE_EVENTS.request, onRequest);
+  return () => {
+    if (disposed) return;
+    disposed = true;
+    target.removeEventListener(PAGE_EVENTS.request, onRequest);
+  };
 }

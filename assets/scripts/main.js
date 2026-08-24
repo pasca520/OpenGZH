@@ -30,7 +30,10 @@ import {
 } from './core/style-override.js';
 import { prepareWechatContent, copyToWechat } from './export/clipboard-exporter.js';
 import { buildDistributionPackage } from './distribution/article-package.js';
-import { installDistributionBridge } from './distribution/extension-bridge.js';
+import {
+  createDistributionBridgeLifecycle,
+  installDistributionBridge
+} from './distribution/extension-bridge.js';
 import { getCategorizedThemes, getStyleName, isRecommended, getStarredStyles, toggleStarStyle } from './ui/theme-manager.js';
 import { applyAppTheme, normalizeAppTheme, toggleAppTheme } from './ui/app-theme.js';
 import {
@@ -380,7 +383,7 @@ let imageStore = null;
 let imageCompressor = null;
 let turndownService = null;
 let pasteHandler = null;
-let disposeDistributionBridge = null;
+let distributionBridgeLifecycle = null;
 let suppressEditorSync = false;
 let suppressTitleSync = false;
 let syncLock = false;
@@ -872,11 +875,19 @@ function performRender(revision) {
     }
   })();
   renderInFlight = job; // 供 flushPendingRender 等待 in-flight 渲染
+  job.then(
+    () => {
+      if (renderInFlight === job) renderInFlight = null;
+    },
+    () => {
+      if (renderInFlight === job) renderInFlight = null;
+    }
+  );
   return job;
 }
 
 function renderMarkdown() {
-  return performRender(null);
+  return performRender(++renderRevision);
 }
 
 /** 尾沿防抖：连续输入合并为最后一次 180ms 后渲染；每次调用递增 revision 使旧渲染过期。 */
@@ -905,14 +916,23 @@ function flushRenderNow() {
   return performRender(++renderRevision);
 }
 
-/** 冲刷 pending 渲染：有 timer 未触发则立即执行同一渲染并等待完成；无 pending 则直接 resolve。 */
-function flushPendingRender() {
-  if (renderTimer) {
-    clearTimeout(renderTimer);
-    renderTimer = null;
-    return performRender(renderRevision);
+/** 冲刷 pending 渲染：等待并追平所有期间产生的最新 revision。 */
+async function flushPendingRender() {
+  while (true) {
+    if (renderTimer !== null) {
+      clearTimeout(renderTimer);
+      renderTimer = null;
+      performRender(renderRevision);
+    }
+
+    const revision = renderRevision;
+    const job = renderInFlight;
+    if (job) await job;
+
+    if (renderTimer !== null || renderInFlight) continue;
+    if (revision !== renderRevision) continue;
+    return;
   }
-  return renderInFlight || Promise.resolve();
 }
 
 function sortDocumentsByCurrentOrder() {
@@ -2674,6 +2694,8 @@ const app = createApp({
     });
 
     onMounted(async () => {
+      const bridgeLifecycle = createDistributionBridgeLifecycle();
+      distributionBridgeLifecycle = bridgeLifecycle;
       starredStyles.value = getStarredStyles();
 
       window.addEventListener('beforeunload', handleBeforeUnload);
@@ -2806,30 +2828,37 @@ const app = createApp({
       await renderMarkdown();
       await persistDocumentState();
 
-      disposeDistributionBridge = installDistributionBridge({
+      bridgeLifecycle.install(() => installDistributionBridge({
         createPackage: async () => {
           await flushPendingRender();
           const activeDocument = getActiveDocument();
+          const documentId = activeDocument?.id || '';
+          const title = resolveDocumentDisplayTitle(activeDocument);
+          const markdown = markdownInput.value;
+          const renderedHtml = renderedContent.value;
+          const styleConfig = mergeTheme(STYLES[currentStyle.value], activeDocument?.styleOverride);
+          const codeTheme = getResolvedCodeTheme();
+          const displaySettingsSnapshot = { ...displaySettings.value };
           return buildDistributionPackage({
-            documentId: activeDocument?.id || '',
-            title: resolveDocumentDisplayTitle(activeDocument),
-            markdown: markdownInput.value,
-            renderedHtml: renderedContent.value,
+            documentId,
+            title,
+            markdown,
+            renderedHtml,
             imageStore,
             prepareWechatContent,
-            styleConfig: mergeTheme(STYLES[currentStyle.value], activeDocument?.styleOverride),
-            codeTheme: getResolvedCodeTheme(),
-            displaySettings: displaySettings.value
+            styleConfig,
+            codeTheme,
+            displaySettings: displaySettingsSnapshot
           });
         }
-      });
+      }));
 
       nextTick(() => setupSyncScroll());
     });
 
     onBeforeUnmount(() => {
-      disposeDistributionBridge?.();
-      disposeDistributionBridge = null;
+      distributionBridgeLifecycle?.dispose();
+      distributionBridgeLifecycle = null;
       disposeXhsMode();
       disposeCoverEditor();
       window.removeEventListener('beforeunload', handleBeforeUnload);
