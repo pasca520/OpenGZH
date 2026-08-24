@@ -28,7 +28,7 @@ export function assertFixedUrl(platformId, input) {
   } catch (_error) {
     throw new PlatformError('PLATFORM_CHANGED', '平台请求地址无效', { retryable: false });
   }
-  if (url.protocol !== 'https:' || url.username || url.password || !hostAllowed(platformId, url.hostname)) {
+  if (url.protocol !== 'https:' || url.port || url.username || url.password || !hostAllowed(platformId, url.hostname)) {
     throw new PlatformError('PLATFORM_CHANGED', `平台返回了未批准地址: ${url.origin}`, { retryable: false });
   }
   return url;
@@ -74,6 +74,9 @@ export function createPortImageBroker(port, { timeoutMs = 30000, idFactory = ran
         return Promise.reject(new PlatformError('IMAGE_READ_FAILED', '图片请求关联信息无效', { retryable: false }));
       }
       const requestId = idFactory();
+      if (typeof requestId !== 'string' || !requestId || pending.has(requestId)) {
+        return Promise.reject(new PlatformError('IMAGE_READ_FAILED', '图片请求 ID 重复或无效', { retryable: false }));
+      }
       return new Promise((resolve, reject) => {
         const entry = { resolve, reject, taskId, platformId, ref: image.ref, timer: null };
         entry.timer = setTimeout(() => {

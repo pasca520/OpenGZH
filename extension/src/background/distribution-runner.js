@@ -23,6 +23,19 @@ function assertPlatformSelection(platformIds) {
   return ordered;
 }
 
+function getPlatformAdapter(platformId, adapterFactories) {
+  if (typeof adapterFactories[platformId] !== 'function') throw new PlatformError('PLATFORM_CHANGED', '平台适配器未注册', { retryable: false });
+  let adapter;
+  try {
+    adapter = assertAdapter(adapterFactories[platformId]());
+  } catch (error) {
+    if (error instanceof TypeError) throw new PlatformError('PLATFORM_CHANGED', error.message, { retryable: false });
+    throw error;
+  }
+  if (adapter.id !== platformId) throw new PlatformError('PLATFORM_CHANGED', '平台适配器标识与注册键不一致', { retryable: false });
+  return adapter;
+}
+
 function imageRefsForPlatform(article, platformId) {
   const content = articleContentForPlatform(article, platformId);
   const references = imageReferencesInContent(content, platformId === 'juejin');
@@ -38,12 +51,12 @@ export function createDistributionRunner({ adapterFactories = {}, runtimeFactory
 
   async function runPlatform({ taskId, operationId, article, platformId, previous = { state: 'idle' } }) {
     try {
-      if (typeof adapterFactories[platformId] !== 'function') throw new PlatformError('PLATFORM_CHANGED', '平台适配器未注册', { retryable: false });
-      const adapter = assertAdapter(adapterFactories[platformId]());
+      const adapter = getPlatformAdapter(platformId, adapterFactories);
       const runtime = runtimeFactory(platformId, taskId, operationId);
       emit(taskId, operationId, platformId, 'checking-auth');
       const auth = await adapter.checkAuth(runtime);
-      if (!auth?.authenticated) {
+      if (typeof auth?.authenticated !== 'boolean') throw new PlatformError('PLATFORM_CHANGED', '鉴权响应格式无效', { retryable: false });
+      if (!auth.authenticated) {
         const error = { code: 'AUTH_REQUIRED', message: '需要重新登录', retryable: true };
         emit(taskId, operationId, platformId, 'auth-required', { error });
         return safeResult(platformId, 'auth-required', { error });
@@ -62,15 +75,17 @@ export function createDistributionRunner({ adapterFactories = {}, runtimeFactory
             ? error
             : new PlatformError('IMAGE_UPLOAD_FAILED', error?.message || '图片上传失败', { retryable: true });
         }
-        if (typeof uploadedUrl !== 'string' || !uploadedUrl) throw new PlatformError('IMAGE_UPLOAD_FAILED', '图片上传响应无效', { retryable: true });
+        if (typeof uploadedUrl !== 'string' || !uploadedUrl.trim()) throw new PlatformError('PLATFORM_CHANGED', '图片上传响应格式无效', { retryable: false });
         imageMap.set(image.ref, uploadedUrl);
         emit(taskId, operationId, platformId, 'uploading-images', { completed: index + 1, total: platformImages.length });
       }
 
       emit(taskId, operationId, platformId, 'saving-draft');
       const draft = await adapter.saveDraft(runtime, article, imageMap, previous, { markdown: platformId === 'juejin' });
-      if (!draft?.draftId || !draft?.draftUrl) throw new PlatformError('PLATFORM_CHANGED', '草稿响应缺少 ID 或编辑地址', { retryable: false });
-      const result = safeResult(platformId, 'success', { draftId: String(draft.draftId), draftUrl: String(draft.draftUrl) });
+      if (typeof draft?.draftId !== 'string' || !draft.draftId.trim() || typeof draft?.draftUrl !== 'string' || !draft.draftUrl.trim()) {
+        throw new PlatformError('PLATFORM_CHANGED', '草稿响应缺少有效 ID 或编辑地址', { retryable: false });
+      }
+      const result = safeResult(platformId, 'success', { draftId: draft.draftId, draftUrl: draft.draftUrl });
       emit(taskId, operationId, platformId, 'success', { draftId: result.draftId, draftUrl: result.draftUrl });
       return result;
     } catch (error) {

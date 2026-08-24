@@ -17,6 +17,7 @@ describe('fixed request runtime', () => {
     expect(() => assertFixedUrl('weixin', 'https://user:pass@mp.weixin.qq.com/')).toThrowError(expect.objectContaining({ code: 'PLATFORM_CHANGED' }));
     expect(() => assertFixedUrl('weixin', 'https://evil.mp.weixin.qq.com/')).toThrowError(expect.objectContaining({ code: 'PLATFORM_CHANGED' }));
     expect(() => assertFixedUrl('juejin', 'https://volces.com/upload')).toThrowError(expect.objectContaining({ code: 'PLATFORM_CHANGED' }));
+    expect(() => assertFixedUrl('weixin', 'https://mp.weixin.qq.com:8443/')).toThrowError(expect.objectContaining({ code: 'PLATFORM_CHANGED' }));
     expect(assertFixedUrl('juejin', 'https://upload.volces.com/upload').hostname).toBe('upload.volces.com');
   });
 
@@ -49,5 +50,15 @@ describe('image port broker', () => {
     await expect(broker.requestImage({ ref: 'img://hero' }, { taskId: 'task-2', platformId: 'weixin' })).rejects.toMatchObject({ code: 'IMAGE_READ_FAILED' });
     broker.dispose();
     await expect(broker.requestImage({ ref: 'img://hero' }, { taskId: 'task-2', platformId: 'weixin' })).rejects.toMatchObject({ code: 'IMAGE_READ_FAILED' });
+  });
+
+  it('fails a duplicate request ID without replacing the original pending request', async () => {
+    const port = fakePort();
+    const broker = createPortImageBroker(port, { timeoutMs: 1000, idFactory: () => 'duplicate-id' });
+    const first = broker.requestImage({ ref: 'img://first' }, { taskId: 'task-3', platformId: 'weixin' });
+    const second = broker.requestImage({ ref: 'img://second' }, { taskId: 'task-3', platformId: 'weixin' });
+    await expect(second).rejects.toMatchObject({ code: 'IMAGE_READ_FAILED' });
+    port.receive({ type: 'IMAGE_DATA', requestId: 'duplicate-id', taskId: 'task-3', platformId: 'weixin', ref: 'img://first', dataUrl: 'data:image/png;base64,cG5n' });
+    await expect(first).resolves.toMatchObject({ type: 'image/png' });
   });
 });

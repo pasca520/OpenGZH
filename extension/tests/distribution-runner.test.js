@@ -113,4 +113,32 @@ describe('distribution runner', () => {
     await expect(runner.retryPlatform({ taskId: 'task-6', operationId: 'op-6', article, platformId: 'weixin', previous: { state: 'unknown' } })).rejects.toMatchObject({ code: 'UNKNOWN_REMOTE_STATE' });
     expect(calls).toEqual([]);
   });
+
+  it('fails closed for malformed adapter identity, auth, image, and draft responses', async () => {
+    const makeRunner = (factory) => createDistributionRunner({
+      adapterFactories: { weixin: factory },
+      runtimeFactory: () => ({ requestImage: async () => new Blob(['png']) }),
+      onState: vi.fn(), persist: vi.fn(async () => {}),
+    });
+    const malformed = [
+      () => ({ id: 'zhihu', checkAuth: async () => ({ authenticated: true }), uploadImage: async () => 'https://cdn/x', saveDraft: async () => ({ draftId: 'd', draftUrl: 'https://mp.weixin.qq.com/d' }) }),
+      () => ({ id: 'weixin', checkAuth: async () => ({ authenticated: 'yes' }), uploadImage: async () => 'https://cdn/x', saveDraft: async () => ({ draftId: 'd', draftUrl: 'https://mp.weixin.qq.com/d' }) }),
+      () => ({ id: 'weixin', checkAuth: async () => ({ authenticated: true }), uploadImage: async () => '   ', saveDraft: async () => ({ draftId: 'd', draftUrl: 'https://mp.weixin.qq.com/d' }) }),
+      () => ({ id: 'weixin', checkAuth: async () => ({ authenticated: true }), uploadImage: async () => 'https://cdn/x', saveDraft: async () => ({ draftId: 1, draftUrl: 'https://mp.weixin.qq.com/d' }) }),
+      () => ({ id: 'weixin', checkAuth: async () => ({ authenticated: true }), uploadImage: async () => 'https://cdn/x', saveDraft: async () => ({ draftId: 'd', draftUrl: 1 }) }),
+    ];
+    for (const [index, factory] of malformed.entries()) {
+      const result = await makeRunner(factory).runBatch({ taskId: 'task-malformed', operationId: `op-${index}`, article, platformIds: ['weixin'] });
+      expect(result.results[0]).toMatchObject({ state: 'failed', error: { code: 'PLATFORM_CHANGED', retryable: false } });
+    }
+  });
+
+  it('normalizes assertAdapter TypeError to a non-retryable platform change', async () => {
+    const runner = createDistributionRunner({
+      adapterFactories: { weixin: () => ({ id: 'weixin' }) },
+      runtimeFactory: () => ({}), onState: vi.fn(), persist: vi.fn(async () => {}),
+    });
+    const result = await runner.runBatch({ taskId: 'task-type', operationId: 'op-type', article, platformIds: ['weixin'] });
+    expect(result.results[0]).toMatchObject({ state: 'failed', error: { code: 'PLATFORM_CHANGED', retryable: false } });
+  });
 });

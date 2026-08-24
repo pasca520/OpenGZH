@@ -11,6 +11,10 @@ const DRAFT_HOSTS = Object.freeze({
   juejin: 'juejin.cn',
   woshipm: 'www.woshipm.com',
 });
+const SAFE_DRAFT_QUERY_KEYS = Object.freeze({
+  weixin: new Set(['t', 'action', 'type', 'appmsgid', 'lang']),
+  woshipm: new Set(['pid']),
+});
 const PLATFORM_ORIGINS = Object.freeze({
   weixin: Object.freeze(['https://mp.weixin.qq.com/*']),
   zhihu: Object.freeze([
@@ -22,6 +26,19 @@ const PLATFORM_ORIGINS = Object.freeze({
   ]),
   woshipm: Object.freeze(['https://www.woshipm.com/*']),
 });
+
+function getPlatformAdapter(platformId, adapterFactories) {
+  if (typeof adapterFactories[platformId] !== 'function') throw new PlatformError('PLATFORM_CHANGED', '平台适配器未注册', { retryable: false });
+  let adapter;
+  try {
+    adapter = assertAdapter(adapterFactories[platformId]());
+  } catch (error) {
+    if (error instanceof TypeError) throw new PlatformError('PLATFORM_CHANGED', error.message, { retryable: false });
+    throw error;
+  }
+  if (adapter.id !== platformId) throw new PlatformError('PLATFORM_CHANGED', '平台适配器标识与注册键不一致', { retryable: false });
+  return adapter;
+}
 
 function nonEmpty(value) {
   return typeof value === 'string' && Boolean(value.trim());
@@ -40,7 +57,12 @@ function safeDraftUrl(platformId, value) {
     return null;
   }
   if (url.protocol !== 'https:' || url.hostname !== DRAFT_HOSTS[platformId] || url.port || url.username || url.password) return null;
-  url.search = '';
+  const safeKeys = SAFE_DRAFT_QUERY_KEYS[platformId] || new Set();
+  const safeQuery = new URLSearchParams();
+  for (const [key, value] of url.searchParams) {
+    if (safeKeys.has(key)) safeQuery.append(key, value);
+  }
+  url.search = safeQuery.toString();
   url.hash = '';
   return url.href;
 }
@@ -142,7 +164,11 @@ export function registerServiceWorker(chromeApi = globalThis.chrome, adapterFact
       for (const result of batch.results || []) merged.set(result.platformId, result);
       const normalized = { taskId: batch.taskId, results: [...merged.values()] };
       latestResults.set(batch.taskId, normalized.results);
-      await chromeApi.storage?.session?.set?.({ [`opengzh.task.${batch.taskId}`]: sanitizeBatchForSession(normalized) });
+      try {
+        await chromeApi.storage?.session?.set?.({ [`opengzh.task.${batch.taskId}`]: sanitizeBatchForSession(normalized) });
+      } catch (_error) {
+        // Session persistence is a convenience cache; the in-memory result remains authoritative for this port.
+      }
     };
     const runner = createDistributionRunner({
       adapterFactories,
@@ -163,6 +189,10 @@ export function registerServiceWorker(chromeApi = globalThis.chrome, adapterFact
     };
     const enqueue = (message, work) => {
       if (disposed) return Promise.resolve();
+      if (message.type === 'START_BATCH' && batchReserved) {
+        fail(message, invalid('当前批次仍在执行，请等待批次完成'));
+        return Promise.resolve();
+      }
       if (message.type === 'RETRY_PLATFORM' && (batchReserved || runningType === 'START_BATCH')) {
         fail(message, invalid('当前批次仍在执行，请等待批次完成'));
         return Promise.resolve();
@@ -190,11 +220,11 @@ export function registerServiceWorker(chromeApi = globalThis.chrome, adapterFact
           if (!nonEmpty(message.requestId)) throw invalid('鉴权请求 ID 无效');
           await assertHostPermissions(message.platformIds, chromeApi.permissions);
           for (const platformId of message.platformIds) {
-            if (typeof adapterFactories[platformId] !== 'function') throw new PlatformError('PLATFORM_CHANGED', '平台适配器未注册', { retryable: false });
-            const adapter = assertAdapter(adapterFactories[platformId]());
+            const adapter = getPlatformAdapter(platformId, adapterFactories);
             const runtime = createRequestRuntime({ platformId, taskId: `auth:${message.requestId}`, imageBroker });
             const auth = await adapter.checkAuth(runtime);
-            send({ type: 'AUTH_RESULT', requestId: message.requestId, platformId, authenticated: Boolean(auth?.authenticated) });
+            if (typeof auth?.authenticated !== 'boolean') throw new PlatformError('PLATFORM_CHANGED', '鉴权响应格式无效', { retryable: false });
+            send({ type: 'AUTH_RESULT', requestId: message.requestId, platformId, authenticated: auth.authenticated });
           }
         });
       }
@@ -213,9 +243,10 @@ export function registerServiceWorker(chromeApi = globalThis.chrome, adapterFact
       if (message.type === 'RETRY_PLATFORM') {
         return enqueue(message, async () => {
           if (!nonEmpty(message.taskId) || !nonEmpty(message.operationId) || !nonEmpty(message.platformId)) throw invalid('任务关联信息无效');
-          await assertHostPermissions([message.platformId], chromeApi.permissions);
           const context = taskContexts.get(message.taskId);
           if (!context) throw invalid('任务上下文已失效，请重新发起同步');
+          if (!context.platformIds.includes(message.platformId)) throw invalid('平台未包含在原任务选择中');
+          await assertHostPermissions([message.platformId], chromeApi.permissions);
           const previous = latestResults.get(message.taskId)?.find((result) => result.platformId === message.platformId) || { state: 'idle' };
           const result = await runner.retryPlatform({ taskId: message.taskId, operationId: message.operationId, article: context.article, platformId: message.platformId, previous });
           if (disposed) return;
