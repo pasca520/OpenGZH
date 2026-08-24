@@ -11,6 +11,7 @@ const OUTPUT_DIR = path.join(DIST_DIR, 'extension');
 const VERSION = '0.1.0';
 const ARCHIVE_PATH = path.join(DIST_DIR, `OpenGZH-extension-v${VERSION}.zip`);
 const FORBIDDEN_PERMISSIONS = ['<all_urls>', 'cookies', 'unlimitedStorage'];
+const REQUIRED_PERMISSIONS = Object.freeze(['storage', 'declarativeNetRequestWithHostAccess']);
 const REQUIRED_HOST_PERMISSIONS = Object.freeze([
   'https://mp.weixin.qq.com/*',
   'https://www.zhihu.com/*',
@@ -25,12 +26,21 @@ const REQUIRED_HOST_PERMISSIONS = Object.freeze([
 ]);
 
 export function shouldCopyExtensionPath(relativePath) {
-  const normalized = relativePath.split(path.sep).join('/');
-  return !normalized.split('/').includes('tests')
-    && !normalized.endsWith('.map')
-    && !normalized.endsWith('.har')
-    && !normalized.split('/').includes('.DS_Store')
-    && !normalized.split('/').includes('.env');
+  if (typeof relativePath !== 'string') return false;
+  const normalized = relativePath.replaceAll('\\', '/');
+  const segments = normalized.toLowerCase().split('/');
+  const lower = normalized.toLowerCase();
+  return !segments.includes('tests')
+    && !lower.endsWith('.map')
+    && !lower.endsWith('.har')
+    && !segments.includes('.ds_store')
+    && !segments.includes('.env');
+}
+
+export function validateArchiveListing(listing) {
+  for (const entry of String(listing).split(/\r?\n/).filter(Boolean)) {
+    if (!shouldCopyExtensionPath(entry)) throw new Error(`压缩包包含禁止文件: ${entry}`);
+  }
 }
 
 export function validateExtensionManifest(manifest) {
@@ -38,13 +48,16 @@ export function validateExtensionManifest(manifest) {
   if (manifest.name !== 'OpenGZH' || manifest.short_name !== 'OpenGZH') throw new Error('插件名称错误');
   if (manifest.description !== '微信公众号、知乎、掘金、人人都是产品经理文章同步助手') throw new Error('插件副标题错误');
   if (manifest.version !== VERSION) throw new Error(`插件版本必须是 ${VERSION}`);
+  if (JSON.stringify(manifest.permissions) !== JSON.stringify(REQUIRED_PERMISSIONS)) {
+    throw new Error('Manifest 权限必须且只能包含已锁定权限');
+  }
   if (JSON.stringify(manifest.host_permissions) !== JSON.stringify(REQUIRED_HOST_PERMISSIONS)) {
     throw new Error('Manifest 必须且只能包含已锁定的平台域名');
   }
-  if (manifest.optional_host_permissions) throw new Error('Manifest 不得使用无法由 content script 可靠请求的可选域名权限');
+  if (Object.hasOwn(manifest, 'optional_host_permissions')) throw new Error('Manifest 不得使用无法由 content script 可靠请求的可选域名权限');
   const serialized = JSON.stringify(manifest);
   if (FORBIDDEN_PERMISSIONS.some((permission) => serialized.includes(permission))) throw new Error('Manifest 包含禁止权限');
-  if (manifest.externally_connectable) throw new Error('禁止 externally_connectable');
+  if (Object.hasOwn(manifest, 'externally_connectable')) throw new Error('禁止 externally_connectable');
   return manifest;
 }
 
@@ -76,9 +89,7 @@ function inspectArchive() {
   const archivedManifest = JSON.parse(run('/usr/bin/unzip', ['-p', ARCHIVE_PATH, 'extension/manifest.json']));
   validateExtensionManifest(archivedManifest);
   const listing = run('/usr/bin/unzip', ['-Z1', ARCHIVE_PATH]);
-  for (const forbidden of ['/tests/', '.DS_Store', '.map', '.har', '/.env']) {
-    if (listing.includes(forbidden)) throw new Error(`压缩包包含禁止文件: ${forbidden}`);
-  }
+  validateArchiveListing(listing);
   for (const required of [
     'extension/manifest.json',
     'extension/src/content/open-gzh.js',
