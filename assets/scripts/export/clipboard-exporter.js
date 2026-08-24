@@ -1012,11 +1012,20 @@ export async function prepareWechatContent({
     error.code = ARTICLE_INVALID;
     throw error;
   }
+  if (!styleConfig?.styles || typeof styleConfig.styles !== 'object' || Array.isArray(styleConfig.styles)) {
+    const error = new Error('样式配置无效');
+    error.code = ARTICLE_INVALID;
+    throw error;
+  }
+  if (imagePolicy !== 'clipboard' && imagePolicy !== 'defer-local') {
+    const error = new Error('图片处理策略无效');
+    error.code = ARTICLE_INVALID;
+    throw error;
+  }
 
   const fontScale = Number(displaySettings?.fontScale) || 1;
   // 始终走缩放（内部会按 14px 基准归一化），保证复制结果与预览字号一致
-  const baseStyleConfig = styleConfig?.styles ? styleConfig : { ...(styleConfig || {}), styles: {} };
-  const effectiveStyleConfig = scaleStyleConfigFontSizes(baseStyleConfig, fontScale);
+  const effectiveStyleConfig = scaleStyleConfigFontSizes(styleConfig, fontScale);
   const parser = new DOMParser();
   const doc = parser.parseFromString(renderedHTML, 'text/html');
 
@@ -1070,13 +1079,24 @@ export async function prepareWechatContent({
   const text = buildClipboardPlainText(doc);
   const tableBackground = extractBackgroundColor(effectiveStyleConfig.styles.container) || '#ffffff';
   const markdownTables = Array.from(doc.querySelectorAll('table[data-markdown-table="true"]'));
-  try {
-    await materializeMarkdownTables(markdownTables, { background: tableBackground });
-  } catch (error) {
-    console.error('表格转图失败:', error);
-    showToast(error.message, 'error');
-    error.wechatToastHandled = true;
-    throw error;
+  const tableImageFailures = imagePolicy === 'defer-local'
+    ? markdownTables.flatMap((table) => Array.from(table.querySelectorAll('img'))
+      .map((image) => image.getAttribute('src') || '')
+      .filter((src) => /^(?:img:\/\/|blob:)/i.test(src)))
+    : [];
+
+  if (tableImageFailures.length > 0) {
+    imageFailures = [...new Set([...imageFailures, ...tableImageFailures])];
+    imageFailureCount = imageFailures.length;
+  } else {
+    try {
+      await materializeMarkdownTables(markdownTables, { background: tableBackground });
+    } catch (error) {
+      console.error('表格转图失败:', error);
+      showToast(error.message, 'error');
+      error.wechatToastHandled = true;
+      throw error;
+    }
   }
 
   stripFormulaExportMetadata(doc.body);

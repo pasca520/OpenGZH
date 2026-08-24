@@ -18,6 +18,11 @@ function makeImage(src, extraAttributes = {}) {
   };
 }
 
+function restoreProperty(target, name, descriptor) {
+  if (descriptor) Object.defineProperty(target, name, descriptor);
+  else delete target[name];
+}
+
 describe('deferLocalImages', () => {
   it('defers indexed local images while preserving data URLs and reporting anonymous blobs', () => {
     const images = [
@@ -56,12 +61,14 @@ describe('writeWechatClipboard', () => {
     };
     const prepared = { html: '<p>HTML</p>', text: 'TEXT' };
 
-    await writeWechatClipboard(prepared, {
+    const writePromise = writeWechatClipboard(prepared, {
       clipboard,
       ClipboardItemCtor: TestClipboardItem,
       BlobCtor: TestBlob,
     });
 
+    expect(clipboard.write).toHaveBeenCalledTimes(1);
+    await writePromise;
     expect(clipboard.write).toHaveBeenCalledTimes(1);
     expect(writes).toHaveLength(1);
     expect(writes[0]).toBeInstanceOf(TestClipboardItem);
@@ -81,6 +88,21 @@ describe('prepareWechatContent', () => {
     expect(prepareWechatContent).toBeTypeOf('function');
     await expect(prepareWechatContent({ renderedHTML: '' }))
       .rejects.toMatchObject({ code: 'ARTICLE_INVALID' });
+  });
+
+  it('rejects an invalid style configuration instead of inventing an empty one', async () => {
+    await expect(prepareWechatContent({
+      renderedHTML: '<p>fixture</p>',
+      styleConfig: {},
+    })).rejects.toMatchObject({ code: 'ARTICLE_INVALID' });
+  });
+
+  it('rejects an unknown image policy as invalid article input', async () => {
+    await expect(prepareWechatContent({
+      renderedHTML: '<p>fixture</p>',
+      styleConfig: { styles: { container: '' } },
+      imagePolicy: 'upload-later',
+    })).rejects.toMatchObject({ code: 'ARTICLE_INVALID' });
   });
 
   it('keeps deferred image references and does not read the image store', async () => {
@@ -178,6 +200,56 @@ describe('prepareWechatContent', () => {
       else delete globalThis.DOMParser;
     }
   });
+
+  it('fails closed on deferred local images inside tables without rasterizing the table', async () => {
+    const tableImage = makeImage('blob:table-rendered', { 'data-image-id': 'table-hero' });
+    const table = {
+      getAttribute: () => '',
+      setAttribute: vi.fn(),
+      querySelectorAll: (selector) => selector === 'img' ? [tableImage] : [],
+      replaceWith: vi.fn(),
+    };
+    const imageStore = { getImageRecord: vi.fn() };
+    const body = {
+      cloneNode: () => ({ querySelectorAll: () => [], textContent: '表格正文' }),
+      querySelectorAll: () => [],
+      get innerHTML() {
+        return `<table><tr><td><img src="${tableImage.getAttribute('src')}"></td></tr></table>`;
+      },
+    };
+    const doc = {
+      body,
+      querySelector: () => null,
+      querySelectorAll: (selector) => {
+        if (selector === 'img') return [tableImage];
+        if (selector.startsWith('table')) return [table];
+        return [];
+      },
+    };
+    const previousParserDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'DOMParser');
+    globalThis.DOMParser = class {
+      parseFromString() {
+        return doc;
+      }
+    };
+
+    try {
+      const prepared = await prepareWechatContent({
+        renderedHTML: '<table><tr><td>fixture</td></tr></table>',
+        styleConfig: { styles: { container: '' } },
+        imageStore,
+        imagePolicy: 'defer-local',
+      });
+
+      expect(prepared.imageFailures).toEqual(['img://table-hero']);
+      expect(prepared.imageFailureCount).toBe(1);
+      expect(prepared.html).toContain('img://table-hero');
+      expect(table.replaceWith).not.toHaveBeenCalled();
+      expect(imageStore.getImageRecord).not.toHaveBeenCalled();
+    } finally {
+      restoreProperty(globalThis, 'DOMParser', previousParserDescriptor);
+    }
+  });
 });
 
 describe('copyToWechat', () => {
@@ -195,10 +267,13 @@ describe('copyToWechat', () => {
       querySelector: () => null,
       querySelectorAll: (selector) => selector === 'img' ? [image] : [],
     };
-    const previousParser = globalThis.DOMParser;
-    const previousClipboardItem = globalThis.ClipboardItem;
+    const previousNavigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+    const previousClipboardDescriptor = globalThis.navigator
+      ? Object.getOwnPropertyDescriptor(globalThis.navigator, 'clipboard')
+      : undefined;
+    const previousParserDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'DOMParser');
+    const previousClipboardItemDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'ClipboardItem');
     const navigatorRef = globalThis.navigator || {};
-    const previousClipboard = navigatorRef.clipboard;
     const write = vi.fn(async () => {});
     const showToast = vi.fn();
     class TestClipboardItem {
@@ -206,11 +281,15 @@ describe('copyToWechat', () => {
         this.data = data;
       }
     }
-    globalThis.DOMParser = class {
+    Object.defineProperty(globalThis, 'DOMParser', {
+      configurable: true,
+      writable: true,
+      value: class {
       parseFromString() {
         return doc;
       }
-    };
+      },
+    });
     Object.defineProperty(navigatorRef, 'clipboard', {
       configurable: true,
       writable: true,
@@ -223,7 +302,11 @@ describe('copyToWechat', () => {
         value: navigatorRef,
       });
     }
-    globalThis.ClipboardItem = TestClipboardItem;
+    Object.defineProperty(globalThis, 'ClipboardItem', {
+      configurable: true,
+      writable: true,
+      value: TestClipboardItem,
+    });
 
     try {
       const copied = await clipboardExporter.copyToWechat({
@@ -240,12 +323,10 @@ describe('copyToWechat', () => {
       expect(showToast).toHaveBeenNthCalledWith(1, '正在处理 1 张图片...', 'success');
       expect(showToast).toHaveBeenLastCalledWith('复制成功', 'success');
     } finally {
-      if (previousParser) globalThis.DOMParser = previousParser;
-      else delete globalThis.DOMParser;
-      if (previousClipboard === undefined) delete navigatorRef.clipboard;
-      else navigatorRef.clipboard = previousClipboard;
-      if (previousClipboardItem) globalThis.ClipboardItem = previousClipboardItem;
-      else delete globalThis.ClipboardItem;
+      restoreProperty(navigatorRef, 'clipboard', previousClipboardDescriptor);
+      restoreProperty(globalThis, 'navigator', previousNavigatorDescriptor);
+      restoreProperty(globalThis, 'DOMParser', previousParserDescriptor);
+      restoreProperty(globalThis, 'ClipboardItem', previousClipboardItemDescriptor);
     }
   });
 
@@ -264,14 +345,18 @@ describe('copyToWechat', () => {
       querySelector: () => null,
       querySelectorAll: (selector) => selector.startsWith('table') ? [table] : [],
     };
-    const previousParser = globalThis.DOMParser;
+    const previousParserDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'DOMParser');
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     const showToast = vi.fn();
-    globalThis.DOMParser = class {
+    Object.defineProperty(globalThis, 'DOMParser', {
+      configurable: true,
+      writable: true,
+      value: class {
       parseFromString() {
         return doc;
       }
-    };
+      },
+    });
 
     try {
       const copied = await clipboardExporter.copyToWechat({
@@ -289,8 +374,7 @@ describe('copyToWechat', () => {
       expect(showToast).not.toHaveBeenCalledWith('复制失败', 'error');
       expect(consoleError).toHaveBeenCalledWith('表格转图失败:', expect.any(Error));
     } finally {
-      if (previousParser) globalThis.DOMParser = previousParser;
-      else delete globalThis.DOMParser;
+      restoreProperty(globalThis, 'DOMParser', previousParserDescriptor);
       consoleError.mockRestore();
     }
   });
