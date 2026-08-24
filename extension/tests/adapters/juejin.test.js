@@ -294,6 +294,33 @@ describe('Juejin adapter', () => {
     expect(states).toContainEqual(expect.objectContaining({ state: code === 'UNKNOWN_REMOTE_STATE' ? 'unknown' : 'failed', draftId }));
   });
 
+  it.each([403, 429, 1001])('retains a draft ID from business err_no %s as UNKNOWN_REMOTE_STATE', async (errNo) => {
+    const draftId = `draft-business-${errNo}`;
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(response('', { headers: { 'x-ware-csrf-token': '0,test-csrf,1,success,s' } }))
+      .mockResolvedValueOnce(response(JSON.stringify({ err_no: errNo, data: { id: draftId } })));
+    const error = await createJuejinAdapter().saveDraft({ fetch, withHeaderRules: withRules }, { title: '标题', portableMarkdown: '正文' }, new Map())
+      .catch((value) => value);
+    expect(error).toMatchObject({ code: 'UNKNOWN_REMOTE_STATE', draftId, retryable: false });
+    expect(serializeError(error)).toMatchObject({ code: 'UNKNOWN_REMOTE_STATE', draftId, retryable: false });
+
+    const states = [];
+    const runner = createDistributionRunner({
+      adapterFactories: { juejin: () => ({
+        id: 'juejin', checkAuth: async () => ({ authenticated: true }), uploadImage: vi.fn(), saveDraft: async () => { throw error; },
+      }) },
+      runtimeFactory: () => ({ requestImage: async () => new Blob(['png']) }),
+      onState: (state) => states.push(state), persist: vi.fn(async () => {}),
+    });
+    const article = {
+      schemaVersion: 1, documentId: 'doc-1', title: '标题', markdown: '正文', portableMarkdown: '正文',
+      semanticHtml: '<p>正文</p>', wechatHtml: '<p>正文</p>', images: [], createdAt: 1787529600000,
+    };
+    const result = await runner.runBatch({ taskId: `task-business-${errNo}`, operationId: `op-business-${errNo}`, article, platformIds: ['juejin'] });
+    expect(result.results[0]).toMatchObject({ state: 'unknown', draftId, error: { code: 'UNKNOWN_REMOTE_STATE', draftId, retryable: false } });
+    expect(states).toContainEqual(expect.objectContaining({ state: 'unknown', draftId }));
+  });
+
   it('maps HTTP 429 to RATE_LIMITED before parsing a malformed body', async () => {
     const fetch = vi.fn()
       .mockResolvedValueOnce(response('', { headers: { 'x-ware-csrf-token': '0,test-csrf,1,success,s' } }))

@@ -329,9 +329,9 @@ export function createJuejinAdapter({
           if (status >= 500) throw new PlatformError('UNKNOWN_REMOTE_STATE', '无法确认掘金是否已创建草稿', { httpStatus: status, ...(createdDraftId ? { draftId: createdDraftId } : {}), retryable: false });
           throw new PlatformError('DRAFT_CREATE_FAILED', '掘金草稿创建失败', { httpStatus: status, ...(createdDraftId ? { draftId: createdDraftId } : {}), retryable: false });
         }
-        if (data.err_no === 429) throw new PlatformError('RATE_LIMITED', '掘金草稿请求过于频繁', { retryable: true });
         if (!Number.isInteger(data.err_no)) throw platformChanged('掘金草稿响应格式已变化', { httpStatus: status });
         if (data.err_no !== 0) {
+          if (createdDraftId) throw new PlatformError('UNKNOWN_REMOTE_STATE', '无法确认掘金业务响应中的草稿状态', { httpStatus: status, draftId: createdDraftId, retryable: false });
           if (data.err_no === 403) throw authRequired();
           if (data.err_no === 429) throw new PlatformError('RATE_LIMITED', '掘金草稿请求过于频繁', { retryable: true });
           throw new PlatformError('DRAFT_CREATE_FAILED', '掘金草稿创建失败', { retryable: true });
