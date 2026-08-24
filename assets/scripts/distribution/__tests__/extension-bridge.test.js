@@ -1,5 +1,9 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { installDistributionBridge, PAGE_EVENTS } from '../extension-bridge.js';
+
+const mainSource = readFileSync(fileURLToPath(new URL('../../main.js', import.meta.url)), 'utf8');
 
 class TestCustomEvent {
   constructor(type, init = {}) {
@@ -27,6 +31,20 @@ function dispatchRequest(target, detail) {
 }
 
 describe('installDistributionBridge', () => {
+  it('waits for the initial render before persisting and installing the bridge', () => {
+    const mountedBlock = mainSource.slice(
+      mainSource.indexOf('onMounted(async () =>'),
+      mainSource.indexOf('onBeforeUnmount(() =>')
+    );
+    const renderIndex = mountedBlock.indexOf('await renderMarkdown();');
+    const persistIndex = mountedBlock.indexOf('await persistDocumentState();', renderIndex);
+    const bridgeIndex = mountedBlock.indexOf('disposeDistributionBridge = installDistributionBridge({', persistIndex);
+
+    expect(renderIndex).toBeGreaterThanOrEqual(0);
+    expect(persistIndex).toBeGreaterThan(renderIndex);
+    expect(bridgeIndex).toBeGreaterThan(persistIndex);
+  });
+
   it('exports the fixed page event names', () => {
     expect(PAGE_EVENTS).toEqual({
       request: 'opengzh:distribution:request',

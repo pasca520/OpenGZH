@@ -2803,7 +2803,7 @@ const app = createApp({
         }
       }
 
-      renderMarkdown();
+      await renderMarkdown();
       await persistDocumentState();
 
       disposeDistributionBridge = installDistributionBridge({
