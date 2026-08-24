@@ -36,6 +36,13 @@
     unselected: '未选择',
     unknown: '未知状态',
   });
+  const DRAFT_HOSTS = Object.freeze({
+    weixin: 'mp.weixin.qq.com',
+    zhihu: 'zhuanlan.zhihu.com',
+    juejin: 'juejin.cn',
+    woshipm: 'www.woshipm.com',
+  });
+  const SENSITIVE_QUERY = /(?:token|ticket|csrf|access_key|session_token)/i;
   const DATA_URL_PATTERN = /^data:(image\/(?:png|jpeg|jpg|gif|webp|avif|svg\+xml));base64,([A-Za-z0-9+/]+={0,2})$/i;
   const SAFE_PAGE_CODES = new Set([ARTICLE_INVALID, IMAGE_READ_FAILED]);
   const SAFE_PAGE_MESSAGES = new Set(['读取失败', '图片读取失败', '文章快照生成失败']);
@@ -185,6 +192,20 @@
     if (!Array.isArray(parsed)) return PLATFORM_IDS.slice();
     const selected = PLATFORM_IDS.filter((id) => parsed.includes(id));
     return selected.length ? selected : PLATFORM_IDS.slice();
+  }
+
+  function sanitizeDraftUrl(platformId, value) {
+    if (typeof value !== 'string' || !DRAFT_HOSTS[platformId]) return null;
+    try {
+      const url = new URL(value);
+      if (url.protocol !== 'https:' || url.hostname !== DRAFT_HOSTS[platformId] || url.username || url.password) return null;
+      for (const key of [...url.searchParams.keys()]) {
+        if (SENSITIVE_QUERY.test(key)) url.searchParams.delete(key);
+      }
+      return url.href;
+    } catch {
+      return null;
+    }
   }
 
   function randomId() {
@@ -337,7 +358,21 @@
             reject(imageReadError());
           }
         });
-        if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) throw imageReadError();
+        if (typeof dataUrl !== 'string') throw imageReadError();
+        const header = dataUrl.match(DATA_URL_PATTERN);
+        if (!header || (image.mimeType && image.mimeType.toLowerCase() !== header[1].toLowerCase())) throw imageReadError();
+        try {
+          validateImage({
+            ref: dataUrl,
+            kind: 'data-url',
+            dataUrl,
+            mimeType: header[1],
+            filename: image.filename || 'image',
+            alt: image.alt || '',
+          });
+        } catch {
+          throw imageReadError();
+        }
         return dataUrl;
       } finally {
         if (typeof db.close === 'function') db.close();
@@ -428,6 +463,32 @@
     return element;
   }
 
+  function findStableAnchorContainer(anchor) {
+    let current = anchor?.parentNode || null;
+    while (current) {
+      if (/\bcopy-buttons\b/.test(String(current.className || ''))) return current;
+      current = current.parentNode;
+    }
+    return null;
+  }
+
+  function isImmediateSibling(parent, reference, child) {
+    if (!parent || !reference || reference.parentNode !== parent || child.parentNode !== parent) return false;
+    if (reference.nextSibling === child) return true;
+    const index = Array.isArray(parent.children) ? parent.children.indexOf(reference) : -1;
+    return index >= 0 && parent.children[index + 1] === child;
+  }
+
+  function mountHostAfterAnchor(host, anchor) {
+    const container = findStableAnchorContainer(anchor);
+    const reference = container?.parentNode ? container : anchor;
+    const parent = reference?.parentNode || null;
+    if (!host || !reference || !parent) return false;
+    if (isImmediateSibling(parent, reference, host)) return true;
+    parent.insertBefore(host, reference.nextSibling || null);
+    return true;
+  }
+
   function defaultStorage() {
     return root.chrome?.storage?.local || null;
   }
@@ -471,10 +532,17 @@
     if (existingHost) return { host: existingHost, existing: true };
     const host = doc.createElement('span');
     host.setAttribute('data-opengzh-extension-host', '');
-    anchor.parentNode.insertBefore(host, anchor.nextSibling || null);
+    mountHostAfterAnchor(host, anchor);
     if (typeof host.attachShadow !== 'function') return { host, existing: false };
     const shadow = host.attachShadow({ mode: 'open' });
-    const state = { selected: PLATFORM_IDS.slice(), busy: false, taskId: null, draftUrls: new Map() };
+    const state = {
+      selected: PLATFORM_IDS.slice(),
+      busy: false,
+      taskId: null,
+      retryTaskId: null,
+      generation: 0,
+      draftUrls: new Map(),
+    };
 
     const shell = doc.createElement('div');
     shell.className = 'opengzh-extension-shell';
@@ -510,6 +578,11 @@
       const name = textElement(doc, 'span', PLATFORMS[platformId].name, 'opengzh-platform-name');
       const status = textElement(doc, 'span', '未知状态', 'opengzh-platform-status');
       status.setAttribute('aria-live', 'polite');
+      const details = doc.createElement('div');
+      details.className = 'opengzh-platform-details';
+      details.append(name, status);
+      const actions = doc.createElement('div');
+      actions.className = 'opengzh-platform-actions';
       const login = textElement(doc, 'button', '登录', 'opengzh-login');
       login.type = 'button';
       login.setAttribute('aria-label', `${PLATFORMS[platformId].name}登录`);
@@ -522,23 +595,30 @@
       draft.setAttribute('aria-label', `${PLATFORMS[platformId].name}打开草稿`);
       draft.hidden = true;
       checkbox.setAttribute('aria-label', `${PLATFORMS[platformId].name}同步选择`);
-      row.append(checkbox, icon, name, status, login, retry, draft);
+      actions.append(login, retry, draft);
+      row.append(checkbox, icon, details, actions);
       rows.append(row);
-      rowMap.set(platformId, { row, checkbox, status, login, retry, draft });
+      rowMap.set(platformId, { row, checkbox, status, login, retry, draft, canRetry: false, statusKey: 'unknown' });
       checkbox.addEventListener('change', () => {
         if (state.busy) return;
         state.selected = PLATFORM_IDS.filter((id) => rowMap.get(id).checkbox.checked);
-        persistSelection(storage, state.selected).catch(() => {});
+        persistSelection(storage, state.selected).catch(() => setAlert('选择未保存'));
       });
       login.addEventListener('click', () => {
         windowObject.open?.(PLATFORMS[platformId].loginUrl, '_blank', 'noopener');
       });
       retry.addEventListener('click', () => {
-        if (state.busy) return;
-        post({
-          type: state.taskId ? 'RETRY_PLATFORM' : 'CHECK_AUTH',
-          ...(state.taskId ? { taskId: state.taskId, platformId } : { platformIds: [platformId] }),
-        });
+        if (state.busy || !rowMap.get(platformId).canRetry) return;
+        if (state.retryTaskId) {
+          state.busy = true;
+          state.taskId = state.retryTaskId;
+          state.generation += 1;
+          setStatus(platformId, 'checking-auth');
+          setLocked(true);
+          post({ type: 'RETRY_PLATFORM', taskId: state.taskId, platformId });
+          return;
+        }
+        post({ type: 'CHECK_AUTH', platformIds: [platformId] });
       });
     }
     const alert = textElement(doc, 'p', '', 'opengzh-alert');
@@ -563,11 +643,13 @@
       .opengzh-backdrop { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(15,23,42,.34); }
       .opengzh-panel { width: min(520px, calc(100vw - 32px)); max-height: min(680px, calc(100vh - 32px)); overflow: auto; box-sizing: border-box; padding: 20px; border-radius: 16px; background: #fff; box-shadow: 0 18px 60px rgba(15,23,42,.24); }
       .opengzh-platforms { display: grid; gap: 8px; }
-      .opengzh-platform-row { display: grid; grid-template-columns: auto 24px minmax(0,1fr) auto auto auto; gap: 8px; align-items: center; padding: 8px; border: 1px solid #dbe3f0; border-radius: 10px; }
+      .opengzh-platform-row { display: grid; grid-template-columns: auto 24px minmax(0,1fr) auto; gap: 8px; align-items: center; padding: 8px; border: 1px solid #dbe3f0; border-radius: 10px; }
       .platform-icon { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; background: #e7edff; }
+      .opengzh-platform-details { display: grid; gap: 2px; min-width: 0; }
+      .opengzh-platform-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
       .opengzh-platform-status { min-width: 7em; color: #596780; }
-      .opengzh-draft[hidden], .opengzh-login[hidden], .opengzh-backdrop[hidden] { display: none; }
-      @media (max-width: 560px) { .opengzh-platform-row { grid-template-columns: auto 24px minmax(0,1fr); } .opengzh-platform-status { grid-column: 3; } }
+      .opengzh-draft[hidden], .opengzh-login[hidden], .opengzh-retry[hidden], .opengzh-backdrop[hidden] { display: none; }
+      @media (max-width: 560px) { .opengzh-platform-row { grid-template-columns: auto 24px minmax(0,1fr); } .opengzh-platform-actions { grid-column: 2 / 4; justify-content: flex-start; } }
     `;
     shadow.append(style, shell);
 
@@ -590,11 +672,16 @@
       for (const platformId of PLATFORM_IDS) rowMap.get(platformId).checkbox.checked = state.selected.includes(platformId);
     }
 
+    function updateRetryState(row) {
+      row.retry.disabled = state.busy || !row.canRetry;
+      row.retry.hidden = row.statusKey === 'success';
+    }
+
     function setLocked(locked) {
       start.disabled = locked;
-      for (const { checkbox, retry } of rowMap.values()) {
-        checkbox.disabled = locked;
-        retry.disabled = locked;
+      for (const row of rowMap.values()) {
+        row.checkbox.disabled = locked;
+        updateRetryState(row);
       }
     }
 
@@ -602,11 +689,24 @@
       alert.textContent = message || '';
     }
 
+    function clearDraft(row) {
+      row.draft.hidden = true;
+      row.draft.href = '';
+    }
+
     function setStatus(platformId, status, message) {
       const row = rowMap.get(platformId);
       if (!row) return;
+      row.statusKey = status;
+      row.canRetry = status === 'failed' || status === 'auth-required';
+      if (status !== 'success') clearDraft(row);
+      if (status === 'success') row.login.hidden = true;
+      if (status === 'auth-required' || status === 'failed' || status === 'checking-auth') row.login.hidden = false;
       if (status === 'unknown') {
         row.status.textContent = '请检查平台草稿箱';
+        row.statusKey = 'unknown';
+        row.canRetry = false;
+        updateRetryState(row);
         return;
       }
       const progress = message?.progress || message;
@@ -616,26 +716,41 @@
       if (status === 'uploading-images' && Number.isFinite(completed) && Number.isFinite(total)) {
         row.status.textContent = `${STATUS_LABELS[status]} ${completed}/${total}`;
       }
-      if (status === 'success' && typeof message?.draftUrl === 'string' && message.draftUrl) {
-        row.draft.href = message.draftUrl;
+      if (status === 'success') {
+        const draftUrl = sanitizeDraftUrl(platformId, message?.draftUrl);
+        if (!draftUrl) {
+          clearDraft(row);
+          row.status.textContent = '请检查平台草稿箱';
+          row.statusKey = 'unknown';
+          row.canRetry = false;
+          updateRetryState(row);
+          return;
+        }
+        row.draft.href = draftUrl;
         row.draft.hidden = false;
       }
       if (status === 'failed') {
         const errorMessage = typeof message?.error === 'string' ? message.error : message?.error?.message;
         if (errorMessage) row.status.textContent = errorMessage;
       }
+      updateRetryState(row);
     }
 
     function setAuthStatus(platformId, authenticated) {
       const row = rowMap.get(platformId);
       if (!row) return;
+      row.statusKey = authenticated ? 'authenticated' : 'auth-required';
+      row.canRetry = !authenticated;
       row.status.textContent = authenticated ? '已登录' : STATUS_LABELS['auth-required'];
       row.login.hidden = authenticated;
+      if (!authenticated) clearDraft(row);
+      updateRetryState(row);
     }
 
-    function finishTask(message = '', { clearTask = true } = {}) {
+    function finishTask(message = '', { clearTask = true, clearRetry = false } = {}) {
       state.busy = false;
       if (clearTask) state.taskId = null;
+      if (clearRetry) state.retryTaskId = null;
       setLocked(false);
       if (message) setAlert(message);
     }
@@ -659,15 +774,22 @@
         setAlert('至少选择一个平台');
         return;
       }
+      const generation = state.generation + 1;
+      const taskId = idFactory();
+      state.generation = generation;
+      state.taskId = taskId;
+      state.retryTaskId = null;
+      state.draftUrls.clear();
       state.busy = true;
+      for (const platformId of state.selected) setStatus(platformId, 'checking-auth');
       setLocked(true);
       setAlert('正在读取文章');
       try {
         const article = await snapshotRequest({ target: doc });
-        if (!state.busy) return;
-        state.taskId = idFactory();
-        post({ type: 'START_BATCH', taskId: state.taskId, platformIds: state.selected.slice(), article });
+        if (!state.busy || state.taskId !== taskId || state.generation !== generation) return;
+        post({ type: 'START_BATCH', taskId, platformIds: state.selected.slice(), article });
       } catch (error) {
+        if (state.taskId !== taskId || state.generation !== generation) return;
         finishTask(error?.message || '文章快照生成失败');
       }
     }
@@ -678,13 +800,38 @@
       backdrop.hidden = false;
       trigger.setAttribute('aria-expanded', 'true');
       close.focus();
-      sendCheckAuth();
+      if (!state.busy) sendCheckAuth();
     }
 
     function closePanel() {
       backdrop.hidden = true;
       trigger.setAttribute('aria-expanded', 'false');
       trigger.focus();
+    }
+
+    function focusableControls() {
+      return [
+        close,
+        ...PLATFORM_IDS.flatMap((platformId) => {
+          const row = rowMap.get(platformId);
+          return [row.checkbox, row.login, row.retry, row.draft];
+        }),
+        start,
+      ].filter((control) => control && !control.hidden && !control.disabled);
+    }
+
+    function onPanelKeydown(event) {
+      if (event.key !== 'Tab') return;
+      const controls = focusableControls();
+      if (!controls.length) return;
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      const current = doc.activeElement;
+      if ((event.shiftKey && (current === first || !controls.includes(current)))
+        || (!event.shiftKey && (current === last || !controls.includes(current)))) {
+        event.preventDefault?.();
+        (event.shiftKey ? last : first).focus();
+      }
     }
 
     function onMessage(message) {
@@ -699,37 +846,46 @@
             ? PLATFORM_IDS.map((platformId) => ({ platformId, ...message.platforms[platformId] }))
             : (message.platformId ? [message] : []));
         for (const result of results) {
+          if (!state.selected.includes(result.platformId)) continue;
           const authenticated = result.authenticated ?? result.loggedIn ?? result.ok;
           setAuthStatus(result.platformId, Boolean(authenticated));
         }
         return;
       }
       if (message?.type === 'PLATFORM_STATE') {
-        if (message.taskId && message.taskId !== state.taskId) return;
+        if (!state.taskId || message.taskId !== state.taskId) return;
         const status = message.status || message.state || 'unknown';
         setStatus(message.platformId, status, message);
-        if (status === 'success' && message.draftUrl) state.draftUrls.set(message.platformId, message.draftUrl);
+        const draftUrl = sanitizeDraftUrl(message.platformId, message.draftUrl);
+        if (status === 'success' && draftUrl) state.draftUrls.set(message.platformId, draftUrl);
+        else if (status !== 'success' || !draftUrl) state.draftUrls.delete(message.platformId);
         return;
       }
       if (message?.type === 'BATCH_COMPLETE') {
-        if (state.taskId && message.taskId === state.taskId) finishTask('', { clearTask: false });
+        if (!state.taskId || message.taskId !== state.taskId) return;
+        state.retryTaskId = state.taskId;
+        finishTask();
         return;
       }
       if (message?.type === 'FATAL_ERROR') {
+        if (state.busy && message.taskId !== state.taskId) return;
         finishTask(typeof message.message === 'string' ? message.message : '同步失败');
       }
     }
 
+    const onPortDisconnect = () => finishTask('无法连接同步服务', { clearRetry: true });
     port?.onMessage?.addListener?.(onMessage);
-    port?.onDisconnect?.addListener?.(() => finishTask('无法连接同步服务'));
+    port?.onDisconnect?.addListener?.(onPortDisconnect);
     trigger.addEventListener('click', openPanel);
     close.addEventListener('click', closePanel);
     backdrop.addEventListener('click', (event) => {
       if (event.target === backdrop) closePanel();
     });
-    doc.addEventListener?.('keydown', (event) => {
+    const onDocumentKeydown = (event) => {
       if (event.key === 'Escape' && !backdrop.hidden) closePanel();
-    });
+    };
+    doc.addEventListener?.('keydown', onDocumentKeydown);
+    panel.addEventListener('keydown', onPanelKeydown);
     start.addEventListener('click', startBatch);
     renderSelection();
     const ready = restoreSelection(storage).then((persisted) => {
@@ -739,6 +895,16 @@
       state.selected = PLATFORM_IDS.slice();
       renderSelection();
     });
+
+    let disposed = false;
+    function dispose() {
+      if (disposed) return;
+      disposed = true;
+      port?.onMessage?.removeListener?.(onMessage);
+      port?.onDisconnect?.removeListener?.(onPortDisconnect);
+      doc.removeEventListener?.('keydown', onDocumentKeydown);
+      panel.removeEventListener?.('keydown', onPanelKeydown);
+    }
 
     return {
       host,
@@ -757,6 +923,7 @@
       startBatch,
       onMessage,
       imageResponder,
+      dispose,
     };
   }
 
@@ -768,11 +935,53 @@
     }
   }
 
-  function boot() {
-    const doc = root.document;
-    const anchor = doc?.querySelector?.('[data-opengzh-copy-button]');
-    if (!anchor) return null;
-    return createUi({ document: doc, anchor, port: connectPort() });
+  function boot(options = {}) {
+    const doc = options.document || root.document;
+    if (!doc) return null;
+    const hasPortOption = Object.hasOwn(options, 'port');
+    let port = hasPortOption ? options.port : null;
+    let portResolved = hasPortOption;
+    let ui = null;
+    let observer = null;
+    let disconnected = false;
+
+    function syncMount() {
+      if (disconnected) return;
+      const anchor = doc.querySelector?.('[data-opengzh-copy-button]');
+      if (!anchor) {
+        if (ui) ui.host.hidden = true;
+        return;
+      }
+      if (!ui) {
+        if (!portResolved) {
+          port = connectPort();
+          portResolved = true;
+        }
+        ui = createUi({ document: doc, anchor, port });
+      } else {
+        mountHostAfterAnchor(ui.host, anchor);
+      }
+      if (ui) ui.host.hidden = false;
+    }
+
+    syncMount();
+    const MutationObserverCtor = options.MutationObserverCtor || root.MutationObserver;
+    if (typeof MutationObserverCtor === 'function') {
+      observer = new MutationObserverCtor(syncMount);
+      observer.observe(doc.body || doc, { childList: true, subtree: true });
+    }
+
+    return {
+      get ui() { return ui; },
+      get observer() { return observer; },
+      disconnect() {
+        if (disconnected) return;
+        disconnected = true;
+        observer?.disconnect?.();
+        ui?.dispose?.();
+        port?.disconnect?.();
+      },
+    };
   }
 
   if (typeof document === 'undefined') {
@@ -783,6 +992,7 @@
       PORT_NAME,
       STORAGE_KEY,
       normalizeSelection,
+      sanitizeDraftUrl,
       validateSnapshot,
       requestSnapshot,
       readImageData,
