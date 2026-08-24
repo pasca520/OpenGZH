@@ -25,7 +25,8 @@ jobs:
 
       - name: Package release
         run: |
-          tar -czf "release-${{ github.sha }}.tar.gz" \
+          archive="/tmp/release-${{ github.sha }}.tar.gz"
+          tar -czf "$archive" \
             --exclude='.git' \
             --exclude='.github' \
             --exclude='.gitignore' \
@@ -39,8 +40,8 @@ jobs:
             --exclude='design-previews' \
             --exclude='social-card-*' \
             --exclude='social-video-*' \
-            --exclude='release-*.tar.gz' \
             .
+          cp "$archive" "release-${{ github.sha }}.tar.gz"
 
       - name: Upload release archive
         uses: appleboy/scp-action@v0.1.7
