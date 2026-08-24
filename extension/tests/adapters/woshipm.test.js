@@ -74,6 +74,47 @@ describe('Woshipm adapter', () => {
     }
   });
 
+  it('ignores script-looking markup in comments and ordinary tag attributes', async () => {
+    for (const page of [
+      '<!-- <script>window.settings={"jltoken":"comment-token"}; var userSettings={"uid":"1585"};</script> -->',
+      '<div data-template=\'<script>window.settings={"jltoken":"single-attribute-token"}; var userSettings={"uid":"1585"};</script>\'></div>',
+      '<div data-template="<script>window.settings={\'jltoken\':\'double-attribute-token\'}; var userSettings={uid:\'1585\'};</script>"></div>',
+    ]) {
+      const fetch = vi.fn().mockResolvedValue(response(page));
+      await expect(createWoshipmAdapter().checkAuth({ fetch, withHeaderRules: withRules }))
+        .resolves.toEqual({ authenticated: false });
+      expect(fetch).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('ignores script-looking markup in inert HTML containers', async () => {
+    for (const page of [
+      '<textarea data-kind="inert"><script>window.settings={"jltoken":"textarea-token"}; var userSettings={"uid":"1585"};</script></textarea>',
+      '<STYLE data-kind="inert"><script>window.settings={"jltoken":"style-token"}; var userSettings={"uid":"1585"};</script></STYLE>',
+      '<title><script>window.settings={"jltoken":"title-token"}; var userSettings={"uid":"1585"};</script></title>',
+      '<noscript data-kind="inert"><script>window.settings={"jltoken":"noscript-token"}; var userSettings={"uid":"1585"};</script></noscript>',
+      '<template data-kind="inert"><section><script>window.settings={"jltoken":"template-token"}; var userSettings={"uid":"1585"};</script></section></template>',
+    ]) {
+      const fetch = vi.fn().mockResolvedValue(response(page));
+      await expect(createWoshipmAdapter().checkAuth({ fetch, withHeaderRules: withRules }))
+        .resolves.toEqual({ authenticated: false });
+      expect(fetch).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('fails closed on unclosed comment or inert HTML context', async () => {
+    for (const page of [
+      '<!-- <script>window.settings={"jltoken":"unclosed-comment"}; var userSettings={"uid":"1585"};</script>',
+      '<textarea><script>window.settings={"jltoken":"unclosed-textarea"}; var userSettings={"uid":"1585"};</script>',
+      '<template><section><script>window.settings={"jltoken":"unclosed-template"}; var userSettings={"uid":"1585"};</section>',
+    ]) {
+      const fetch = vi.fn().mockResolvedValue(response(page));
+      await expect(createWoshipmAdapter().checkAuth({ fetch, withHeaderRules: withRules }))
+        .rejects.toMatchObject({ code: 'PLATFORM_CHANGED', retryable: false });
+      expect(fetch).toHaveBeenCalledTimes(1);
+    }
+  });
+
   it('fails closed on an unclosed script opening tag', async () => {
     for (const page of [
       '<script type="text/plain" data-label="unclosed window.settings={"jltoken":"bad"}; var userSettings={"uid":"1585"}</script>',
@@ -98,6 +139,36 @@ describe('Woshipm adapter', () => {
         .rejects.toMatchObject({ code: 'PLATFORM_CHANGED', retryable: false });
       expect(fetch).toHaveBeenCalledTimes(1);
     }
+  });
+
+  it('masks regex decoys after statement blocks without treating them as auth', async () => {
+    for (const [block, token] of [
+      ['if (true) {}', 'if-block-token'],
+      ['function decoy() {}', 'function-block-token'],
+      ['class Decoy {}', 'class-block-token'],
+      ['try {} catch (error) {}', 'try-block-token'],
+      ['switch (0) {}', 'switch-block-token'],
+    ]) {
+      const page = `<script>var userSettings={"uid":"1585"}; ${block} /; window.settings={"jltoken":"${token}"}/g;</script>`;
+      const fetch = vi.fn()
+        .mockResolvedValueOnce(response(page))
+        .mockResolvedValueOnce(response(JSON.stringify(profile)));
+      await expect(createWoshipmAdapter().checkAuth({ fetch, withHeaderRules: withRules }))
+        .rejects.toMatchObject({ code: 'PLATFORM_CHANGED', retryable: false });
+      expect(fetch).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('does not mask a normal division after an object expression', async () => {
+    const page = `<script>
+      const ratio = {} / { value: 1 };
+      window.settings={"jltoken":"valid-token"}; var userSettings={"uid":"1585"};
+    </script>`;
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(response(page))
+      .mockResolvedValueOnce(response(JSON.stringify(profile)));
+    await expect(createWoshipmAdapter().checkAuth({ fetch, withHeaderRules: withRules }))
+      .resolves.toEqual({ authenticated: true, userId: '1585', username: '测试用户' });
   });
 
   it('fails closed when a top-level uid has no valid token', async () => {

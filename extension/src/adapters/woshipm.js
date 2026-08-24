@@ -118,11 +118,17 @@ function maskJavascript(source) {
     if (index >= 0 && index < masked.length && masked[index] !== '\n' && masked[index] !== '\r') masked[index] = ' ';
   };
   const controlWords = new Set(['catch', 'for', 'if', 'switch', 'while', 'with']);
-  const canStartRegex = (token) => ['start', 'operator', 'open', 'comma', 'colon', 'keyword', 'control-close'].includes(token);
-  const parenKinds = [];
+  const blockWords = new Set(['do', 'else', 'finally', 'try']);
+  const canStartRegex = (token) => [
+    'start', 'operator', 'open', 'comma', 'colon', 'keyword', 'block-keyword',
+    'statement-boundary', 'control-close', 'block-close', 'arrow',
+  ].includes(token);
+  const delimiters = [];
   let mode = 'code';
   let quote = '';
   let previous = 'start';
+  let functionPending = false;
+  let classPending = false;
   for (let index = 0; index < source.length; index += 1) {
     const character = source[index];
     const next = source[index + 1];
@@ -196,18 +202,53 @@ function maskJavascript(source) {
       while (cursor < source.length && /[A-Za-z0-9_$]/u.test(source[cursor])) cursor += 1;
       const word = source.slice(index, cursor);
       if (controlWords.has(word)) previous = 'control';
-      else previous = ['return', 'throw', 'case', 'delete', 'do', 'else', 'void', 'typeof', 'instanceof', 'in', 'new', 'yield', 'await'].includes(word) ? 'keyword' : 'value';
+      else if (blockWords.has(word)) previous = 'block-keyword';
+      else if (word === 'function') {
+        previous = 'keyword';
+        functionPending = true;
+      } else if (word === 'class') {
+        previous = 'keyword';
+        classPending = true;
+      } else previous = ['return', 'throw', 'case', 'delete', 'void', 'typeof', 'instanceof', 'in', 'new', 'yield', 'await'].includes(word) ? 'keyword' : 'value';
       index = cursor - 1;
       continue;
     }
+    if (character === '=' && next === '>') {
+      previous = 'arrow';
+      index += 1;
+      continue;
+    }
     if (character === '(') {
-      parenKinds.push(previous === 'control' ? 'control' : 'normal');
+      delimiters.push({ type: 'paren', control: previous === 'control' });
       previous = 'open';
-    } else if (character === '[' || character === '{') previous = 'open';
-    else if (character === ',' ) previous = 'comma';
-    else if (character === ':') previous = 'colon';
-    else if (character === ')') previous = parenKinds.pop() === 'control' ? 'control-close' : 'close';
-    else if (character === ']' || character === '}') previous = 'close';
+    } else if (character === '[') {
+      delimiters.push({ type: 'bracket' });
+      previous = 'open';
+    } else if (character === '{') {
+      const block = functionPending || classPending || ['start', 'statement-boundary', 'block-keyword', 'control-close', 'arrow'].includes(previous);
+      delimiters.push({ type: 'brace', block });
+      functionPending = false;
+      classPending = false;
+      previous = 'open';
+    } else if (character === ',' ) previous = 'comma';
+    else if (character === ':') {
+      functionPending = false;
+      classPending = false;
+      previous = 'colon';
+    } else if (character === ';') {
+      functionPending = false;
+      classPending = false;
+      previous = 'statement-boundary';
+    } else if (character === ')') {
+      const delimiter = delimiters.pop();
+      previous = delimiter?.type === 'paren' && delimiter.control ? 'control-close' : 'close';
+    } else if (character === ']') {
+      delimiters.pop();
+      previous = 'close';
+    } else if (character === '}') {
+      const delimiter = delimiters.pop();
+      previous = delimiter?.type === 'brace' && delimiter.block ? 'block-close' : 'object-close';
+    }
     else previous = 'operator';
   }
   return masked.join('');
@@ -297,30 +338,114 @@ function findTagEnd(source, start) {
   return -1;
 }
 
+const INERT_HTML_TAGS = new Set(['noscript', 'style', 'template', 'textarea', 'title']);
+
+function findClosingTag(source, start, tagName) {
+  const match = new RegExp(`</${tagName}\\s*>`, 'iu').exec(source.slice(start));
+  if (!match) return null;
+  const closingStart = start + match.index;
+  return { start: closingStart, end: closingStart + match[0].length };
+}
+
+function findTemplateEnd(source, start) {
+  let depth = 1;
+  let index = start;
+  while (index < source.length) {
+    if (source.startsWith('<!--', index)) {
+      const commentEnd = source.indexOf('-->', index + 4);
+      if (commentEnd < 0) return -1;
+      index = commentEnd + 3;
+      continue;
+    }
+    if (source[index] !== '<') {
+      index += 1;
+      continue;
+    }
+    const closing = /^<\/template\b/iu.test(source.slice(index));
+    const opening = /^<template\b/iu.test(source.slice(index));
+    if (!closing && !opening) {
+      index += 1;
+      continue;
+    }
+    const tagEnd = findTagEnd(source, index);
+    if (tagEnd < 0) return -1;
+    if (closing) {
+      depth -= 1;
+      if (depth === 0) return tagEnd + 1;
+    } else if (!/\/\s*>$/u.test(source.slice(index, tagEnd + 1))) {
+      depth += 1;
+    }
+    index = tagEnd + 1;
+  }
+  return -1;
+}
+
 function readScriptBlocks(html) {
   const source = String(html);
   const blocks = [];
-  const openingPattern = /<script\b/giu;
-  let match;
-  while ((match = openingPattern.exec(source))) {
-    const openingStart = match.index;
-    const openingEnd = findTagEnd(source, openingStart);
-    if (openingEnd < 0) {
+  let index = 0;
+  while (index < source.length) {
+    if (source.startsWith('<!--', index)) {
+      const commentEnd = source.indexOf('-->', index + 4);
+      if (commentEnd < 0) {
+        blocks.push({ malformed: true });
+        break;
+      }
+      index = commentEnd + 3;
+      continue;
+    }
+    if (source[index] !== '<') {
+      index += 1;
+      continue;
+    }
+    if (/^<script\b/iu.test(source.slice(index))) {
+      const openingEnd = findTagEnd(source, index);
+      if (openingEnd < 0) {
+        blocks.push({ malformed: true });
+        break;
+      }
+      const closing = findClosingTag(source, openingEnd + 1, 'script');
+      if (!closing) {
+        blocks.push({ malformed: true });
+        break;
+      }
+      blocks.push({
+        attributes: source.slice(index + '<script'.length, openingEnd),
+        source: source.slice(openingEnd + 1, closing.start),
+        malformed: false,
+      });
+      index = closing.end;
+      continue;
+    }
+    const tag = /^<([a-z][a-z0-9:-]*)\b/iu.exec(source.slice(index));
+    if (!tag) {
+      const tagEnd = findTagEnd(source, index);
+      if (source[index + 1] === '!' || source[index + 1] === '?') {
+        if (tagEnd < 0) blocks.push({ malformed: true });
+        if (tagEnd < 0) break;
+        index = tagEnd + 1;
+      } else index += 1;
+      continue;
+    }
+    const tagEnd = findTagEnd(source, index);
+    if (tagEnd < 0) {
       blocks.push({ malformed: true });
       break;
     }
-    const closing = /<\/script\s*>/iu.exec(source.slice(openingEnd + 1));
-    if (!closing) {
-      blocks.push({ malformed: true });
-      break;
+    const tagName = tag[1].toLowerCase();
+    const openingTag = source.slice(index, tagEnd + 1);
+    if (INERT_HTML_TAGS.has(tagName) && !/\/\s*>$/u.test(openingTag)) {
+      const inertEnd = tagName === 'template'
+        ? findTemplateEnd(source, tagEnd + 1)
+        : findClosingTag(source, tagEnd + 1, tagName)?.end ?? -1;
+      if (inertEnd < 0) {
+        blocks.push({ malformed: true });
+        break;
+      }
+      index = inertEnd;
+      continue;
     }
-    const closingStart = openingEnd + 1 + closing.index;
-    blocks.push({
-      attributes: source.slice(openingStart + '<script'.length, openingEnd),
-      source: source.slice(openingEnd + 1, closingStart),
-      malformed: false,
-    });
-    openingPattern.lastIndex = closingStart + closing[0].length;
+    index = tagEnd + 1;
   }
   return blocks;
 }
