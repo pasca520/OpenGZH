@@ -1,0 +1,30 @@
+{
+  "token": {
+    "data": {
+      "token": {
+        "AccessKeyId": "test-access-key",
+        "SecretAccessKey": "test-secret-key",
+        "SessionToken": "test-session-token",
+        "ExpiredTime": "2026-08-24T12:00:00+08:00",
+        "CurrentTime": "2026-08-24T10:00:00+08:00"
+      }
+    },
+    "err_no": 0
+  },
+  "apply": {
+    "Result": {
+      "UploadAddress": {
+        "StoreInfos": [{ "StoreUri": "test/store.png", "Auth": "test-upload-auth", "UploadID": "test-upload-id" }],
+        "UploadHosts": ["upload.test.volces.com"],
+        "SessionKey": "test-session-key"
+      }
+    }
+  },
+  "commit": {
+    "Result": { "Results": [{ "Uri": "test/store.png", "UriStatus": 2000 }] }
+  },
+  "url": {
+    "data": { "main_url": "https://p3-juejin.byteimg.com/test/store.png" },
+    "err_no": 0
+  }
+}
