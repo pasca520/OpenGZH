@@ -83,6 +83,36 @@ function findBalanced(source, start, opening, closing) {
   return -1;
 }
 
+function findFenceEnd(source, openerEnd, marker, length) {
+  let cursor = source.indexOf('\n', openerEnd);
+  if (cursor < 0) return source.length;
+  cursor += 1;
+  const close = new RegExp(`^ {0,3}${marker}{${length},}[ \\t]*$`);
+  while (cursor <= source.length) {
+    const lineEnd = source.indexOf('\n', cursor);
+    const end = lineEnd < 0 ? source.length : lineEnd;
+    const line = source.slice(cursor, end).replace(/\r$/, '');
+    if (close.test(line)) return lineEnd < 0 ? end : lineEnd + 1;
+    if (lineEnd < 0) break;
+    cursor = lineEnd + 1;
+  }
+  return source.length;
+}
+
+function findInlineCodeClose(source, start, length) {
+  for (let index = start; index < source.length;) {
+    if (source[index] !== '`') {
+      index += 1;
+      continue;
+    }
+    let run = 1;
+    while (source[index + run] === '`') run += 1;
+    if (run === length) return index;
+    index += run;
+  }
+  return -1;
+}
+
 function protectedRanges(source) {
   const ranges = [];
   const add = (start, end) => ranges.push({ start, end: Math.max(end, start + 1) });
@@ -99,12 +129,15 @@ function protectedRanges(source) {
       if (fence) {
         const marker = fence[1][0];
         const length = fence[1].length;
-        const close = new RegExp(`^ {0,3}${marker}{${length},}\\s*$`, 'm');
-        const rest = source.slice(index + fence[0].length);
-        const match = close.exec(rest);
-        const end = match ? index + fence[0].length + match.index + match[0].length : source.length;
-        add(index, end);
-        index = end;
+        const lineEnd = source.indexOf('\n', index + fence[0].length);
+        const info = source.slice(index + fence[0].length, lineEnd < 0 ? source.length : lineEnd);
+        if (marker !== '`' || !info.includes('`')) {
+          const end = findFenceEnd(source, index + fence[0].length, marker, length);
+          add(index, end);
+          index = end;
+          continue;
+        }
+        index += length;
         continue;
       }
       const indented = source.slice(index).match(/^(?: {4}|\t)[^\n]*(?:\n|$)/);
@@ -117,27 +150,32 @@ function protectedRanges(source) {
     if (source[index] === '`') {
       let run = 1;
       while (source[index + run] === '`') run += 1;
-      const marker = '`'.repeat(run);
-      const close = source.indexOf(marker, index + run);
-      const end = close < 0 ? source.length : close + run;
-      add(index, end);
-      index = end;
-      continue;
-    }
-    const code = source.slice(index).match(/^<(pre|code)\b/i);
-    if (code) {
-      const tagEnd = findTagEnd(source, index);
-      const tag = source.slice(index, tagEnd);
-      const name = code[1];
-      const close = new RegExp(`</${name}\\s*>`, 'i').exec(source.slice(index + tag.length));
-      const end = close ? index + tag.length + close.index + close[0].length : source.length;
-      add(index, end);
-      index = end;
+      const close = findInlineCodeClose(source, index + run, run);
+      if (close >= 0) {
+        add(index, close + run);
+        index = close + run;
+      } else {
+        index += run;
+      }
       continue;
     }
     index += 1;
   }
   return ranges.sort((left, right) => left.start - right.start);
+}
+
+function isPotentialHtmlTag(source, index) {
+  const remainder = source.slice(index);
+  return source.startsWith('<!--', index)
+    || /^<\/?[A-Za-z][\w:-]*(?:[\s/>]|$)/.test(remainder)
+    || /^<![A-Za-z]/.test(remainder)
+    || /^<\?/.test(remainder);
+}
+
+function isEscaped(source, index) {
+  let slashes = 0;
+  for (let cursor = index - 1; cursor >= 0 && source[cursor] === '\\'; cursor -= 1) slashes += 1;
+  return slashes % 2 === 1;
 }
 
 function rangeAt(ranges, index) {
@@ -189,13 +227,13 @@ export function imageReferencesInContent(content, markdown = false) {
       index = protectedRange.end;
       continue;
     }
-    if (source[index] === '<') {
+    if (source[index] === '<' && isPotentialHtmlTag(source, index)) {
       const end = findTagEnd(source, index);
       if (/^<img\b/i.test(source.slice(index, end))) add(readAttribute(source, index + 4, end - 1), 'html');
       index = end;
       continue;
     }
-    if (!markdown || source[index] !== '!' || source[index - 1] === '\\' || source[index + 1] !== '[') {
+    if (!markdown || source[index] !== '!' || isEscaped(source, index) || source[index + 1] !== '[') {
       index += 1;
       continue;
     }

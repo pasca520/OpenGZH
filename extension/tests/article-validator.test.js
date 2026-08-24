@@ -194,6 +194,13 @@ describe('validateArticle', () => {
     });
     expect(() => validateArticle(proxied)).toThrowError(expect.objectContaining({ code: 'ARTICLE_INVALID' }));
   });
+
+  it('maps Proxy prototype failures to ARTICLE_INVALID', () => {
+    const proxied = new Proxy(article, {
+      getPrototypeOf: () => { throw new Error('prototype failure'); },
+    });
+    expect(() => validateArticle(proxied)).toThrowError(expect.objectContaining({ code: 'ARTICLE_INVALID' }));
+  });
 });
 
 describe('validateSelectedPlatformImages', () => {
@@ -267,7 +274,7 @@ describe('validateSelectedPlatformImages', () => {
   it('ignores comments, code blocks, and escaped Markdown while scanning real images', () => {
     const safe = {
       ...article,
-      semanticHtml: '<!-- <img src="https://images.example.com/comment.png"> --><pre><code><img src="https://images.example.com/code.png"></code></pre><img src="img://hero">',
+      semanticHtml: '<!-- <img src="https://images.example.com/comment.png"> --><img src="img://hero">',
     };
     expect(() => validateSelectedPlatformImages(safe, ['zhihu'])).not.toThrow();
     expect(() => validateSelectedPlatformImages({
@@ -275,5 +282,59 @@ describe('validateSelectedPlatformImages', () => {
       portableMarkdown: '\\![escaped](https://images.example.com/escaped.png)\n\n`![code](https://images.example.com/code.png)`\n\n```\n![fenced](https://images.example.com/fenced.png)\n```\n\n    ![indented](https://images.example.com/indented.png)\n\n![real](https://images.example.com/real.png)',
       images: [],
     }, ['juejin'])).toThrowError(expect.objectContaining({ code: 'IMAGE_NOT_LOCAL' }));
+  });
+
+  it('uses odd and even backslash parity for Markdown image escapes', () => {
+    const external = 'https://images.example.com/escaped.png';
+    expect(() => validateSelectedPlatformImages({
+      ...article,
+      portableMarkdown: String.raw`\![escaped](${external})`,
+      images: [],
+    }, ['juejin'])).not.toThrow();
+    expect(() => validateSelectedPlatformImages({
+      ...article,
+      portableMarkdown: String.raw`\\![active](${external})`,
+      images: [],
+    }, ['juejin'])).toThrowError(expect.objectContaining({ code: 'IMAGE_NOT_LOCAL' }));
+  });
+
+  it('does not protect the rest of Markdown after an unclosed inline code marker', () => {
+    expect(() => validateSelectedPlatformImages({
+      ...article,
+      portableMarkdown: 'unclosed ` code\n\n![real](https://images.example.com/real.png)',
+      images: [],
+    }, ['juejin'])).toThrowError(expect.objectContaining({ code: 'IMAGE_NOT_LOCAL' }));
+  });
+
+  it('rejects backticks in backtick fence info strings but accepts tilde info strings', () => {
+    expect(() => validateSelectedPlatformImages({
+      ...article,
+      portableMarkdown: '```js`\n![real](https://images.example.com/real.png)\n```',
+      images: [],
+    }, ['juejin'])).toThrowError(expect.objectContaining({ code: 'IMAGE_NOT_LOCAL' }));
+    expect(() => validateSelectedPlatformImages({
+      ...article,
+      portableMarkdown: '~~~js`\n![fenced](https://images.example.com/fenced.png)\n~~~',
+      images: [],
+    }, ['juejin'])).not.toThrow();
+  });
+
+  it('scans rendered HTML images while ignoring Markdown code ranges and plain less-than text', () => {
+    const external = 'https://images.example.com/code.png';
+    expect(() => validateSelectedPlatformImages({
+      ...article,
+      semanticHtml: `2 < 3\n<pre><code><img src="${external}"></code></pre>`,
+      images: [],
+    }, ['zhihu'])).toThrowError(expect.objectContaining({ code: 'IMAGE_NOT_LOCAL' }));
+    expect(() => validateSelectedPlatformImages({
+      ...article,
+      portableMarkdown: `\`<img src="${external}">\``,
+      images: [],
+    }, ['juejin'])).not.toThrow();
+    expect(() => validateSelectedPlatformImages({
+      ...article,
+      portableMarkdown: `~~~html\n<img src="${external}">\n~~~`,
+      images: [],
+    }, ['juejin'])).not.toThrow();
   });
 });

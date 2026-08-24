@@ -85,6 +85,15 @@ describe('platform errors', () => {
     expect(redacted).not.toContain('raw-csrf');
   });
 
+  it('redacts unquoted authorization and cookie values without consuming safe following fields', () => {
+    const raw = 'authorization=live-tokenonly cookie=session=live-cookie safe=keep';
+    const redacted = redactSecrets(raw);
+    expect(redacted).not.toContain('live-tokenonly');
+    expect(redacted).not.toContain('live-cookie');
+    expect(redacted).toContain('safe=keep');
+    expect(redactSecrets('{"cookie": session=live-json-cookie}')).not.toContain('live-json-cookie');
+  });
+
   it('keeps PlatformError remote state and maps ordinary errors to unknown state', () => {
     const existing = new PlatformError('DRAFT_UPDATE_FAILED', '已知失败');
     expect(remoteStateError(existing)).toBe(existing);

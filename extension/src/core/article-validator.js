@@ -23,8 +23,12 @@ function invalid(message) {
 
 function isPlainRecord(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
+  try {
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+  } catch {
+    invalid('文章数据无法安全检查');
+  }
 }
 
 function hasExactKeys(value, keys) {

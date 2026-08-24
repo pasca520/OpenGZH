@@ -9,6 +9,8 @@ const SECRET_KEY = /^(?:token|ticket|csrf|jltoken|accesskeyid|secretaccesskey|se
 const SECRET_QUERY = /([?&](?:token|ticket|csrf|jltoken|sessiontoken|access[_-]?key(?:id)?|secret[_-]?access[_-]?key|access[_-]?token|authorization|x-csrf-token)=)[^&#\s]*/gi;
 const SECRET_JSON = /((?:["']?)(?:token|ticket|csrf|jltoken|accesskeyid|secretaccesskey|sessiontoken|access_id|access_key|access_token|authorization|cookie|x-csrf-token)(?:["']?\s*[:=]\s*["']))([\s\S]*?)(?=["'])/gi;
 const SECRET_UNQUOTED = /((?:^|[\s{,])(?:token|ticket|csrf|jltoken|accesskeyid|secretaccesskey|sessiontoken|access_id|access_key|access_token|x-csrf-token)\s*[:=]\s*)([^,}\r\n]+?)(?=\s+(?:token|ticket|csrf|jltoken|accesskeyid|secretaccesskey|sessiontoken|access_id|access_key|access_token|authorization|cookie|x-csrf-token)\s*[:=]|[,}\r\n]|$)/gi;
+const SECRET_AUTH_COOKIE_ASSIGN = /((?:^|[\s{,])["']?(?:authorization|cookie)["']?\s*=\s*)([^,}\r\n]+?)(?=\s+[A-Za-z][\w-]*\s*[:=]|[,}\r\n]|$)/gi;
+const SECRET_AUTH_COOKIE_COLON = /((?:^|[\s{,])["']?(?:authorization|cookie)["']?\s*:\s*)(?!Bearer\b|Basic\b)([^,}\r\n]+?)(?=\s+[A-Za-z][\w-]*\s*[:=]|[,}\r\n]|$)/gi;
 const AUTH_HEADER = /(Authorization\s*:\s*(?:Bearer|Basic)\s+)([^\r\n,}]+)/gi;
 const COOKIE_HEADER = /(Cookie\s*:\s*)([^\r\n,}]+)/gi;
 const BARE_CREDENTIAL = /\b(Bearer|Basic)\s+([^\s,}]+)/gi;
@@ -27,10 +29,18 @@ function stripHtml(value) {
   return String(value).replace(/<[^>]*>/g, ' ');
 }
 
+function redactAuthCookieColon(match, prefix, value) {
+  const trimmed = value.trim();
+  if (/^(?:Bearer|Basic)\b/i.test(trimmed) || (/^["'][\s\S]*["']$/.test(trimmed))) return match;
+  return `${prefix}[REDACTED]`;
+}
+
 function redactString(value) {
   return stripHtml(value)
     .replace(SECRET_QUERY, '$1[REDACTED]')
     .replace(SECRET_JSON, '$1[REDACTED]')
+    .replace(SECRET_AUTH_COOKIE_ASSIGN, '$1[REDACTED]')
+    .replace(SECRET_AUTH_COOKIE_COLON, redactAuthCookieColon)
     .replace(SECRET_UNQUOTED, '$1[REDACTED]')
     .replace(AUTH_HEADER, '$1[REDACTED]')
     .replace(COOKIE_HEADER, '$1[REDACTED]')
