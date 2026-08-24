@@ -276,6 +276,7 @@ export function deferLocalImages(images) {
   for (const image of images) {
     const imageId = image.getAttribute('data-image-id');
     const src = image.getAttribute('src') || '';
+    if (/^data:/i.test(src)) continue;
     if (imageId) {
       image.setAttribute('src', `img://${imageId}`);
     } else if (src.startsWith('blob:')) {

@@ -22,7 +22,7 @@ describe('deferLocalImages', () => {
   it('defers indexed local images while preserving data URLs and reporting anonymous blobs', () => {
     const images = [
       makeImage('blob:rendered', { 'data-image-id': 'hero' }),
-      makeImage('data:image/png;base64,cG5n'),
+      makeImage('data:image/png;base64,cG5n', { 'data-image-id': 'stale' }),
       makeImage('blob:anonymous'),
     ];
 
@@ -118,14 +118,180 @@ describe('prepareWechatContent', () => {
       });
 
       expect(typeof prepared.html).toBe('string');
-      expect(prepared.html).toContain('img://hero');
-      expect(prepared.html).toContain('data:image/png;base64,cG5n');
-      expect(prepared.html).toContain('blob:anonymous');
-      expect(prepared.imageFailures).toEqual(['blob:anonymous']);
+      expect(prepared).toMatchObject({
+        html: body.innerHTML,
+        text: '正文',
+        images: ['img://hero', 'data:image/png;base64,cG5n', 'blob:anonymous'],
+        imageFailures: ['blob:anonymous'],
+        imageFailureCount: 1,
+      });
       expect(imageStore.getImageRecord).not.toHaveBeenCalled();
     } finally {
       if (previousParser) globalThis.DOMParser = previousParser;
       else delete globalThis.DOMParser;
+    }
+  });
+
+  it('uses clipboard preparation by default and preserves a CDN image exactly', async () => {
+    const image = makeImage('https://cdn.example.com/banner.png');
+    const imageStore = { getImageRecord: vi.fn() };
+    const showToast = vi.fn();
+    const body = {
+      cloneNode: () => ({ querySelectorAll: () => [], textContent: '正文' }),
+      querySelectorAll: () => [],
+      get innerHTML() {
+        return `<p>正文</p><img src="${image.getAttribute('src')}">`;
+      },
+    };
+    const doc = {
+      body,
+      querySelector: () => null,
+      querySelectorAll: (selector) => selector === 'img' ? [image] : [],
+    };
+    const previousParser = globalThis.DOMParser;
+    globalThis.DOMParser = class {
+      parseFromString() {
+        return doc;
+      }
+    };
+
+    try {
+      const prepared = await prepareWechatContent({
+        renderedHTML: '<p>fixture</p>',
+        styleConfig: { styles: { container: '' } },
+        imageStore,
+        showToast,
+      });
+
+      expect(prepared).toEqual({
+        html: body.innerHTML,
+        text: '正文',
+        images: ['https://cdn.example.com/banner.png'],
+        imageFailures: [],
+        imageFailureCount: 0,
+      });
+      expect(showToast).toHaveBeenCalledWith('正在处理 1 张图片...', 'success');
+      expect(imageStore.getImageRecord).not.toHaveBeenCalled();
+      expect(prepared.html).not.toContain('img://');
+    } finally {
+      if (previousParser) globalThis.DOMParser = previousParser;
+      else delete globalThis.DOMParser;
+    }
+  });
+});
+
+describe('copyToWechat', () => {
+  it('prepares and writes HTML/plain text once before reporting success', async () => {
+    const image = makeImage('https://cdn.example.com/banner.png');
+    const body = {
+      cloneNode: () => ({ querySelectorAll: () => [], textContent: '正文' }),
+      querySelectorAll: () => [],
+      get innerHTML() {
+        return `<p>正文</p><img src="${image.getAttribute('src')}">`;
+      },
+    };
+    const doc = {
+      body,
+      querySelector: () => null,
+      querySelectorAll: (selector) => selector === 'img' ? [image] : [],
+    };
+    const previousParser = globalThis.DOMParser;
+    const previousClipboardItem = globalThis.ClipboardItem;
+    const navigatorRef = globalThis.navigator || {};
+    const previousClipboard = navigatorRef.clipboard;
+    const write = vi.fn(async () => {});
+    const showToast = vi.fn();
+    class TestClipboardItem {
+      constructor(data) {
+        this.data = data;
+      }
+    }
+    globalThis.DOMParser = class {
+      parseFromString() {
+        return doc;
+      }
+    };
+    Object.defineProperty(navigatorRef, 'clipboard', {
+      configurable: true,
+      writable: true,
+      value: { write },
+    });
+    if (!globalThis.navigator) {
+      Object.defineProperty(globalThis, 'navigator', {
+        configurable: true,
+        writable: true,
+        value: navigatorRef,
+      });
+    }
+    globalThis.ClipboardItem = TestClipboardItem;
+
+    try {
+      const copied = await clipboardExporter.copyToWechat({
+        renderedHTML: '<p>fixture</p>',
+        styleConfig: { styles: { container: '' } },
+        showToast,
+      });
+
+      expect(copied).toBe(true);
+      expect(write).toHaveBeenCalledTimes(1);
+      const item = write.mock.calls[0][0][0];
+      expect(await item.data['text/html'].text()).toBe(body.innerHTML);
+      expect(await item.data['text/plain'].text()).toBe('正文');
+      expect(showToast).toHaveBeenNthCalledWith(1, '正在处理 1 张图片...', 'success');
+      expect(showToast).toHaveBeenLastCalledWith('复制成功', 'success');
+    } finally {
+      if (previousParser) globalThis.DOMParser = previousParser;
+      else delete globalThis.DOMParser;
+      if (previousClipboard === undefined) delete navigatorRef.clipboard;
+      else navigatorRef.clipboard = previousClipboard;
+      if (previousClipboardItem) globalThis.ClipboardItem = previousClipboardItem;
+      else delete globalThis.ClipboardItem;
+    }
+  });
+
+  it('reports a table conversion error once without adding a generic copy error', async () => {
+    const table = {
+      getAttribute: () => '',
+      setAttribute: vi.fn(),
+    };
+    const body = {
+      cloneNode: () => ({ querySelectorAll: () => [], textContent: '正文' }),
+      querySelectorAll: () => [],
+      innerHTML: '<p>正文</p><table></table>',
+    };
+    const doc = {
+      body,
+      querySelector: () => null,
+      querySelectorAll: (selector) => selector.startsWith('table') ? [table] : [],
+    };
+    const previousParser = globalThis.DOMParser;
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const showToast = vi.fn();
+    globalThis.DOMParser = class {
+      parseFromString() {
+        return doc;
+      }
+    };
+
+    try {
+      const copied = await clipboardExporter.copyToWechat({
+        renderedHTML: '<table><tr><td>fixture</td></tr></table>',
+        styleConfig: { styles: { container: '' } },
+        showToast,
+      });
+
+      expect(copied).toBe(false);
+      expect(showToast).toHaveBeenCalledTimes(1);
+      expect(showToast).toHaveBeenCalledWith(
+        '第 1 个表格转换失败：浏览器不支持 XML 序列化',
+        'error',
+      );
+      expect(showToast).not.toHaveBeenCalledWith('复制失败', 'error');
+      expect(consoleError).toHaveBeenCalledWith('表格转图失败:', expect.any(Error));
+    } finally {
+      if (previousParser) globalThis.DOMParser = previousParser;
+      else delete globalThis.DOMParser;
+      consoleError.mockRestore();
     }
   });
 });
