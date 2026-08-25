@@ -43,8 +43,21 @@ function dispatchRequest(target, detail) {
 describe('website distribution entry', () => {
   it('keeps a permanent distribution button wired to the extension bridge', () => {
     expect(indexSource.match(/data-opengzh-distribution-button/g) || []).toHaveLength(1);
-    expect(indexSource).toContain('@click="openDistribution"');
-    expect(indexSource).toContain('同步到平台');
+    expect(indexSource).toMatch(/<button\s+data-opengzh-distribution-button\b[\s\S]*?<\/button>\s*<button\s+data-opengzh-copy-button\b/);
+    const distributionButtonMatch = indexSource.match(/<button\s+data-opengzh-distribution-button\b[\s\S]*?<\/button>/);
+    const copyButtonMatch = indexSource.match(/<button\s+data-opengzh-copy-button\b[\s\S]*?<\/button>/);
+    expect(distributionButtonMatch).not.toBeNull();
+    expect(copyButtonMatch).not.toBeNull();
+    const distributionButton = distributionButtonMatch?.[0] || '';
+    const copyButton = copyButtonMatch?.[0] || '';
+    expect(distributionButton).toContain('type="button"');
+    expect(distributionButton).toContain('aria-haspopup="dialog"');
+    expect(distributionButton).toContain('aria-expanded="false"');
+    expect(distributionButton).toContain('@click="openDistribution"');
+    expect(distributionButton).toContain('同步到平台');
+    expect(distributionButton).not.toMatch(/\s(?:disabled|:disabled)(?:\s*=|\s|>)/);
+    expect(copyButton).toContain(':disabled="!renderedContent"');
+    expect(copyButton).toContain('@click="doCopy"');
     expect(mainSource.match(/const OPENGZH_EXTENSION_STORE_URL = '';/g) || []).toHaveLength(1);
     expect(mainSource).toContain('requestDistributionOpen({');
     expect(mainSource).toContain("toast.show('OpenGZH 插件即将上线 Chrome 商店', 'info',");
