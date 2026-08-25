@@ -1,13 +1,18 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createDistributionBridgeLifecycle,
   installDistributionBridge,
-  PAGE_EVENTS
+  PAGE_EVENTS,
+  requestDistributionOpen
 } from '../extension-bridge.js';
 
 const mainSource = readFileSync(fileURLToPath(new URL('../../main.js', import.meta.url)), 'utf8');
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 class TestCustomEvent {
   constructor(type, init = {}) {
@@ -102,7 +107,9 @@ describe('installDistributionBridge', () => {
     expect(PAGE_EVENTS).toEqual({
       request: 'opengzh:distribution:request',
       ready: 'opengzh:distribution:ready',
-      error: 'opengzh:distribution:error'
+      error: 'opengzh:distribution:error',
+      open: 'opengzh:distribution:open',
+      opened: 'opengzh:distribution:opened'
     });
     expect(Object.isFrozen(PAGE_EVENTS)).toBe(true);
   });
@@ -214,5 +221,168 @@ describe('installDistributionBridge', () => {
     });
     expect(JSON.stringify(errorEvent.detail)).not.toContain('secret');
     expect(Object.keys(errorEvent.detail)).toEqual(['requestId', 'code', 'message']);
+  });
+});
+
+describe('requestDistributionOpen', () => {
+  it('resolves true for a matching acknowledgement and cleans up', async () => {
+    const target = createEventTarget();
+    const openWindow = vi.fn();
+    const promise = requestDistributionOpen({
+      target,
+      CustomEventCtor: TestCustomEvent,
+      requestId: 'open-1',
+      timeoutMs: 500,
+      openWindow
+    });
+
+    expect(target.dispatchEvent).toHaveBeenCalledWith({
+      type: PAGE_EVENTS.open,
+      detail: { requestId: 'open-1' }
+    });
+    expect(target.listeners.has(PAGE_EVENTS.opened)).toBe(true);
+
+    target.dispatchEvent({ type: PAGE_EVENTS.opened, detail: { requestId: 'open-1' } });
+
+    await expect(promise).resolves.toBe(true);
+    expect(target.listeners.has(PAGE_EVENTS.opened)).toBe(false);
+    expect(openWindow).not.toHaveBeenCalled();
+  });
+
+  it('ignores mismatched acknowledgement IDs until the matching one arrives', async () => {
+    const target = createEventTarget();
+    vi.useFakeTimers();
+    const promise = requestDistributionOpen({
+      target,
+      CustomEventCtor: TestCustomEvent,
+      requestId: 'open-2',
+      timeoutMs: 500,
+      openWindow: vi.fn()
+    });
+
+    target.dispatchEvent({ type: PAGE_EVENTS.opened, detail: { requestId: 'other' } });
+    await Promise.resolve();
+    let settled = false;
+    promise.then(() => { settled = true; });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    target.dispatchEvent({ type: PAGE_EVENTS.opened, detail: { requestId: 'open-2' } });
+    await expect(promise).resolves.toBe(true);
+  });
+
+  it('notifies after the default 500ms timeout when the store URL is empty', async () => {
+    const target = createEventTarget();
+    const notifyUnavailable = vi.fn();
+    const openWindow = vi.fn();
+    vi.useFakeTimers();
+    const promise = requestDistributionOpen({
+      target,
+      CustomEventCtor: TestCustomEvent,
+      requestId: 'open-timeout',
+      notifyUnavailable,
+      openWindow
+    });
+
+    await vi.advanceTimersByTimeAsync(499);
+    expect(notifyUnavailable).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+
+    await expect(promise).resolves.toBe(false);
+    expect(notifyUnavailable).toHaveBeenCalledTimes(1);
+    expect(openWindow).not.toHaveBeenCalled();
+    expect(target.listeners.has(PAGE_EVENTS.opened)).toBe(false);
+  });
+
+  it('opens a valid HTTPS Chrome Web Store URL on timeout', async () => {
+    const target = createEventTarget();
+    const openWindow = vi.fn();
+    vi.useFakeTimers();
+    const storeUrl = 'https://chromewebstore.google.com/detail/opengzh/abc123';
+    const promise = requestDistributionOpen({
+      target,
+      CustomEventCtor: TestCustomEvent,
+      requestId: 'open-store',
+      timeoutMs: 10,
+      storeUrl,
+      openWindow,
+      notifyUnavailable: vi.fn()
+    });
+
+    await vi.advanceTimersByTimeAsync(10);
+
+    await expect(promise).resolves.toBe(false);
+    expect(openWindow).toHaveBeenCalledWith(storeUrl, '_blank', 'noopener');
+  });
+
+  it('notifies instead of opening an unsafe store URL', async () => {
+    const target = createEventTarget();
+    const openWindow = vi.fn();
+    const notifyUnavailable = vi.fn();
+    vi.useFakeTimers();
+    const promise = requestDistributionOpen({
+      target,
+      CustomEventCtor: TestCustomEvent,
+      requestId: 'open-unsafe',
+      timeoutMs: 10,
+      storeUrl: 'https://evil.example/extension',
+      openWindow,
+      notifyUnavailable
+    });
+
+    await vi.advanceTimersByTimeAsync(10);
+
+    await expect(promise).resolves.toBe(false);
+    expect(openWindow).not.toHaveBeenCalled();
+    expect(notifyUnavailable).toHaveBeenCalledTimes(1);
+  });
+
+  it('cleans up the listener and timer after a matching acknowledgement', async () => {
+    const target = createEventTarget();
+    const openWindow = vi.fn();
+    vi.useFakeTimers();
+    const promise = requestDistributionOpen({
+      target,
+      CustomEventCtor: TestCustomEvent,
+      requestId: 'open-clean',
+      timeoutMs: 500,
+      openWindow
+    });
+
+    target.dispatchEvent({ type: PAGE_EVENTS.opened, detail: { requestId: 'open-clean' } });
+    await expect(promise).resolves.toBe(true);
+    expect(target.listeners.has(PAGE_EVENTS.opened)).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+
+    await vi.advanceTimersByTimeAsync(500);
+    expect(openWindow).not.toHaveBeenCalled();
+  });
+
+  it('cleans up after dispatch failure and ignores a late acknowledgement', async () => {
+    const target = createEventTarget();
+    const originalDispatch = target.dispatchEvent;
+    target.dispatchEvent = vi.fn((event) => {
+      if (event.type === PAGE_EVENTS.open) throw new Error('dispatch failed');
+      return originalDispatch(event);
+    });
+    const notifyUnavailable = vi.fn();
+    const openWindow = vi.fn();
+    vi.useFakeTimers();
+    const promise = requestDistributionOpen({
+      target,
+      CustomEventCtor: TestCustomEvent,
+      requestId: 'open-dispatch-failure',
+      timeoutMs: 500,
+      openWindow,
+      notifyUnavailable
+    });
+
+    await expect(promise).resolves.toBe(false);
+    expect(target.listeners.has(PAGE_EVENTS.opened)).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(notifyUnavailable).toHaveBeenCalledTimes(1);
+    target.dispatchEvent({ type: PAGE_EVENTS.opened, detail: { requestId: 'open-dispatch-failure' } });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(openWindow).not.toHaveBeenCalled();
   });
 });

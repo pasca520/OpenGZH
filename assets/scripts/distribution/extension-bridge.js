@@ -6,7 +6,9 @@
 export const PAGE_EVENTS = Object.freeze({
   request: 'opengzh:distribution:request',
   ready: 'opengzh:distribution:ready',
-  error: 'opengzh:distribution:error'
+  error: 'opengzh:distribution:error',
+  open: 'opengzh:distribution:open',
+  opened: 'opengzh:distribution:opened'
 });
 
 const ERROR_CODES = new Set(['ARTICLE_INVALID', 'IMAGE_READ_FAILED']);
@@ -17,6 +19,72 @@ function getSafeError(error) {
   const code = ERROR_CODES.has(error?.code) ? error.code : 'ARTICLE_INVALID';
   const message = SAFE_MESSAGES.has(error?.message) ? error.message : DEFAULT_ERROR_MESSAGE;
   return { code, message };
+}
+
+export function requestDistributionOpen({
+  target = document,
+  CustomEventCtor = CustomEvent,
+  requestId = crypto.randomUUID(),
+  timeoutMs = 500,
+  storeUrl = '',
+  notifyUnavailable = () => {},
+  openWindow = (...args) => window.open(...args)
+} = {}) {
+  return new Promise((resolve) => {
+    let settled = false;
+    let timerId;
+
+    const cleanup = () => {
+      target.removeEventListener(PAGE_EVENTS.opened, onOpened);
+      clearTimeout(timerId);
+    };
+
+    const isSafeStoreUrl = () => {
+      try {
+        return new URL(storeUrl).origin === 'https://chromewebstore.google.com';
+      } catch {
+        return false;
+      }
+    };
+
+    const settle = (result) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (result) {
+        resolve(true);
+        return;
+      }
+
+      if (isSafeStoreUrl()) {
+        try {
+          openWindow(storeUrl, '_blank', 'noopener');
+        } catch {
+          notifyUnavailable();
+        }
+      } else {
+        notifyUnavailable();
+      }
+      resolve(false);
+    };
+
+    const onOpened = (event) => {
+      if (event.detail?.requestId !== requestId) return;
+      settle(true);
+    };
+
+    target.addEventListener(PAGE_EVENTS.opened, onOpened);
+    timerId = setTimeout(() => settle(false), timeoutMs);
+
+    try {
+      const dispatched = target.dispatchEvent(new CustomEventCtor(PAGE_EVENTS.open, {
+        detail: { requestId }
+      }));
+      if (dispatched === false) settle(false);
+    } catch {
+      settle(false);
+    }
+  });
 }
 
 export function createDistributionBridgeLifecycle() {
