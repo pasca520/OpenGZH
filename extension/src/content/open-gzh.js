@@ -578,6 +578,7 @@
 
     function setAnchor(nextAnchor) {
       if (!nextAnchor) return false;
+      if (currentAnchor !== nextAnchor) currentAnchor.setAttribute?.('aria-expanded', 'false');
       currentAnchor = nextAnchor;
       currentAnchor.setAttribute?.('aria-expanded', state.panelOpen ? 'true' : 'false');
       return true;

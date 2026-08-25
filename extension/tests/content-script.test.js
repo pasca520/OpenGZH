@@ -1321,6 +1321,8 @@ describe('content script mount lifecycle', () => {
     await controller.ui.ready;
     const ui = controller.ui;
     const host = ui.host;
+    await ui.openPanel();
+    expect(oldAnchor.attributes.get('aria-expanded')).toBe('true');
     oldParent.removeChild(oldAnchor);
     doc.anchor = null;
     Observer.instance.trigger();
@@ -1336,13 +1338,14 @@ describe('content script mount lifecycle', () => {
     expect(controller.ui).toBe(ui);
     expect(ui.host).toBe(host);
     expect(ui.anchor).toBe(newAnchor);
+    expect(oldAnchor.attributes.get('aria-expanded')).toBe('false');
     await ui.openPanel();
     expect(newAnchor.attributes.get('aria-expanded')).toBe('true');
-    expect(oldAnchor.attributes.get('aria-expanded')).toBeUndefined();
+    expect(oldAnchor.attributes.get('aria-expanded')).toBe('false');
     ui.closePanel();
     expect(newAnchor.attributes.get('aria-expanded')).toBe('false');
     expect(doc.activeElement).toBe(newAnchor);
-    expect(oldAnchor.attributes.get('aria-expanded')).toBeUndefined();
+    expect(oldAnchor.attributes.get('aria-expanded')).toBe('false');
     expect(host.parentNode).toBe(newParent);
     controller.disconnect();
   });
