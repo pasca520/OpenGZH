@@ -545,6 +545,7 @@
     if (!doc || !anchor || !anchor.parentNode) return null;
     const existingHost = doc.querySelector?.('[data-opengzh-extension-host]');
     if (existingHost) return { host: existingHost, existing: true };
+    let currentAnchor = anchor;
     const host = doc.createElement('span');
     host.setAttribute('data-opengzh-extension-host', '');
     mountHostAfterAnchor(host, anchor);
@@ -563,6 +564,7 @@
       draftUrls: new Map(),
       portConnected: Boolean(port),
       disposed: false,
+      panelOpen: false,
     };
     Object.defineProperties(state, {
       activeTaskId: { get: () => state.taskId, set: (value) => { state.taskId = value; } },
@@ -572,6 +574,13 @@
     function listen(target, type, handler) {
       target?.addEventListener?.(type, handler);
       if (target?.removeEventListener) listenerDisposers.push(() => target.removeEventListener(type, handler));
+    }
+
+    function setAnchor(nextAnchor) {
+      if (!nextAnchor) return false;
+      currentAnchor = nextAnchor;
+      currentAnchor.setAttribute?.('aria-expanded', state.panelOpen ? 'true' : 'false');
+      return true;
     }
 
     const shell = doc.createElement('div');
@@ -884,21 +893,25 @@
     }
 
     async function openPanel() {
-      await ready;
       if (state.disposed || !state.portConnected) return false;
       panel.hidden = false;
       backdrop.hidden = false;
-      anchor.setAttribute('aria-expanded', 'true');
+      state.panelOpen = true;
+      currentAnchor.setAttribute('aria-expanded', 'true');
       close.focus();
-      if (!state.busy) sendCheckAuth();
+      ready.then(() => {
+        if (state.disposed || !state.portConnected || !state.panelOpen || state.busy) return;
+        sendCheckAuth();
+      });
       return true;
     }
 
     function closePanel() {
+      state.panelOpen = false;
       backdrop.hidden = true;
       panel.hidden = true;
-      anchor.setAttribute('aria-expanded', 'false');
-      anchor.focus();
+      currentAnchor.setAttribute('aria-expanded', 'false');
+      currentAnchor.focus();
     }
 
     function focusableControls() {
@@ -1024,6 +1037,10 @@
       if (disposed) return;
       disposed = true;
       state.disposed = true;
+      state.panelOpen = false;
+      currentAnchor.setAttribute?.('aria-expanded', 'false');
+      backdrop.hidden = true;
+      panel.hidden = true;
       abortSnapshot();
       invalidateAuth();
       state.busy = false;
@@ -1040,7 +1057,8 @@
       host,
       shadow,
       state,
-      anchor,
+      get anchor() { return currentAnchor; },
+      setAnchor,
       panel,
       backdrop,
       alert,
@@ -1089,6 +1107,7 @@
         }
         ui = createUi({ document: doc, anchor, port });
       } else {
+        ui.setAnchor?.(anchor);
         mountHostAfterAnchor(ui.host, anchor);
       }
       if (ui) ui.host.hidden = false;
