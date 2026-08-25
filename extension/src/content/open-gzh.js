@@ -399,10 +399,11 @@
     const queue = [];
     const drainWaiters = [];
     let active = false;
+    let currentPort = port;
 
     function post(message) {
       try {
-        port?.postMessage?.(message);
+        currentPort?.postMessage?.(message);
       } catch {
         // A disconnected worker must not strand the next queued image.
       }
@@ -464,7 +465,11 @@
       return new Promise((resolve) => drainWaiters.push(resolve));
     }
 
-    return { handleMessage, drain };
+    function setPort(nextPort) {
+      currentPort = nextPort || null;
+    }
+
+    return { handleMessage, drain, setPort };
   }
 
   function textElement(doc, tag, text, className) {
@@ -541,6 +546,7 @@
     AbortControllerCtor = root.AbortController,
     windowObject = root,
     CustomEventCtor = defaultEventCtor(),
+    reconnectPort,
   } = {}) {
     if (!doc || !anchor || !anchor.parentNode) return null;
     const existingHost = doc.querySelector?.('[data-opengzh-extension-host]');
@@ -695,6 +701,10 @@
     shadow.append(style, shell);
 
     const imageResponder = createImageResponder({ port });
+    let activePort = null;
+    let activePortMessageListener = null;
+    let activePortDisconnectListener = null;
+    let handshake = null;
     let snapshotController = null;
     function createSnapshotController() {
       if (typeof AbortControllerCtor === 'function') return new AbortControllerCtor();
@@ -723,13 +733,13 @@
 
     function post(message) {
       if (state.disposed) return false;
-      if (!port || typeof port.postMessage !== 'function') {
+      if (!activePort || typeof activePort.postMessage !== 'function') {
         state.portConnected = false;
         finishTask('无法连接同步服务');
         return false;
       }
       try {
-        port.postMessage(message);
+        activePort.postMessage(message);
         return true;
       } catch {
         state.portConnected = false;
@@ -896,7 +906,16 @@
     }
 
     async function openPanel() {
-      if (state.disposed || !state.portConnected) return false;
+      if (state.disposed) return false;
+      if (!state.portConnected) {
+        let connected = false;
+        try {
+          connected = await reconnectPort?.();
+        } catch {
+          connected = false;
+        }
+        if (!connected || state.disposed || !state.portConnected) return false;
+      }
       panel.hidden = false;
       backdrop.hidden = false;
       state.panelOpen = true;
@@ -998,10 +1017,102 @@
       }
     }
 
-    const onPortDisconnect = () => {
+    function settleHandshake(success) {
+      const pending = handshake;
+      if (!pending) return false;
+      handshake = null;
+      if (pending.timer) clearTimeout(pending.timer);
+      const connected = Boolean(success && !state.disposed && activePort === pending.port);
+      state.portConnected = connected;
+      pending.resolve(connected);
+      return connected;
+    }
+
+    function detachPort(connection = activePort) {
+      if (!connection) return;
+      if (connection === activePort) {
+        activePortMessageListener && connection.onMessage?.removeListener?.(activePortMessageListener);
+        activePortDisconnectListener && connection.onDisconnect?.removeListener?.(activePortDisconnectListener);
+        activePort = null;
+        activePortMessageListener = null;
+        activePortDisconnectListener = null;
+        imageResponder.setPort(null);
+      }
+    }
+
+    function onPortMessage(connection, message) {
+      if (state.disposed || activePort !== connection) return;
+      if (message?.type === 'PONG') {
+        if (handshake?.port === connection && handshake.requestId === message.requestId) settleHandshake(true);
+        return;
+      }
+      onMessage(message);
+    }
+
+    function onPortDisconnect(connection) {
+      if (state.disposed || activePort !== connection) return;
       state.portConnected = false;
+      detachPort(connection);
+      if (handshake?.port === connection) settleHandshake(false);
       finishTask('无法连接同步服务', { clearRetry: true });
-    };
+    }
+
+    function setPort(nextPort, { ready: isReady = true } = {}) {
+      if (state.disposed) return Promise.resolve(false);
+      if (!nextPort || typeof nextPort.postMessage !== 'function') {
+        state.portConnected = false;
+        return Promise.resolve(false);
+      }
+      if (activePort === nextPort) {
+        if (isReady && !handshake) {
+          state.portConnected = true;
+          return Promise.resolve(true);
+        }
+        if (handshake) return handshake.promise;
+      }
+      if (handshake) settleHandshake(false);
+      if (activePort) detachPort();
+      activePort = nextPort;
+      imageResponder.setPort(nextPort);
+      const connection = nextPort;
+      activePortMessageListener = (message) => onPortMessage(connection, message);
+      activePortDisconnectListener = () => onPortDisconnect(connection);
+      connection.onMessage?.addListener?.(activePortMessageListener);
+      connection.onDisconnect?.addListener?.(activePortDisconnectListener);
+      state.portConnected = Boolean(isReady);
+      if (isReady) return Promise.resolve(true);
+
+      let requestId;
+      try {
+        requestId = idFactory();
+      } catch {
+        detachPort(connection);
+        state.portConnected = false;
+        return Promise.resolve(false);
+      }
+      let resolveHandshake;
+      const promise = new Promise((resolve) => { resolveHandshake = resolve; });
+      handshake = { port: connection, requestId, resolve: resolveHandshake, timer: null, promise };
+      const pending = handshake;
+      try {
+        connection.postMessage({ type: 'PING', requestId });
+      } catch {
+        if (handshake === pending) {
+          detachPort(connection);
+          settleHandshake(false);
+        }
+        return promise;
+      }
+      if (handshake === pending) {
+        pending.timer = setTimeout(() => {
+          if (handshake !== pending) return;
+          detachPort(connection);
+          settleHandshake(false);
+        }, 400);
+      }
+      return promise;
+    }
+
     const onOpenRequest = async (event) => {
       const requestId = event?.detail?.requestId;
       if (typeof requestId !== 'string' || !requestId.trim()) return;
@@ -1013,8 +1124,7 @@
         // Page acknowledgements are best-effort; the panel remains usable.
       }
     };
-    port?.onMessage?.addListener?.(onMessage);
-    port?.onDisconnect?.addListener?.(onPortDisconnect);
+    setPort(port);
     listen(doc, PAGE_EVENTS.open, onOpenRequest);
     listen(close, 'click', closePanel);
     listen(backdrop, 'click', (event) => {
@@ -1054,8 +1164,10 @@
       state.operationId = null;
       setAlert('');
       for (const remove of listenerDisposers.splice(0)) remove();
-      port?.onMessage?.removeListener?.(onMessage);
-      port?.onDisconnect?.removeListener?.(onPortDisconnect);
+      const portToDisconnect = activePort;
+      if (handshake) settleHandshake(false);
+      detachPort(portToDisconnect);
+      portToDisconnect?.disconnect?.();
       if (host.parentNode) host.parentNode.removeChild(host);
     }
 
@@ -1077,6 +1189,7 @@
       startBatch,
       onMessage,
       imageResponder,
+      setPort,
       dispose,
     };
   }
@@ -1098,6 +1211,26 @@
     let ui = null;
     let observer = null;
     let disconnected = false;
+    let reconnectPromise = null;
+    const connectPortFactory = typeof options.connectPort === 'function' ? options.connectPort : connectPort;
+
+    function reconnect() {
+      if (disconnected || !ui || ui.state.disposed) return Promise.resolve(false);
+      if (ui.state.portConnected) return Promise.resolve(true);
+      if (reconnectPromise) return reconnectPromise;
+      reconnectPromise = Promise.resolve()
+        .then(() => {
+          if (disconnected || !ui || ui.state.disposed) return null;
+          return connectPortFactory();
+        })
+        .then((nextPort) => {
+          if (disconnected || ui.state.disposed || !nextPort) return false;
+          return ui.setPort?.(nextPort, { ready: false }) || false;
+        })
+        .catch(() => false)
+        .finally(() => { reconnectPromise = null; });
+      return reconnectPromise;
+    }
 
     function syncMount() {
       if (disconnected) return;
@@ -1108,10 +1241,14 @@
       }
       if (!ui) {
         if (!portResolved) {
-          port = connectPort();
+          try {
+            port = connectPortFactory();
+          } catch {
+            port = null;
+          }
           portResolved = true;
         }
-        ui = createUi({ document: doc, anchor, port });
+        ui = createUi({ document: doc, anchor, port, reconnectPort: reconnect, CustomEventCtor: options.CustomEventCtor });
       } else {
         ui.setAnchor?.(anchor);
         mountHostAfterAnchor(ui.host, anchor);
@@ -1134,7 +1271,6 @@
         disconnected = true;
         observer?.disconnect?.();
         ui?.dispose?.();
-        port?.disconnect?.();
       },
     };
   }

@@ -245,6 +245,10 @@ export function registerServiceWorker(chromeApi = globalThis.chrome, adapterFact
 
     const onMessage = (message) => {
       if (disposed || !message || typeof message.type !== 'string') return;
+      if (message.type === 'PING') {
+        if (nonEmpty(message.requestId)) send({ type: 'PONG', requestId: message.requestId });
+        return;
+      }
       if (message.type === 'CHECK_AUTH') {
         return enqueue(message, async () => {
           if (!nonEmpty(message.requestId)) throw invalid('鉴权请求 ID 无效');

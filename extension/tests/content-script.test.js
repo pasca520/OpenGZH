@@ -121,6 +121,37 @@ class FakeDocument extends FakeEventTarget {
 
 const allPlatforms = ['weixin', 'zhihu', 'juejin', 'woshipm'];
 
+function makePort({ autoPong = false } = {}) {
+  const messages = [];
+  const messageListeners = new Set();
+  const disconnectListeners = new Set();
+  const port = {
+    name: 'opengzh-distribution-v1',
+    messages,
+    onMessage: {
+      addListener: (listener) => messageListeners.add(listener),
+      removeListener: (listener) => messageListeners.delete(listener),
+    },
+    onDisconnect: {
+      addListener: (listener) => disconnectListeners.add(listener),
+      removeListener: (listener) => disconnectListeners.delete(listener),
+    },
+    postMessage(message) {
+      messages.push(message);
+      if (autoPong && message?.type === 'PING') {
+        queueMicrotask(() => port.receive({ type: 'PONG', requestId: message.requestId }));
+      }
+    },
+    receive(message) {
+      for (const listener of [...messageListeners]) listener(message);
+    },
+    disconnect() {
+      for (const listener of [...disconnectListeners]) listener();
+    },
+  };
+  return port;
+}
+
 function snapshot(overrides = {}) {
   return {
     schemaVersion: 1,
@@ -613,6 +644,110 @@ describe('content script distribution open protocol', () => {
     expect(ui.state.selected).toEqual(selectedByUser);
     expect(ui.rows.get('zhihu').checkbox.checked).toBe(false);
     expect(messages).toEqual([{ type: 'CHECK_AUTH', requestId: expect.any(String), platformIds: selectedByUser }]);
+  });
+
+  it('reconnects after the original port disconnects before opening and acknowledging', async () => {
+    const { boot } = loadTestApi();
+    const { doc } = makeUiDom();
+    const oldPort = makePort();
+    const newPort = makePort({ autoPong: true });
+    const connectPort = vi.fn(() => newPort);
+    const controller = boot({ document: doc, port: oldPort, connectPort, CustomEventCtor: FakeEvent });
+    await controller.ui.ready;
+    oldPort.disconnect();
+    doc.dispatchEvent(new FakeEvent('opengzh:distribution:open', { detail: { requestId: 'reconnect-1' } }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(connectPort).toHaveBeenCalledTimes(1);
+    expect(newPort.messages.some((message) => message.type === 'PING')).toBe(true);
+    expect(doc.events.at(-1)).toMatchObject({ type: 'opengzh:distribution:opened', detail: { requestId: 'reconnect-1' } });
+    expect(controller.ui.backdrop.hidden).toBe(false);
+    controller.disconnect();
+  });
+
+  it('waits for the new port PONG before opening or acknowledging a request', async () => {
+    const { boot } = loadTestApi();
+    const { doc } = makeUiDom();
+    const oldPort = makePort();
+    const newPort = makePort();
+    const controller = boot({ document: doc, port: oldPort, connectPort: () => newPort, CustomEventCtor: FakeEvent });
+    await controller.ui.ready;
+    oldPort.disconnect();
+    doc.dispatchEvent(new FakeEvent('opengzh:distribution:open', { detail: { requestId: 'reconnect-wait' } }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(newPort.messages.find((message) => message.type === 'PING')).toBeTruthy();
+    expect(controller.ui.backdrop.hidden).toBe(true);
+    expect(doc.events.some((event) => event.type === 'opengzh:distribution:opened')).toBe(false);
+    const ping = newPort.messages.find((message) => message.type === 'PING');
+    newPort.receive({ type: 'PONG', requestId: ping.requestId });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(controller.ui.backdrop.hidden).toBe(false);
+    expect(doc.events.at(-1)).toMatchObject({ type: 'opengzh:distribution:opened', detail: { requestId: 'reconnect-wait' } });
+    controller.disconnect();
+  });
+
+  it('does not acknowledge when reconnecting cannot connect or never becomes ready', async () => {
+    const { boot } = loadTestApi();
+    const { doc } = makeUiDom();
+    const oldPort = makePort();
+    const controller = boot({ document: doc, port: oldPort, connectPort: () => null, CustomEventCtor: FakeEvent });
+    await controller.ui.ready;
+    oldPort.disconnect();
+    doc.dispatchEvent(new FakeEvent('opengzh:distribution:open', { detail: { requestId: 'reconnect-fail' } }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(doc.events.some((event) => event.type === 'opengzh:distribution:opened')).toBe(false);
+    expect(controller.ui.backdrop.hidden).toBe(true);
+    controller.disconnect();
+  });
+
+  it('ignores old-port messages and disconnects, and deduplicates concurrent reconnects', async () => {
+    const { boot } = loadTestApi();
+    const { doc } = makeUiDom();
+    const oldPort = makePort();
+    const newPort = makePort({ autoPong: true });
+    const connectPort = vi.fn(() => newPort);
+    const controller = boot({ document: doc, port: oldPort, connectPort, CustomEventCtor: FakeEvent });
+    await controller.ui.ready;
+    oldPort.disconnect();
+    doc.dispatchEvent(new FakeEvent('opengzh:distribution:open', { detail: { requestId: 'reconnect-a' } }));
+    doc.dispatchEvent(new FakeEvent('opengzh:distribution:open', { detail: { requestId: 'reconnect-b' } }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(connectPort).toHaveBeenCalledTimes(1);
+    expect(doc.events.filter((event) => event.type === 'opengzh:distribution:opened').map((event) => event.detail.requestId)).toEqual(['reconnect-a', 'reconnect-b']);
+    oldPort.receive({ type: 'FATAL_ERROR', message: 'stale old port error' });
+    oldPort.disconnect();
+    expect(controller.ui.state.portConnected).toBe(true);
+    expect(controller.ui.backdrop.hidden).toBe(false);
+    controller.disconnect();
+  });
+
+  it('does not reconnect after the UI is disposed', async () => {
+    const { boot } = loadTestApi();
+    const { doc } = makeUiDom();
+    const oldPort = makePort();
+    const connectPort = vi.fn(() => makePort({ autoPong: true }));
+    const controller = boot({ document: doc, port: oldPort, connectPort, CustomEventCtor: FakeEvent });
+    await controller.ui.ready;
+    oldPort.disconnect();
+    controller.disconnect();
+    doc.dispatchEvent(new FakeEvent('opengzh:distribution:open', { detail: { requestId: 'reconnect-disposed' } }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(connectPort).not.toHaveBeenCalled();
+    expect(doc.events.some((event) => event.type === 'opengzh:distribution:opened')).toBe(false);
+  });
+
+  it('does not start a queued reconnect after disposal', async () => {
+    const { boot } = loadTestApi();
+    const { doc } = makeUiDom();
+    const oldPort = makePort();
+    const connectPort = vi.fn(() => makePort({ autoPong: true }));
+    const controller = boot({ document: doc, port: oldPort, connectPort, CustomEventCtor: FakeEvent });
+    await controller.ui.ready;
+    oldPort.disconnect();
+    doc.dispatchEvent(new FakeEvent('opengzh:distribution:open', { detail: { requestId: 'reconnect-queued-dispose' } }));
+    controller.disconnect();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(connectPort).not.toHaveBeenCalled();
+    expect(doc.events.some((event) => event.type === 'opengzh:distribution:opened')).toBe(false);
   });
 });
 

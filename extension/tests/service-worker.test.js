@@ -24,6 +24,22 @@ const article = {
 };
 
 describe('service worker boundary', () => {
+  it('answers a valid reconnect ping with the same request id', async () => {
+    const onConnect = { addListener: vi.fn() };
+    const port = portFixture();
+    registerServiceWorker({
+      runtime: { onConnect },
+      permissions: { contains: vi.fn(async () => true) },
+      storage: { session: { set: vi.fn(async () => {}) } },
+      tabs: { create: vi.fn(), update: vi.fn() },
+    }, {});
+    onConnect.addListener.mock.calls[0][0](port);
+
+    await port.receive({ type: 'PING', requestId: 'reconnect-1' });
+
+    expect(port.messages).toEqual([{ type: 'PONG', requestId: 'reconnect-1' }]);
+  });
+
   it('registers exactly the four approved adapters in fixed order', () => {
     expect(Object.keys(ADAPTER_FACTORIES)).toEqual(['weixin', 'zhihu', 'juejin', 'woshipm']);
     expect(Object.isFrozen(ADAPTER_FACTORIES)).toBe(true);
