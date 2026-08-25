@@ -669,6 +669,7 @@ describe('content script distribution open protocol', () => {
     const { doc } = makeUiDom();
     const oldPort = makePort();
     const newPort = makePort();
+    const disconnect = vi.spyOn(newPort, 'disconnect');
     const controller = boot({ document: doc, port: oldPort, connectPort: () => newPort, CustomEventCtor: FakeEvent });
     await controller.ui.ready;
     oldPort.disconnect();
@@ -680,9 +681,52 @@ describe('content script distribution open protocol', () => {
     const ping = newPort.messages.find((message) => message.type === 'PING');
     newPort.receive({ type: 'PONG', requestId: ping.requestId });
     await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(disconnect).not.toHaveBeenCalled();
     expect(controller.ui.backdrop.hidden).toBe(false);
     expect(doc.events.at(-1)).toMatchObject({ type: 'opengzh:distribution:opened', detail: { requestId: 'reconnect-wait' } });
     controller.disconnect();
+  });
+
+  it('retires a handshake port on timeout and ignores a late PONG', async () => {
+    vi.useFakeTimers();
+    const { boot } = loadTestApi();
+    const { doc } = makeUiDom();
+    const oldPort = makePort();
+    const newPort = makePort();
+    const disconnect = vi.spyOn(newPort, 'disconnect');
+    const controller = boot({ document: doc, port: oldPort, connectPort: () => newPort, CustomEventCtor: FakeEvent });
+    await controller.ui.ready;
+    oldPort.disconnect();
+    doc.dispatchEvent(new FakeEvent('opengzh:distribution:open', { detail: { requestId: 'reconnect-timeout' } }));
+    await vi.advanceTimersByTimeAsync(0);
+    const ping = newPort.messages.find((message) => message.type === 'PING');
+    expect(ping).toBeTruthy();
+    await vi.advanceTimersByTimeAsync(401);
+    expect(disconnect).toHaveBeenCalledTimes(1);
+    expect(controller.ui.state.portConnected).toBe(false);
+    newPort.receive({ type: 'PONG', requestId: ping.requestId });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(controller.ui.backdrop.hidden).toBe(true);
+    expect(doc.events.some((event) => event.type === 'opengzh:distribution:opened')).toBe(false);
+    controller.disconnect();
+  });
+
+  it('retires a pending handshake port when disposed', async () => {
+    const { boot } = loadTestApi();
+    const { doc } = makeUiDom();
+    const oldPort = makePort();
+    const newPort = makePort();
+    const disconnect = vi.spyOn(newPort, 'disconnect');
+    const controller = boot({ document: doc, port: oldPort, connectPort: () => newPort, CustomEventCtor: FakeEvent });
+    await controller.ui.ready;
+    oldPort.disconnect();
+    doc.dispatchEvent(new FakeEvent('opengzh:distribution:open', { detail: { requestId: 'reconnect-dispose-handshake' } }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    controller.disconnect();
+    expect(disconnect).toHaveBeenCalledTimes(1);
+    newPort.receive({ type: 'PONG', requestId: newPort.messages.find((message) => message.type === 'PING')?.requestId });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(doc.events.some((event) => event.type === 'opengzh:distribution:opened')).toBe(false);
   });
 
   it('does not acknowledge when reconnecting cannot connect or never becomes ready', async () => {
@@ -748,6 +792,29 @@ describe('content script distribution open protocol', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(connectPort).not.toHaveBeenCalled();
     expect(doc.events.some((event) => event.type === 'opengzh:distribution:opened')).toBe(false);
+  });
+
+  it('clears pending auth on disconnect so reconnect sends a fresh auth request', async () => {
+    const { boot } = loadTestApi();
+    const { doc } = makeUiDom();
+    const oldPort = makePort();
+    const newPort = makePort({ autoPong: true });
+    const controller = boot({ document: doc, port: oldPort, connectPort: () => newPort, CustomEventCtor: FakeEvent });
+    await controller.ui.ready;
+    doc.dispatchEvent(new FakeEvent('opengzh:distribution:open', { detail: { requestId: 'auth-before-disconnect' } }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const firstAuth = oldPort.messages.find((message) => message.type === 'CHECK_AUTH');
+    expect(firstAuth).toBeTruthy();
+    oldPort.disconnect();
+    doc.dispatchEvent(new FakeEvent('opengzh:distribution:open', { detail: { requestId: 'auth-after-reconnect' } }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const secondAuth = newPort.messages.find((message) => message.type === 'CHECK_AUTH');
+    expect(secondAuth).toMatchObject({ type: 'CHECK_AUTH', requestId: expect.any(String) });
+    expect(secondAuth.requestId).not.toBe(firstAuth.requestId);
+    expect(controller.ui.rows.get('weixin').statusKey).toBe('checking-auth');
+    controller.ui.onMessage({ type: 'AUTH_RESULT', requestId: firstAuth.requestId, platformId: 'weixin', authenticated: false });
+    expect(controller.ui.rows.get('weixin').statusKey).toBe('checking-auth');
+    controller.disconnect();
   });
 });
 

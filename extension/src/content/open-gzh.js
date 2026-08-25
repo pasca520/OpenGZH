@@ -1040,6 +1040,16 @@
       }
     }
 
+    function retirePort(connection = activePort) {
+      if (!connection) return;
+      detachPort(connection);
+      try {
+        connection.disconnect?.();
+      } catch {
+        // A failed handshake port is already unusable.
+      }
+    }
+
     function onPortMessage(connection, message) {
       if (state.disposed || activePort !== connection) return;
       if (message?.type === 'PONG') {
@@ -1054,6 +1064,7 @@
       state.portConnected = false;
       detachPort(connection);
       if (handshake?.port === connection) settleHandshake(false);
+      invalidateAuth();
       finishTask('无法连接同步服务', { clearRetry: true });
     }
 
@@ -1071,7 +1082,7 @@
         if (handshake) return handshake.promise;
       }
       if (handshake) settleHandshake(false);
-      if (activePort) detachPort();
+      if (activePort) retirePort();
       activePort = nextPort;
       imageResponder.setPort(nextPort);
       const connection = nextPort;
@@ -1086,7 +1097,7 @@
       try {
         requestId = idFactory();
       } catch {
-        detachPort(connection);
+        retirePort(connection);
         state.portConnected = false;
         return Promise.resolve(false);
       }
@@ -1098,7 +1109,7 @@
         connection.postMessage({ type: 'PING', requestId });
       } catch {
         if (handshake === pending) {
-          detachPort(connection);
+          retirePort(connection);
           settleHandshake(false);
         }
         return promise;
@@ -1106,7 +1117,7 @@
       if (handshake === pending) {
         pending.timer = setTimeout(() => {
           if (handshake !== pending) return;
-          detachPort(connection);
+          retirePort(connection);
           settleHandshake(false);
         }, 400);
       }
@@ -1166,8 +1177,7 @@
       for (const remove of listenerDisposers.splice(0)) remove();
       const portToDisconnect = activePort;
       if (handshake) settleHandshake(false);
-      detachPort(portToDisconnect);
-      portToDisconnect?.disconnect?.();
+      retirePort(portToDisconnect);
       if (host.parentNode) host.parentNode.removeChild(host);
     }
 
