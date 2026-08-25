@@ -16,6 +16,8 @@
     request: 'opengzh:distribution:request',
     ready: 'opengzh:distribution:ready',
     error: 'opengzh:distribution:error',
+    open: 'opengzh:distribution:open',
+    opened: 'opengzh:distribution:opened',
   });
   const IMAGE_READ_FAILED = 'IMAGE_READ_FAILED';
   const ARTICLE_INVALID = 'ARTICLE_INVALID';
@@ -529,7 +531,7 @@
 
   function createUi({
     document: doc = root.document,
-    anchor = doc?.querySelector?.('[data-opengzh-copy-button]'),
+    anchor = doc?.querySelector?.('[data-opengzh-distribution-button]'),
     port,
     storage = defaultStorage(),
     snapshotRequest = requestSnapshot,
@@ -538,6 +540,7 @@
     operationIdFactory = randomId,
     AbortControllerCtor = root.AbortController,
     windowObject = root,
+    CustomEventCtor = defaultEventCtor(),
   } = {}) {
     if (!doc || !anchor || !anchor.parentNode) return null;
     const existingHost = doc.querySelector?.('[data-opengzh-extension-host]');
@@ -558,6 +561,8 @@
       authCompleted: new Set(),
       operationId: null,
       draftUrls: new Map(),
+      portConnected: Boolean(port),
+      disposed: false,
     };
     Object.defineProperties(state, {
       activeTaskId: { get: () => state.taskId, set: (value) => { state.taskId = value; } },
@@ -571,12 +576,9 @@
 
     const shell = doc.createElement('div');
     shell.className = 'opengzh-extension-shell';
-    const trigger = textElement(doc, 'button', '同步到平台', 'opengzh-trigger');
-    trigger.type = 'button';
-    trigger.setAttribute('aria-haspopup', 'dialog');
-    trigger.setAttribute('aria-expanded', 'false');
     const panel = doc.createElement('section');
     panel.className = 'opengzh-panel';
+    panel.hidden = true;
     panel.setAttribute('role', 'dialog');
     panel.setAttribute('aria-modal', 'true');
     panel.setAttribute('aria-label', 'OpenGZH');
@@ -659,7 +661,7 @@
     backdrop.hidden = true;
     panel.append(close, title, subtitle, rows, alert, start);
     backdrop.append(panel);
-    shell.append(trigger, backdrop);
+    shell.append(backdrop);
     const style = doc.createElement('style');
     style.textContent = `
       :host { all: initial; font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; color: #15233f; }
@@ -667,7 +669,6 @@
       button, a { font: inherit; }
       button { cursor: pointer; }
       button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
-      .opengzh-trigger { border: 1px solid #315efb; border-radius: 8px; padding: 8px 12px; background: #315efb; color: #fff; }
       .opengzh-backdrop { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(15,23,42,.34); }
       .opengzh-panel { width: min(520px, calc(100vw - 32px)); max-height: min(680px, calc(100vh - 32px)); overflow: auto; box-sizing: border-box; padding: 20px; border-radius: 16px; background: #fff; box-shadow: 0 18px 60px rgba(15,23,42,.24); }
       .opengzh-platforms { display: grid; gap: 8px; }
@@ -711,6 +712,7 @@
     function post(message) {
       if (state.disposed) return false;
       if (!port || typeof port.postMessage !== 'function') {
+        state.portConnected = false;
         finishTask('无法连接同步服务');
         return false;
       }
@@ -718,6 +720,7 @@
         port.postMessage(message);
         return true;
       } catch {
+        state.portConnected = false;
         finishTask('无法连接同步服务');
         return false;
       }
@@ -882,18 +885,20 @@
 
     async function openPanel() {
       await ready;
-      if (state.disposed) return;
+      if (state.disposed || !state.portConnected) return false;
       panel.hidden = false;
       backdrop.hidden = false;
-      trigger.setAttribute('aria-expanded', 'true');
+      anchor.setAttribute('aria-expanded', 'true');
       close.focus();
       if (!state.busy) sendCheckAuth();
+      return true;
     }
 
     function closePanel() {
       backdrop.hidden = true;
-      trigger.setAttribute('aria-expanded', 'false');
-      trigger.focus();
+      panel.hidden = true;
+      anchor.setAttribute('aria-expanded', 'false');
+      anchor.focus();
     }
 
     function focusableControls() {
@@ -977,10 +982,24 @@
       }
     }
 
-    const onPortDisconnect = () => finishTask('无法连接同步服务', { clearRetry: true });
+    const onPortDisconnect = () => {
+      state.portConnected = false;
+      finishTask('无法连接同步服务', { clearRetry: true });
+    };
+    const onOpenRequest = async (event) => {
+      const requestId = event?.detail?.requestId;
+      if (typeof requestId !== 'string' || !requestId.trim()) return;
+      const opened = await openPanel();
+      if (!opened || state.disposed || !state.portConnected) return;
+      try {
+        doc.dispatchEvent(new CustomEventCtor(PAGE_EVENTS.opened, { detail: { requestId } }));
+      } catch {
+        // Page acknowledgements are best-effort; the panel remains usable.
+      }
+    };
     port?.onMessage?.addListener?.(onMessage);
     port?.onDisconnect?.addListener?.(onPortDisconnect);
-    listen(trigger, 'click', openPanel);
+    listen(doc, PAGE_EVENTS.open, onOpenRequest);
     listen(close, 'click', closePanel);
     listen(backdrop, 'click', (event) => {
       if (event.target === backdrop) closePanel();
@@ -1021,7 +1040,7 @@
       host,
       shadow,
       state,
-      trigger,
+      anchor,
       panel,
       backdrop,
       alert,
@@ -1058,7 +1077,7 @@
 
     function syncMount() {
       if (disconnected) return;
-      const anchor = doc.querySelector?.('[data-opengzh-copy-button]');
+      const anchor = doc.querySelector?.('[data-opengzh-distribution-button]');
       if (!anchor) {
         if (ui) ui.host.hidden = true;
         return;

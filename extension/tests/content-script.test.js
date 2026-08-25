@@ -113,7 +113,7 @@ class FakeDocument extends FakeEventTarget {
   }
 
   querySelector(selector) {
-    if (selector === '[data-opengzh-copy-button]') return this.anchor?.parentNode ? this.anchor : null;
+    if (selector === '[data-opengzh-distribution-button]') return this.anchor?.parentNode ? this.anchor : null;
     if (selector === '[data-opengzh-extension-host]') return this.anchor?.parentNode?.children.find((child) => child.dataset.opengzhExtensionHost !== undefined) || null;
     return null;
   }
@@ -346,10 +346,13 @@ describe('content script source contract', () => {
     expect(source).toContain('opengzh:distribution:request');
     expect(source).toContain('opengzh:distribution:ready');
     expect(source).toContain('opengzh:distribution:error');
+    expect(source).toContain('opengzh:distribution:open');
+    expect(source).toContain('opengzh:distribution:opened');
     expect(source).toContain('data-opengzh-extension-host');
     expect(source).toContain('platform-icon');
     expect(source).toContain('保存草稿并打开');
-    expect(source).toContain('同步到平台');
+    expect(source).not.toContain('同步到平台');
+    expect(source).not.toContain('opengzh-trigger');
     expect(source).toContain('微信公众号、知乎、掘金、人人都是产品经理文章同步助手');
     expect(source).not.toContain('chrome.permissions');
     expect(source).not.toContain('permissions.request');
@@ -363,7 +366,7 @@ describe('content script shadow DOM UI', () => {
     const { createUi } = loadTestApi();
     const parent = new FakeElement('div');
     const anchor = new FakeElement('button');
-    anchor.dataset.opengzhCopyButton = '';
+    anchor.dataset.opengzhDistributionButton = '';
     parent.append(anchor);
     const doc = new FakeDocument(anchor);
     const messages = [];
@@ -376,6 +379,9 @@ describe('content script shadow DOM UI', () => {
     expect(parent.children).toHaveLength(2);
     expect(parent.children[1]).toBe(ui.host);
     expect(ui.host.shadowRoot).toBe(ui.shadow);
+    expect(ui.trigger).toBeUndefined();
+    expect(ui.shadow.children.find((child) => child.tagName === 'STYLE').textContent).not.toContain('opengzh-trigger');
+    expect(ui.shadow.children.find((child) => child.className === 'opengzh-extension-shell').children).toHaveLength(1);
     expect(ui.rows.get('weixin').row.children[1].className).toBe('platform-icon');
     expect(ui.rows.get('weixin').row.children[1].textContent).toBe('微');
     expect(ui.rows.get('weixin').row.children[1].attributes.get('aria-hidden')).toBe('true');
@@ -399,6 +405,97 @@ describe('content script shadow DOM UI', () => {
     ui.state.retryTaskId = 'task-1';
     ui.rows.get('weixin').retry.dispatchEvent(new FakeEvent('click'));
     expect(messages.at(-1)).toMatchObject({ type: 'RETRY_PLATFORM', taskId: 'task-1', operationId: expect.any(String), platformId: 'weixin' });
+  });
+});
+
+describe('content script distribution open protocol', () => {
+  it('opens once for a valid page request and acknowledges the same request id', async () => {
+    const { createUi, PAGE_EVENTS } = loadTestApi();
+    const { doc, anchor, parent } = makeUiDom();
+    const messages = [];
+    const port = { postMessage: (message) => messages.push(message), onMessage: { addListener: vi.fn() } };
+    const ui = createUi({
+      document: doc,
+      anchor,
+      port,
+      storage: { get: async () => ({}), set: async () => {}, remove: async () => {} },
+      CustomEventCtor: FakeEvent,
+    });
+    await ui.ready;
+    doc.dispatchEvent(new FakeEvent(PAGE_EVENTS.open, { detail: { requestId: 'page-request-1' } }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(ui.backdrop.hidden).toBe(false);
+    expect(anchor.attributes.get('aria-expanded')).toBe('true');
+    expect(doc.events.filter((event) => event.type === PAGE_EVENTS.opened)).toHaveLength(1);
+    expect(doc.events.at(-1)).toMatchObject({ type: PAGE_EVENTS.opened, detail: { requestId: 'page-request-1' } });
+    const host = ui.host;
+    doc.dispatchEvent(new FakeEvent(PAGE_EVENTS.open, { detail: { requestId: 'page-request-2' } }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(doc.events.filter((event) => event.type === PAGE_EVENTS.opened).map((event) => event.detail.requestId)).toEqual(['page-request-1', 'page-request-2']);
+    expect(parent.children.filter((child) => child.dataset.opengzhExtensionHost !== undefined)).toEqual([host]);
+    expect(messages.filter((message) => message.type === 'CHECK_AUTH')).toHaveLength(1);
+  });
+
+  it('ignores invalid page requests and does not acknowledge without a connected port', async () => {
+    const { createUi, PAGE_EVENTS } = loadTestApi();
+    const invalidDom = makeUiDom();
+    const invalidUi = createUi({
+      document: invalidDom.doc,
+      anchor: invalidDom.anchor,
+      port: { postMessage: vi.fn(), onMessage: { addListener: vi.fn() } },
+      storage: { get: async () => ({}), set: async () => {}, remove: async () => {} },
+      CustomEventCtor: FakeEvent,
+    });
+    await invalidUi.ready;
+    for (const detail of [{ requestId: '' }, { requestId: '   ' }, {}, null]) {
+      invalidDom.doc.dispatchEvent(new FakeEvent(PAGE_EVENTS.open, { detail }));
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(invalidDom.doc.events.some((event) => event.type === PAGE_EVENTS.opened)).toBe(false);
+    expect(invalidUi.backdrop.hidden).toBe(true);
+
+    const disconnectedDom = makeUiDom();
+    const disconnectedUi = createUi({
+      document: disconnectedDom.doc,
+      anchor: disconnectedDom.anchor,
+      storage: { get: async () => ({}), set: async () => {}, remove: async () => {} },
+      CustomEventCtor: FakeEvent,
+    });
+    await disconnectedUi.ready;
+    expect(await disconnectedUi.openPanel()).toBe(false);
+    expect(disconnectedUi.panel.hidden).toBe(true);
+    disconnectedDom.doc.dispatchEvent(new FakeEvent(PAGE_EVENTS.open, { detail: { requestId: 'no-port' } }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(disconnectedDom.doc.events.some((event) => event.type === PAGE_EVENTS.opened)).toBe(false);
+    expect(disconnectedUi.backdrop.hidden).toBe(true);
+  });
+
+  it('stops acknowledging requests after port disconnect and removes the open listener on dispose', async () => {
+    const { createUi, PAGE_EVENTS } = loadTestApi();
+    const { doc, anchor } = makeUiDom();
+    let onDisconnect;
+    const port = {
+      postMessage: vi.fn(),
+      onMessage: { addListener: vi.fn(), removeListener: vi.fn() },
+      onDisconnect: { addListener: (listener) => { onDisconnect = listener; }, removeListener: vi.fn() },
+    };
+    const ui = createUi({
+      document: doc,
+      anchor,
+      port,
+      storage: { get: async () => ({}), set: async () => {}, remove: async () => {} },
+      CustomEventCtor: FakeEvent,
+    });
+    await ui.ready;
+    expect(doc.listenerCount(PAGE_EVENTS.open)).toBe(1);
+    onDisconnect();
+    expect(ui.state.portConnected).toBe(false);
+    doc.dispatchEvent(new FakeEvent(PAGE_EVENTS.open, { detail: { requestId: 'after-disconnect' } }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(doc.events.some((event) => event.type === PAGE_EVENTS.opened)).toBe(false);
+    expect(ui.backdrop.hidden).toBe(true);
+    ui.dispose();
+    expect(doc.listenerCount(PAGE_EVENTS.open)).toBe(0);
   });
 });
 
@@ -461,7 +558,7 @@ describe('locked Data URL validation', () => {
 function makeUiDom() {
   const parent = new FakeElement('div');
   const anchor = new FakeElement('button');
-  anchor.dataset.opengzhCopyButton = '';
+  anchor.dataset.opengzhDistributionButton = '';
   parent.append(anchor);
   const doc = new FakeDocument(anchor);
   return { doc, anchor, parent };
@@ -509,7 +606,7 @@ describe('async extension selection storage and selected-only auth', () => {
   });
 
   it('restores chrome.storage.local selection before opening and keeps empty selection transient', async () => {
-    const { createUi } = loadTestApi();
+    const { createUi, PAGE_EVENTS } = loadTestApi();
     const { doc, anchor } = makeUiDom();
     let resolveGet;
     const storage = {
@@ -519,10 +616,11 @@ describe('async extension selection storage and selected-only auth', () => {
     };
     const messages = [];
     const ui = createUi({ document: doc, anchor, storage, port: { postMessage: (message) => messages.push(message) } });
-    ui.trigger.dispatchEvent(new FakeEvent('click'));
+    doc.dispatchEvent(new FakeEvent(PAGE_EVENTS.open, { detail: { requestId: 'restore-selection' } }));
     expect(messages).toEqual([]);
     resolveGet({ 'opengzh.selectedPlatformIds': ['woshipm', 'weixin'] });
     await ui.ready;
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(messages[0]).toMatchObject({ type: 'CHECK_AUTH', requestId: expect.any(String), platformIds: ['weixin', 'woshipm'] });
     expect(ui.rows.get('zhihu').checkbox.checked).toBe(false);
     for (const id of ['weixin', 'woshipm']) {
@@ -1058,7 +1156,7 @@ describe('content script mount lifecycle', () => {
     const { boot } = loadTestApi();
     const placeholderParent = new FakeElement('div');
     const placeholderAnchor = new FakeElement('button');
-    placeholderAnchor.dataset.opengzhCopyButton = '';
+    placeholderAnchor.dataset.opengzhDistributionButton = '';
     placeholderParent.append(placeholderAnchor);
     const doc = new FakeDocument(placeholderAnchor);
     doc.anchor = null;
@@ -1077,7 +1175,7 @@ describe('content script mount lifecycle', () => {
     expect(controller.ui).toBe(null);
     const parent = new FakeElement('div');
     const anchor = new FakeElement('button');
-    anchor.dataset.opengzhCopyButton = '';
+    anchor.dataset.opengzhDistributionButton = '';
     parent.append(anchor);
     doc.anchor = anchor;
     Observer.instance.trigger();
@@ -1090,7 +1188,7 @@ describe('content script mount lifecycle', () => {
     const { boot } = loadTestApi();
     const oldParent = new FakeElement('div');
     const oldAnchor = new FakeElement('button');
-    oldAnchor.dataset.opengzhCopyButton = '';
+    oldAnchor.dataset.opengzhDistributionButton = '';
     oldParent.append(oldAnchor);
     const doc = new FakeDocument(oldAnchor);
     const port = {
@@ -1121,7 +1219,7 @@ describe('content script mount lifecycle', () => {
 
     const newParent = new FakeElement('div');
     const newAnchor = new FakeElement('button');
-    newAnchor.dataset.opengzhCopyButton = '';
+    newAnchor.dataset.opengzhDistributionButton = '';
     newParent.append(newAnchor);
     doc.anchor = newAnchor;
     Observer.instance.trigger();
@@ -1138,7 +1236,7 @@ describe('content script mount lifecycle', () => {
     expect(port.onDisconnect.removeListener).toHaveBeenCalledTimes(1);
     expect(port.disconnect).toHaveBeenCalledTimes(1);
     expect(host.parentNode).toBe(null);
-    expect(ui.trigger.listenerCount('click')).toBe(0);
+    expect(oldAnchor.listenerCount('click')).toBe(0);
   });
 });
 
@@ -1146,7 +1244,7 @@ describe('Shadow DOM CSS, accessibility, and focus contract', () => {
   it('has fixed responsive styles, accessible controls, live status, and focus restoration', async () => {
     const { createUi } = loadTestApi();
     const { doc, anchor } = makeUiDom();
-    const ui = createUi({ document: doc, anchor, storage: { get: async () => ({}), set: async () => {}, remove: async () => {} } });
+    const ui = createUi({ document: doc, anchor, storage: { get: async () => ({}), set: async () => {}, remove: async () => {} }, port: { postMessage: () => {} } });
     const style = ui.shadow.children.find((child) => child.tagName === 'STYLE');
     expect(style).toBeTruthy();
     expect(style.textContent).toContain('.opengzh-platform-details');
@@ -1154,7 +1252,7 @@ describe('Shadow DOM CSS, accessibility, and focus contract', () => {
     expect(style.textContent).toContain('grid-column: 2 / 4');
     expect(ui.rows.get('weixin').row.children[2].className).toBe('opengzh-platform-details');
     expect(ui.rows.get('weixin').row.children[3].className).toBe('opengzh-platform-actions');
-    expect(ui.trigger.attributes.get('aria-haspopup')).toBe('dialog');
+    expect(ui.anchor).toBe(anchor);
     expect(ui.panel.attributes.get('aria-labelledby')).toBe('opengzh-title');
     expect(ui.rows.get('weixin').checkbox.attributes.get('aria-label')).toContain('微信公众号');
     expect(ui.rows.get('weixin').login.attributes.get('aria-label')).toContain('微信公众号');
@@ -1163,15 +1261,19 @@ describe('Shadow DOM CSS, accessibility, and focus contract', () => {
     expect(ui.rows.get('weixin').status.attributes.get('aria-live')).toBe('polite');
     await ui.openPanel();
     expect(doc.activeElement).toBe(ui.close);
+    expect(anchor.attributes.get('aria-expanded')).toBe('true');
     ui.close.dispatchEvent(new FakeEvent('click'));
-    expect(doc.activeElement).toBe(ui.trigger);
+    expect(doc.activeElement).toBe(anchor);
+    expect(anchor.attributes.get('aria-expanded')).toBe('false');
     await ui.openPanel();
     doc.dispatchEvent(new FakeEvent('keydown', { detail: undefined }));
     doc.events.at(-1).key = 'Escape';
     doc.dispatchEvent(doc.events.at(-1));
-    expect(doc.activeElement).toBe(ui.trigger);
+    expect(doc.activeElement).toBe(anchor);
+    expect(anchor.attributes.get('aria-expanded')).toBe('false');
     await ui.openPanel();
     ui.backdrop.dispatchEvent(new FakeEvent('click'));
-    expect(doc.activeElement).toBe(ui.trigger);
+    expect(doc.activeElement).toBe(anchor);
+    expect(anchor.attributes.get('aria-expanded')).toBe('false');
   });
 });
