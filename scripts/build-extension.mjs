@@ -24,15 +24,23 @@ const REQUIRED_HOST_PERMISSIONS = Object.freeze([
   'https://*.volces.com/*',
   'https://www.woshipm.com/*',
 ]);
+const REQUIRED_ARCHIVE_ENTRIES = Object.freeze([
+  'manifest.json',
+  'src/content/open-gzh.js',
+  'src/background/service-worker.js',
+  'assets/icon-128.png',
+]);
 
 export function shouldCopyExtensionPath(relativePath) {
   if (typeof relativePath !== 'string') return false;
   const normalized = relativePath.replaceAll('\\', '/');
   const segments = normalized.toLowerCase().split('/');
   const lower = normalized.toLowerCase();
+  if (normalized.startsWith('/') || /^[a-z]:\//i.test(normalized) || segments.includes('..')) return false;
   return !segments.includes('tests')
     && !lower.endsWith('.map')
     && !lower.endsWith('.har')
+    && !lower.endsWith('.md')
     && !segments.includes('.ds_store')
     && !segments.includes('.env');
 }
@@ -40,6 +48,16 @@ export function shouldCopyExtensionPath(relativePath) {
 export function validateArchiveListing(listing) {
   for (const entry of String(listing).split(/\r?\n/).filter(Boolean)) {
     if (!shouldCopyExtensionPath(entry)) throw new Error(`压缩包包含禁止文件: ${entry}`);
+  }
+}
+
+export function validateArchiveRootListing(listing) {
+  const entries = new Set(String(listing).split(/\r?\n/).filter(Boolean));
+  for (const required of REQUIRED_ARCHIVE_ENTRIES) {
+    if (!entries.has(required)) throw new Error(`压缩包缺少根目录文件: ${required}`);
+  }
+  if ([...entries].some((entry) => entry === 'extension' || entry.startsWith('extension/'))) {
+    throw new Error('压缩包不得嵌套 extension 目录');
   }
 }
 
@@ -86,18 +104,11 @@ async function copyRuntime() {
 }
 
 function inspectArchive() {
-  const archivedManifest = JSON.parse(run('/usr/bin/unzip', ['-p', ARCHIVE_PATH, 'extension/manifest.json']));
-  validateExtensionManifest(archivedManifest);
   const listing = run('/usr/bin/unzip', ['-Z1', ARCHIVE_PATH]);
   validateArchiveListing(listing);
-  for (const required of [
-    'extension/manifest.json',
-    'extension/src/content/open-gzh.js',
-    'extension/src/background/service-worker.js',
-    'extension/assets/icon-128.png',
-  ]) {
-    if (!listing.split('\n').includes(required)) throw new Error(`压缩包缺少文件: ${required}`);
-  }
+  validateArchiveRootListing(listing);
+  const archivedManifest = JSON.parse(run('/usr/bin/unzip', ['-p', ARCHIVE_PATH, 'manifest.json']));
+  validateExtensionManifest(archivedManifest);
 }
 
 export async function buildExtension() {
@@ -106,7 +117,7 @@ export async function buildExtension() {
   await assertIcons();
   await copyRuntime();
   await rm(ARCHIVE_PATH, { force: true });
-  run('/usr/bin/zip', ['-X', '-r', path.basename(ARCHIVE_PATH), 'extension'], { cwd: DIST_DIR });
+  run('/usr/bin/zip', ['-X', '-r', ARCHIVE_PATH, 'manifest.json', 'assets', 'src'], { cwd: OUTPUT_DIR });
   inspectArchive();
   return ARCHIVE_PATH;
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   shouldCopyExtensionPath,
   validateArchiveListing,
+  validateArchiveRootListing,
   validateExtensionManifest,
 } from '../build-extension.mjs';
 
@@ -35,6 +36,8 @@ describe('extension build', () => {
     ['src\\tests\\nested\\file.js', false],
     ['src/background/service-worker.js.map', false],
     ['src\\background\\worker.js.map', false],
+    ['docs/README.md', false],
+    ['docs/README.MD', false],
     ['.DS_Store', false],
     ['assets\\.DS_Store', false],
     ['account.har', false],
@@ -43,6 +46,10 @@ describe('extension build', () => {
     ['assets\\.env\\secret', false],
     ['src/my.harbor', true],
     ['src/.envoy/config.js', true],
+    ['../outside.js', false],
+    ['..\\outside.js', false],
+    ['/absolute.js', false],
+    ['C:\\absolute.js', false],
   ])('filters %s', (path, expected) => {
     expect(shouldCopyExtensionPath(path)).toBe(expected);
   });
@@ -69,7 +76,24 @@ describe('extension build', () => {
     expect(() => validateArchiveListing('extension\\tests\\adapters\\bad.js\n')).toThrowError(/tests/);
     expect(() => validateArchiveListing('extension/src/.env\\secret\n')).toThrowError(/\.env/);
     expect(() => validateArchiveListing('extension/src/archive.HAR\n')).toThrowError(/archive.HAR/);
+    expect(() => validateArchiveListing('extension/docs/README.Md\n')).toThrowError(/README.Md/);
     expect(() => validateArchiveListing('extension/src/my.harbor\n')).not.toThrow();
     expect(() => validateArchiveListing('extension/src/.envoy/config.js\n')).not.toThrow();
+  });
+
+  it('requires runtime entries at the ZIP root', () => {
+    expect(() => validateArchiveRootListing([
+      'extension/manifest.json',
+      'extension/src/content/open-gzh.js',
+      'extension/src/background/service-worker.js',
+      'extension/assets/icon-128.png',
+    ].join('\n'))).toThrowError(/根目录|manifest/);
+
+    expect(() => validateArchiveRootListing([
+      'manifest.json',
+      'src/content/open-gzh.js',
+      'src/background/service-worker.js',
+      'assets/icon-128.png',
+    ].join('\n'))).not.toThrow();
   });
 });
