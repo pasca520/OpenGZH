@@ -556,6 +556,64 @@ describe('content script distribution open protocol', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(messages).toEqual([]);
   });
+
+  it('preserves a user selection made before delayed persisted selection restores', async () => {
+    const { createUi, PAGE_EVENTS } = loadTestApi();
+    const { doc, anchor } = makeUiDom();
+    let resolveSelection;
+    const messages = [];
+    const ui = createUi({
+      document: doc,
+      anchor,
+      port: { postMessage: (message) => messages.push(message), onMessage: { addListener: vi.fn() } },
+      storage: {
+        get: () => new Promise((resolve) => { resolveSelection = resolve; }),
+        set: async () => {},
+        remove: async () => {},
+      },
+      CustomEventCtor: FakeEvent,
+    });
+    doc.dispatchEvent(new FakeEvent(PAGE_EVENTS.open, { detail: { requestId: 'selection-race-success' } }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    ui.rows.get('weixin').checkbox.checked = false;
+    ui.rows.get('weixin').checkbox.dispatchEvent(new FakeEvent('change'));
+    const selectedByUser = allPlatforms.filter((platformId) => platformId !== 'weixin');
+    resolveSelection({ 'opengzh.selectedPlatformIds': ['weixin'] });
+    await ui.ready;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(ui.state.selected).toEqual(selectedByUser);
+    expect(ui.rows.get('weixin').checkbox.checked).toBe(false);
+    expect(messages).toEqual([{ type: 'CHECK_AUTH', requestId: expect.any(String), platformIds: selectedByUser }]);
+  });
+
+  it('preserves a user selection when delayed persisted selection restore fails', async () => {
+    const { createUi, PAGE_EVENTS } = loadTestApi();
+    const { doc, anchor } = makeUiDom();
+    let rejectSelection;
+    const messages = [];
+    const ui = createUi({
+      document: doc,
+      anchor,
+      port: { postMessage: (message) => messages.push(message), onMessage: { addListener: vi.fn() } },
+      storage: {
+        get: () => new Promise((resolve, reject) => { rejectSelection = reject; }),
+        set: async () => {},
+        remove: async () => {},
+      },
+      CustomEventCtor: FakeEvent,
+    });
+    doc.dispatchEvent(new FakeEvent(PAGE_EVENTS.open, { detail: { requestId: 'selection-race-failure' } }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    ui.rows.get('zhihu').checkbox.checked = false;
+    ui.rows.get('zhihu').checkbox.dispatchEvent(new FakeEvent('change'));
+    const selectedByUser = allPlatforms.filter((platformId) => platformId !== 'zhihu');
+    rejectSelection(new Error('storage unavailable'));
+    await ui.ready;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(ui.state.selected).toEqual(selectedByUser);
+    expect(ui.rows.get('zhihu').checkbox.checked).toBe(false);
+    expect(messages).toEqual([{ type: 'CHECK_AUTH', requestId: expect.any(String), platformIds: selectedByUser }]);
+  });
 });
 
 describe('locked distribution protocol integration', () => {

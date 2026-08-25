@@ -565,6 +565,7 @@
       portConnected: Boolean(port),
       disposed: false,
       panelOpen: false,
+      selectionRevision: 0,
     };
     Object.defineProperties(state, {
       activeTaskId: { get: () => state.taskId, set: (value) => { state.taskId = value; } },
@@ -639,6 +640,7 @@
       rowMap.set(platformId, { row, checkbox, status, login, retry, draft, canRetry: false, statusKey: 'unknown' });
       listen(checkbox, 'change', () => {
         if (state.busy) return;
+        state.selectionRevision += 1;
         invalidateAuth();
         state.selected = PLATFORM_IDS.filter((id) => rowMap.get(id).checkbox.checked);
         persistSelection(storage, state.selected).catch(() => setAlert('选择未保存'));
@@ -1025,10 +1027,13 @@
     listen(panel, 'keydown', onPanelKeydown);
     listen(start, 'click', startBatch);
     renderSelection();
+    const restoreRevision = state.selectionRevision;
     const ready = restoreSelection(storage).then((persisted) => {
+      if (state.selectionRevision !== restoreRevision) return;
       state.selected = normalizeSelection(persisted);
       renderSelection();
     }).catch(() => {
+      if (state.selectionRevision !== restoreRevision) return;
       state.selected = PLATFORM_IDS.slice();
       renderSelection();
     });
