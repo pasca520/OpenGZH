@@ -9,6 +9,7 @@ import {
 } from '../extension-bridge.js';
 
 const mainSource = readFileSync(fileURLToPath(new URL('../../main.js', import.meta.url)), 'utf8');
+const indexSource = readFileSync(fileURLToPath(new URL('../../../../index.html', import.meta.url)), 'utf8');
 
 afterEach(() => {
   vi.useRealTimers();
@@ -38,6 +39,23 @@ function createEventTarget() {
 function dispatchRequest(target, detail) {
   target.dispatchEvent({ type: PAGE_EVENTS.request, detail });
 }
+
+describe('website distribution entry', () => {
+  it('keeps a permanent distribution button wired to the extension bridge', () => {
+    expect(indexSource.match(/data-opengzh-distribution-button/g) || []).toHaveLength(1);
+    expect(indexSource).toContain('@click="openDistribution"');
+    expect(indexSource).toContain('同步到平台');
+    expect(mainSource.match(/const OPENGZH_EXTENSION_STORE_URL = '';/g) || []).toHaveLength(1);
+    expect(mainSource).toContain('requestDistributionOpen({');
+    expect(mainSource).toContain("toast.show('OpenGZH 插件即将上线 Chrome 商店', 'info',");
+
+    const setupStart = mainSource.indexOf('setup() {');
+    const setupReturnStart = mainSource.indexOf('    return {', setupStart);
+    const setupReturnEnd = mainSource.indexOf('\n    };', setupReturnStart);
+    const setupReturnBlock = mainSource.slice(setupReturnStart, setupReturnEnd);
+    expect(setupReturnBlock).toContain('openDistribution,');
+  });
+});
 
 describe('installDistributionBridge', () => {
   it('waits for the initial render before persisting and installing the bridge', () => {

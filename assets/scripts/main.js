@@ -32,7 +32,8 @@ import { prepareWechatContent, copyToWechat } from './export/clipboard-exporter.
 import { buildDistributionPackage } from './distribution/article-package.js';
 import {
   createDistributionBridgeLifecycle,
-  installDistributionBridge
+  installDistributionBridge,
+  requestDistributionOpen
 } from './distribution/extension-bridge.js';
 import { getCategorizedThemes, getStyleName, isRecommended, getStarredStyles, toggleStarStyle } from './ui/theme-manager.js';
 import { applyAppTheme, normalizeAppTheme, toggleAppTheme } from './ui/app-theme.js';
@@ -72,6 +73,7 @@ const { createApp, ref, reactive, watch, nextTick, onMounted, onBeforeUnmount, c
 
 const UNTITLED_PREFIX = '未命名文档';
 const CRASH_RECOVERY_KEY = 'opengzh-crash-recovery';
+const OPENGZH_EXTENSION_STORE_URL = '';
 
 const markdownInput = ref('');
 const renderedContent = ref('');
@@ -1463,6 +1465,13 @@ function resetToDefault() {
   resetCoverToDefault();
   persistDocumentState();
   toast.show('已恢复默认设置', 'info');
+}
+
+async function openDistribution() {
+  return requestDistributionOpen({
+    storeUrl: OPENGZH_EXTENSION_STORE_URL,
+    notifyUnavailable: () => toast.show('OpenGZH 插件即将上线 Chrome 商店', 'info', 4000)
+  });
 }
 
 async function doCopy() {
@@ -3016,6 +3025,7 @@ const app = createApp({
       renderMarkdown,
       toggleToc,
       scrollToTocHeading,
+      openDistribution,
       doCopy,
       onPaste,
       handleDrop,
