@@ -438,6 +438,45 @@ describe('content script shadow DOM UI', () => {
     ui.rows.get('weixin').retry.dispatchEvent(new FakeEvent('click'));
     expect(messages.at(-1)).toMatchObject({ type: 'RETRY_PLATFORM', taskId: 'task-1', operationId: expect.any(String), platformId: 'weixin' });
   });
+
+  it('shows only status-relevant row actions and disables the primary action without a selection', async () => {
+    const { createUi } = loadTestApi();
+    const { doc, anchor } = makeUiDom();
+    const messages = [];
+    const ui = createUi({
+      document: doc,
+      anchor,
+      storage: { get: async () => ({}), set: async () => {}, remove: async () => {} },
+      port: { postMessage: (message) => messages.push(message) },
+    });
+    await ui.ready;
+    await ui.openPanel();
+
+    const row = ui.rows.get('weixin');
+    expect(row.row.dataset.status).toBe('checking-auth');
+    expect(row.login.hidden).toBe(true);
+    expect(row.retry.hidden).toBe(true);
+
+    ui.onMessage({ type: 'AUTH_RESULT', requestId: messages.at(-1).requestId, platformId: 'weixin', authenticated: false });
+    expect(row.row.dataset.status).toBe('auth-required');
+    expect(row.login.hidden).toBe(false);
+    expect(row.retry.hidden).toBe(false);
+
+    ui.state.taskId = 'task';
+    ui.state.operationId = 'operation';
+    ui.state.busy = true;
+    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task', operationId: 'operation', platformId: 'weixin', status: 'failed', error: { message: '平台结构变化' } });
+    expect(row.login.hidden).toBe(true);
+    expect(row.retry.hidden).toBe(false);
+
+    ui.state.busy = false;
+    for (const platformId of allPlatforms) {
+      const platform = ui.rows.get(platformId);
+      platform.checkbox.checked = false;
+      platform.checkbox.dispatchEvent(new FakeEvent('change'));
+    }
+    expect(ui.start.disabled).toBe(true);
+  });
 });
 
 describe('content script distribution open protocol', () => {
@@ -1074,7 +1113,7 @@ describe('Task5 quality runtime contracts', () => {
     });
     expect(ui.rows.get('weixin').statusKey).toBe('failed');
     expect(ui.rows.get('weixin').status.textContent).toBe('平台响应已变化');
-    expect(ui.rows.get('weixin').login.hidden).toBe(false);
+    expect(ui.rows.get('weixin').login.hidden).toBe(true);
     expect(ui.rows.get('weixin').retry.hidden).toBe(false);
     expect(ui.state.authRequestId).toBe(null);
   });
@@ -1429,21 +1468,36 @@ describe('Task5 quality runtime contracts', () => {
   it('uses shadow activeElement to move between controls instead of resetting every Tab to close', async () => {
     const { createUi } = loadTestApi();
     const { doc, anchor } = makeUiDom();
+    const messages = [];
     const ui = createUi({
       document: doc,
       anchor,
       storage: { get: async () => ({}), set: async () => {}, remove: async () => {} },
-      port: { postMessage: () => {} },
+      port: { postMessage: (message) => messages.push(message) },
     });
     await ui.ready;
     await ui.openPanel();
     const checkbox = ui.rows.get('weixin').checkbox;
+    const nextCheckbox = ui.rows.get('zhihu').checkbox;
     const login = ui.rows.get('weixin').login;
     checkbox.focus();
     ui.shadow.activeElement = checkbox;
-    const forward = new FakeEvent('keydown', { key: 'Tab' });
-    ui.panel.dispatchEvent(forward);
-    expect(forward.defaultPrevented).toBe(true);
+    const checkingForward = new FakeEvent('keydown', { key: 'Tab' });
+    ui.panel.dispatchEvent(checkingForward);
+    expect(checkingForward.defaultPrevented).toBe(true);
+    expect(doc.activeElement).toBe(nextCheckbox);
+
+    ui.onMessage({
+      type: 'AUTH_RESULT',
+      requestId: messages.at(-1).requestId,
+      platformId: 'weixin',
+      authenticated: false,
+    });
+    checkbox.focus();
+    ui.shadow.activeElement = checkbox;
+    const actionableForward = new FakeEvent('keydown', { key: 'Tab' });
+    ui.panel.dispatchEvent(actionableForward);
+    expect(actionableForward.defaultPrevented).toBe(true);
     expect(doc.activeElement).toBe(login);
     ui.shadow.activeElement = login;
     const backward = new FakeEvent('keydown', { key: 'Tab', shiftKey: true });

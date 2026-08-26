@@ -613,6 +613,7 @@
       const row = doc.createElement('div');
       row.className = 'opengzh-platform-row';
       row.dataset.platformId = platformId;
+      row.dataset.status = 'unknown';
       const checkbox = doc.createElement('input');
       checkbox.type = 'checkbox';
       checkbox.checked = true;
@@ -630,9 +631,11 @@
       actions.className = 'opengzh-platform-actions';
       const login = textElement(doc, 'button', '登录', 'opengzh-login');
       login.type = 'button';
+      login.hidden = true;
       login.setAttribute('aria-label', `${PLATFORMS[platformId].name}登录`);
       const retry = textElement(doc, 'button', '重新检测', 'opengzh-retry');
       retry.type = 'button';
+      retry.hidden = true;
       retry.setAttribute('aria-label', `${PLATFORMS[platformId].name}重新检测`);
       const draft = textElement(doc, 'a', '打开草稿', 'opengzh-draft');
       draft.target = '_blank';
@@ -649,6 +652,7 @@
         state.selectionRevision += 1;
         invalidateAuth();
         state.selected = PLATFORM_IDS.filter((id) => rowMap.get(id).checkbox.checked);
+        setLocked(state.busy);
         persistSelection(storage, state.selected).catch(() => setAlert('选择未保存'));
       });
       listen(login, 'click', () => {
@@ -752,16 +756,19 @@
       for (const platformId of PLATFORM_IDS) rowMap.get(platformId).checkbox.checked = state.selected.includes(platformId);
     }
 
-    function updateRetryState(row) {
+    function updateRowPresentation(row) {
+      row.row.dataset.status = row.statusKey;
+      row.status.dataset.status = row.statusKey;
+      row.login.hidden = row.statusKey !== 'auth-required';
+      row.retry.hidden = !row.canRetry;
       row.retry.disabled = state.busy || !row.canRetry;
-      row.retry.hidden = row.statusKey === 'success';
     }
 
     function setLocked(locked) {
-      start.disabled = locked;
+      start.disabled = locked || !state.selected.length;
       for (const row of rowMap.values()) {
         row.checkbox.disabled = locked;
-        updateRetryState(row);
+        updateRowPresentation(row);
       }
     }
 
@@ -786,13 +793,11 @@
       row.statusKey = status;
       row.canRetry = status === 'failed' || status === 'auth-required';
       if (status !== 'success') clearDraft(row);
-      if (status === 'success') row.login.hidden = true;
-      if (status === 'auth-required' || status === 'failed' || status === 'checking-auth') row.login.hidden = false;
       if (status === 'unknown') {
         row.status.textContent = '请检查平台草稿箱';
         row.statusKey = 'unknown';
         row.canRetry = false;
-        updateRetryState(row);
+        updateRowPresentation(row);
         return;
       }
       const progress = message?.progress || message;
@@ -809,7 +814,7 @@
           row.status.textContent = '请检查平台草稿箱';
           row.statusKey = 'unknown';
           row.canRetry = false;
-          updateRetryState(row);
+          updateRowPresentation(row);
           return;
         }
         row.draft.href = draftUrl;
@@ -819,7 +824,7 @@
         const errorMessage = typeof message?.error === 'string' ? message.error : message?.error?.message;
         if (errorMessage) row.status.textContent = errorMessage;
       }
-      updateRetryState(row);
+      updateRowPresentation(row);
     }
 
     function setAuthStatus(platformId, authenticated) {
@@ -828,9 +833,8 @@
       row.statusKey = authenticated ? 'authenticated' : 'auth-required';
       row.canRetry = !authenticated;
       row.status.textContent = authenticated ? '已登录' : STATUS_LABELS['auth-required'];
-      row.login.hidden = authenticated;
       if (!authenticated) clearDraft(row);
-      updateRetryState(row);
+      updateRowPresentation(row);
     }
 
     function finishTask(message = '', { clearTask = true, clearRetry = false } = {}) {
@@ -1153,10 +1157,12 @@
       if (state.selectionRevision !== restoreRevision) return;
       state.selected = normalizeSelection(persisted);
       renderSelection();
+      setLocked(state.busy);
     }).catch(() => {
       if (state.selectionRevision !== restoreRevision) return;
       state.selected = PLATFORM_IDS.slice();
       renderSelection();
+      setLocked(state.busy);
     });
 
     let disposed = false;
