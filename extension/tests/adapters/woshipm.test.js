@@ -337,6 +337,21 @@ describe('Woshipm adapter', () => {
     expect(init.body.get('files')).toBeInstanceOf(Blob);
   });
 
+  it('uploads editor images whose filenames contain Chinese characters', async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(response(writingPage))
+      .mockResolvedValueOnce(response(JSON.stringify(profile)))
+      .mockResolvedValueOnce(response(JSON.stringify({ data: [{ url: 'https://image.woshipm.com/test.png' }] })));
+    const runtime = { fetch, withHeaderRules: withRules };
+    const adapter = createWoshipmAdapter();
+    const filename = '一个项目管理软件的诞生：状态机与流程编排.png';
+    await adapter.checkAuth(runtime);
+
+    await expect(adapter.uploadImage(runtime, new Blob(['png'], { type: 'image/png' }), filename))
+      .resolves.toBe('https://image.woshipm.com/test.png');
+    expect(fetch.mock.calls[2][1].body.get('name')).toBe(filename);
+  });
+
   it('requires an authenticated Blob and safe filename before any upload request', async () => {
     const adapter = createWoshipmAdapter();
     const fetch = vi.fn();

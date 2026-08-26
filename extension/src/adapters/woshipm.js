@@ -9,7 +9,7 @@ const SCRIPT_TYPES = new Set(['text/javascript', 'application/javascript', 'text
 const SAFE_TOKEN = /^[A-Za-z0-9._~+/=-]{1,4096}$/u;
 const SAFE_UID = /^[1-9]\d{0,18}$/u;
 const SAFE_TEXT = /^[^\u0000-\u001f\u007f<>]{1,512}$/u;
-const SAFE_FILENAME = /^(?!\.{1,2}$)[A-Za-z0-9][A-Za-z0-9._ -]{0,255}$/u;
+const SAFE_FILENAME = /^(?!\.{1,2}$)(?![. ])[^\u0000-\u001f\u007f<>:"/\\|?*]{1,256}$/u;
 const RULES = Object.freeze([{
   id: 4001,
   priority: 1,
