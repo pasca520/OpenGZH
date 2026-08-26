@@ -525,7 +525,19 @@ function topLevelObjectAssignments(script, pattern) {
 }
 
 function extractPageAuth(html) {
-  const result = { token: null, uid: null, sawUid: false, malformed: false };
+  const result = {
+    token: null,
+    uid: null,
+    sawUid: false,
+    loggedIn: null,
+    authUid: null,
+    malformed: false,
+  };
+  const setToken = (value) => {
+    const token = safeToken(value);
+    if (!token || result.token !== null) result.malformed = true;
+    else result.token = token;
+  };
   for (const block of readScriptBlocks(html)) {
     if (block.malformed) {
       result.malformed = true;
@@ -545,10 +557,30 @@ function extractPageAuth(html) {
       }
       const property = properties?.get('jltoken');
       if (!property) continue;
-      const token = property.type === 'string' ? safeToken(property.value) : null;
-      if (!token) result.malformed = true;
-      else if (result.token !== null) result.malformed = true;
-      else result.token = token;
+      if (property.type !== 'string') result.malformed = true;
+      else setToken(property.value);
+    }
+    for (const assignment of topLevelObjectAssignments(script, /(?:^|[;}])\s*var\s+PURE\s*=\s*\{/gu)) {
+      const properties = assignment.malformed ? null : parseObjectProperties(assignment.source);
+      const login = properties?.get('is_user_logged_in');
+      const token = properties?.get('jltoken');
+      const userId = properties?.get('user_id');
+      const loginValue = login?.type === 'string' || login?.type === 'bare' ? String(login.value) : null;
+      if (!properties || !['0', '1'].includes(loginValue) || result.loggedIn !== null) {
+        result.malformed = true;
+        continue;
+      }
+      result.loggedIn = loginValue === '1';
+      if (!result.loggedIn) {
+        if ((token?.value || '') !== '' || (userId?.value || '') !== '') result.malformed = true;
+        continue;
+      }
+      const uid = normalizeUid(userId?.type === 'string' || userId?.type === 'bare' ? userId.value : null);
+      if (token?.type !== 'string' || !uid) result.malformed = true;
+      else {
+        setToken(token.value);
+        result.authUid = uid;
+      }
     }
     for (const assignment of topLevelObjectAssignments(script, /(?:^|[;}])\s*var\s+userSettings\s*=\s*\{/giu)) {
       if (assignment.malformed) {
@@ -569,6 +601,7 @@ function extractPageAuth(html) {
       else result.uid = uid;
     }
   }
+  if (result.loggedIn === true && result.authUid !== result.uid) result.malformed = true;
   return result;
 }
 
@@ -633,6 +666,7 @@ export function createWoshipmAdapter() {
         try { html = await page.text(); } catch (_error) { throw networkError('人人登录页读取失败'); }
         const parsed = extractPageAuth(html);
         if (parsed.malformed) throw platformChanged('人人登录页认证结构已变化');
+        if (parsed.loggedIn === false) return { authenticated: false };
         if (!parsed.uid) {
           jltoken = '';
           return { authenticated: false };

@@ -5,6 +5,9 @@ import { PlatformError } from '../../src/core/platform-errors.js';
 
 const profile = JSON.parse(await readFile(new URL('../fixtures/woshipm-profile.json', import.meta.url), 'utf8'));
 const writingPage = '<script>window.settings={"jltoken":"test-jltoken"}; var userSettings={"url":"/","uid":"1585"};</script>';
+const currentWritingPage = `<script>
+  var PURE={is_user_logged_in:"1",user_id:"1585",jltoken:"current-jltoken"};
+</script><script>var userSettings={url:"/",uid:"1585"};</script>`;
 const withRules = (_rules, work) => work();
 const response = (body, init) => new Response(body, init);
 const redirect = (status = 302) => status === 0
@@ -20,6 +23,42 @@ describe('Woshipm adapter', () => {
     expect(result).toEqual({ authenticated: true, userId: '1585', username: '测试用户' });
     expect(JSON.stringify(result)).not.toContain('test-jltoken');
     expect(fetch.mock.calls[1][0]).toBe('https://www.woshipm.com/api2/user/profile?uid=1585');
+  });
+
+  it('extracts the current PURE auth shape and verifies the matching profile', async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(response(currentWritingPage))
+      .mockResolvedValueOnce(response(JSON.stringify(profile)));
+
+    const result = await createWoshipmAdapter().checkAuth({ fetch, withHeaderRules: withRules });
+
+    expect(result).toEqual({ authenticated: true, userId: '1585', username: '测试用户' });
+    expect(JSON.stringify(result)).not.toContain('current-jltoken');
+    expect(fetch.mock.calls[1][0]).toBe('https://www.woshipm.com/api2/user/profile?uid=1585');
+  });
+
+  it('maps an explicit current-page logged-out marker to unauthenticated', async () => {
+    const page = '<script>var PURE={is_user_logged_in:"0",user_id:"",jltoken:""};</script>';
+    const fetch = vi.fn().mockResolvedValue(response(page));
+
+    await expect(createWoshipmAdapter().checkAuth({ fetch, withHeaderRules: withRules }))
+      .resolves.toEqual({ authenticated: false });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed when current-page auth identities conflict or auth objects repeat', async () => {
+    const pages = [
+      '<script>var PURE={is_user_logged_in:"1",user_id:"999",jltoken:"token"}; var userSettings={uid:"1585"};</script>',
+      '<script>var PURE={is_user_logged_in:"1",user_id:"1585",jltoken:"token"}; var PURE={is_user_logged_in:"1",user_id:"1585",jltoken:"token"}; var userSettings={uid:"1585"};</script>',
+      '<script>window.settings={jltoken:"legacy"}; var PURE={is_user_logged_in:"1",user_id:"1585",jltoken:"current"}; var userSettings={uid:"1585"};</script>',
+    ];
+
+    for (const page of pages) {
+      const fetch = vi.fn().mockResolvedValue(response(page));
+      await expect(createWoshipmAdapter().checkAuth({ fetch, withHeaderRules: withRules }))
+        .rejects.toMatchObject({ code: 'PLATFORM_CHANGED', retryable: false });
+      expect(fetch).toHaveBeenCalledTimes(1);
+    }
   });
 
   it('ignores auth-shaped decoys outside top-level executable JavaScript', async () => {
