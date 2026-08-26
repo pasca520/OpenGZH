@@ -26,6 +26,22 @@ describe('WeChat adapter', () => {
     expect(JSON.stringify(await adapter.checkAuth(runtime))).not.toMatch(/test-token-123|test-ticket-456/);
   });
 
+  it('uses an open backend page when the WeChat root redirects after login', async () => {
+    const backendUrl = 'https://mp.weixin.qq.com/cgi-bin/home?t=home/index&lang=zh_CN&token=browser-secret-token';
+    const fetch = vi.fn(async (url) => url === backendUrl
+      ? response(home)
+      : { status: 0, ok: false, type: 'opaqueredirect', async text() { return ''; } });
+    const runtime = {
+      ...runtimeFor(fetch),
+      listOpenPageUrls: vi.fn(async () => [backendUrl]),
+    };
+
+    const result = await createWeixinAdapter().checkAuth(runtime);
+
+    expect(result).toEqual({ authenticated: true, userId: 'test-user-789', username: '测试账号' });
+    expect(JSON.stringify(result)).not.toContain('browser-secret-token');
+  });
+
   it('accepts reordered fields and either quote style only inside the wx bootstrap object', async () => {
     const reordered = `<!doctype html><script>window.wx = { nick_name: '测试账号', time: 1787529600, user_name: 'test-user-789', data: { t: 'test-token-123' }, ticket: 'test-ticket-456' };</script>`;
     const adapter = createWeixinAdapter();

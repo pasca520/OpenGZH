@@ -29,6 +29,24 @@ describe('fixed request runtime', () => {
     await runtime.fetch('https://api.juejin.cn/user', { credentials: 'omit', redirect: 'follow' });
     expect(fetchImpl).toHaveBeenLastCalledWith('https://api.juejin.cn/user', expect.objectContaining({ redirect: 'manual', credentials: 'include' }));
   });
+
+  it('lists only fixed-host WeChat page URLs from open browser tabs', async () => {
+    const backendUrl = 'https://mp.weixin.qq.com/cgi-bin/home?t=home/index&token=browser-secret-token';
+    const tabsApi = { query: vi.fn(async () => [
+      { url: backendUrl },
+      { url: backendUrl },
+      { url: 'https://evil.example/cgi-bin/home?token=secret' },
+      { url: 'http://mp.weixin.qq.com/cgi-bin/home?token=secret' },
+      {},
+    ]) };
+    const runtime = createRequestRuntime({
+      platformId: 'weixin', taskId: 'task', imageBroker: { requestImage: vi.fn() },
+      fetchImpl: vi.fn(), tabsApi,
+    });
+
+    await expect(runtime.listOpenPageUrls()).resolves.toEqual([backendUrl]);
+    expect(tabsApi.query).toHaveBeenCalledWith({ url: ['https://mp.weixin.qq.com/*'] });
+  });
 });
 
 describe('image port broker', () => {

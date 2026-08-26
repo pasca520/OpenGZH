@@ -305,6 +305,31 @@ function hasExplicitPort(value) {
   return authority.slice(authority.lastIndexOf('@') + 1).includes(':');
 }
 
+async function openBackendPageUrls(runtime) {
+  if (typeof runtime?.listOpenPageUrls !== 'function') return [];
+  let values;
+  try {
+    values = await runtime.listOpenPageUrls();
+  } catch (_error) {
+    return [];
+  }
+  if (!Array.isArray(values)) return [];
+  const urls = [];
+  for (const value of values) {
+    if (typeof value !== 'string') continue;
+    try {
+      const url = new URL(value);
+      if (url.protocol !== 'https:' || url.hostname !== 'mp.weixin.qq.com' || hasExplicitPort(value)
+        || url.username || url.password || url.hash || !url.pathname.startsWith('/cgi-bin/')
+        || !url.searchParams.get('token')) continue;
+      if (!urls.includes(url.href)) urls.push(url.href);
+    } catch (_error) {
+      // Ignore stale or malformed browser tab URLs and fall back to the public root.
+    }
+  }
+  return urls;
+}
+
 function findTagEnd(source, start) {
   let quote = '';
   for (let index = start + 1; index < source.length; index += 1) {
@@ -489,26 +514,37 @@ export function createWeixinAdapter() {
 
     async checkAuth(runtime) {
       session = null;
-      let response;
-      try {
-        response = await runtime.fetch(HOME_URL, { method: 'GET' });
-      } catch (_error) {
-        throw networkError('微信公众号登录检测网络异常');
+      const urls = [...await openBackendPageUrls(runtime), HOME_URL];
+      for (const url of [...new Set(urls)]) {
+        const isRoot = url === HOME_URL;
+        let response;
+        try {
+          response = await runtime.fetch(url, { method: 'GET' });
+        } catch (_error) {
+          if (isRoot) throw networkError('微信公众号登录检测网络异常');
+          continue;
+        }
+        if (isAuthResponse(response)) continue;
+        const status = responseStatus(response);
+        if (status >= 500) {
+          if (isRoot) throw networkError('微信公众号登录检测网络异常', status);
+          continue;
+        }
+        if (isResponseNotOk(response)) {
+          if (isRoot) throw new PlatformError('PLATFORM_CHANGED', `微信公众号登录页响应异常: ${status}`, { httpStatus: status, retryable: false });
+          continue;
+        }
+        let text;
+        try {
+          text = await response.text();
+        } catch (_error) {
+          if (isRoot) throw networkError('微信公众号登录页读取失败');
+          continue;
+        }
+        session = parseBootstrap(text);
+        if (session) return { authenticated: true, userId: session.userName, username: session.nickName };
       }
-      if (isAuthResponse(response)) return { authenticated: false };
-      const status = responseStatus(response);
-      if (status >= 500) throw networkError('微信公众号登录检测网络异常', status);
-      if (isResponseNotOk(response)) throw new PlatformError('PLATFORM_CHANGED', `微信公众号登录页响应异常: ${status}`, { httpStatus: status, retryable: false });
-      let text;
-      try {
-        text = await response.text();
-      } catch (_error) {
-        throw networkError('微信公众号登录页读取失败');
-      }
-      session = parseBootstrap(text);
-      return session
-        ? { authenticated: true, userId: session.userName, username: session.nickName }
-        : { authenticated: false };
+      return { authenticated: false };
     },
 
     async uploadImage(runtime, blob, filename) {

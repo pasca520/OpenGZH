@@ -10,6 +10,9 @@ const ALLOWED_HOSTS = Object.freeze({
 });
 
 const CREDENTIALLESS_HOSTS = new Set(['imagex.bytedanceapi.com']);
+const TAB_QUERY_PATTERNS = Object.freeze({
+  weixin: Object.freeze(['https://mp.weixin.qq.com/*']),
+});
 
 function randomId() {
   if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID();
@@ -108,6 +111,7 @@ export function createRequestRuntime({
   imageBroker,
   fetchImpl = globalThis.fetch,
   declarativeNetRequest = globalThis.chrome?.declarativeNetRequest,
+  tabsApi = globalThis.chrome?.tabs,
   logSink = console,
 }) {
   if (typeof fetchImpl !== 'function') throw new TypeError('fetch 不可用');
@@ -121,6 +125,27 @@ export function createRequestRuntime({
         credentials: credentialPolicy(url),
         redirect: 'manual',
       });
+    },
+    async listOpenPageUrls() {
+      const patterns = TAB_QUERY_PATTERNS[platformId];
+      if (!patterns || typeof tabsApi?.query !== 'function') return [];
+      let tabs;
+      try {
+        tabs = await tabsApi.query({ url: [...patterns] });
+      } catch (_error) {
+        return [];
+      }
+      const urls = [];
+      for (const tab of Array.isArray(tabs) ? tabs : []) {
+        if (typeof tab?.url !== 'string') continue;
+        try {
+          const url = assertFixedUrl(platformId, tab.url).href;
+          if (!urls.includes(url)) urls.push(url);
+        } catch (_error) {
+          // Browser tab metadata is advisory; ignore stale or unapproved URLs.
+        }
+      }
+      return urls;
     },
     requestImage: (image) => imageBroker.requestImage(image, { taskId, platformId }),
     withHeaderRules: (rules, work) => withSessionHeaderRules(declarativeNetRequest, rules, work),
