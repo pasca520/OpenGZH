@@ -61,6 +61,11 @@ describe('service worker boundary', () => {
       'https://mp.weixin.qq.com/*', 'https://www.zhihu.com/*', 'https://zhuanlan.zhihu.com/*',
       'https://api.zhihu.com/*', 'https://zhihu-pics-upload.zhimg.com/*',
     ] });
+    await expect(assertHostPermissions(['juejin'], permissions)).resolves.toBe(true);
+    expect(permissions.contains).toHaveBeenLastCalledWith({ origins: [
+      'https://juejin.cn/*', 'https://api.juejin.cn/*', 'https://imagex.bytedanceapi.com/*',
+      'https://tos-d-x-lf.douyin.com/*', 'https://*.volces.com/*',
+    ] });
     await expect(assertHostPermissions(['evil'], permissions)).rejects.toMatchObject({ code: 'ARTICLE_INVALID' });
     await expect(assertHostPermissions(['weixin'], { contains: vi.fn(async () => false) })).rejects.toMatchObject({ code: 'PERMISSION_DENIED', retryable: true });
   });

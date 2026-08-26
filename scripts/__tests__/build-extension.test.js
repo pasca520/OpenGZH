@@ -22,6 +22,7 @@ const manifest = {
     'https://juejin.cn/*',
     'https://api.juejin.cn/*',
     'https://imagex.bytedanceapi.com/*',
+    'https://tos-d-x-lf.douyin.com/*',
     'https://*.volces.com/*',
     'https://www.woshipm.com/*',
   ],

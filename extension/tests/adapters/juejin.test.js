@@ -114,6 +114,25 @@ describe('Juejin adapter', () => {
     expect(signAws4.mock.calls.every(([input]) => input.region === 'cn-north-1')).toBe(true);
   });
 
+  it('uploads to the current fixed Juejin TOS host returned by ImageX', async () => {
+    const current = structuredClone(fixture);
+    current.apply.Result.UploadAddress.UploadHosts = ['tos-d-x-lf.douyin.com'];
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(response(JSON.stringify(current.token)))
+      .mockResolvedValueOnce(response(JSON.stringify(current.apply)))
+      .mockResolvedValueOnce(response('', { status: 200 }))
+      .mockResolvedValueOnce(response(JSON.stringify(current.commit)))
+      .mockResolvedValueOnce(response(JSON.stringify(current.url)));
+    const signAws4 = vi.fn(async () => ({ headers: {
+      authorization: 'test-signature', 'x-amz-date': '20260824T000000Z', 'x-amz-security-token': 'test-session-token',
+    } }));
+    const adapter = createJuejinAdapter({ signAws4, uuid: 'test-uuid', now: () => new Date('2026-08-24T10:00:00+08:00') });
+
+    await expect(adapter.uploadImage({ fetch, withHeaderRules: withRules }, new Blob(['png'], { type: 'image/png' }), 'hero.png'))
+      .resolves.toBe('https://p3-juejin.byteimg.com/test/store.png');
+    expect(fetch.mock.calls[2][0]).toBe('https://tos-d-x-lf.douyin.com/test/store.png');
+  });
+
   it('rejects hostile upload hosts before sending PUT', async () => {
     const hostile = structuredClone(fixture);
     hostile.apply.Result.UploadAddress.UploadHosts = ['uploads.evil.example'];

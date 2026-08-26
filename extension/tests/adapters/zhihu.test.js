@@ -102,6 +102,47 @@ describe('Zhihu adapter', () => {
     expect(fetch.mock.calls[1][1].body).toBeInstanceOf(Blob);
   });
 
+  it('supports the current state=2 camelCase image flow and returns the polled source URL', async () => {
+    const hash = 'bff139fa05ac583f685a523ab3d110a0';
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(response(JSON.stringify({
+        uploadFile: { state: 2, imageId: 'current-image-id' },
+        uploadToken: { accessId: 'test-access-id', accessKey: 'test-access-key', accessToken: 'test-access-token' },
+      })))
+      .mockResolvedValueOnce(response('', { status: 200 }))
+      .mockResolvedValueOnce(response(null, { status: 204 }))
+      .mockResolvedValueOnce(response(JSON.stringify({ status: 'success', src: `https://pic4.zhimg.com/v2-${hash}` })));
+    const adapter = createZhihuAdapter({ hmacSha1Base64: vi.fn(async () => 'test-signature'), delay: async () => {}, now: () => new Date('2026-01-01T00:00:00Z') });
+
+    await expect(adapter.uploadImage({ fetch, withHeaderRules: withRules }, new Blob(['png'], { type: 'image/png' }), 'hero.png'))
+      .resolves.toBe(`https://pic4.zhimg.com/v2-${hash}`);
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+      'https://api.zhihu.com/images',
+      `https://zhihu-pics-upload.zhimg.com/v2-${hash}`,
+      'https://api.zhihu.com/images/current-image-id/uploading_status',
+      'https://api.zhihu.com/images/current-image-id',
+    ]);
+    expect(fetch.mock.calls[1][1].headers).not.toHaveProperty('Content-MD5');
+  });
+
+  it('treats current non-state=2 images as reusable even when an object key is present without a token', async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(response(JSON.stringify({
+        upload_file: { state: 0, image_id: 'reused-image-id', object_key: 'legacy-looking-key' },
+      })))
+      .mockResolvedValueOnce(response(JSON.stringify({ status: 'success', src: 'https://pic4.zhimg.com/reused-image-id' })));
+
+    await expect(createZhihuAdapter({ delay: async () => {} }).uploadImage(
+      { fetch, withHeaderRules: withRules },
+      new Blob(['png'], { type: 'image/png' }),
+      'hero.png',
+    )).resolves.toBe('https://pic4.zhimg.com/reused-image-id');
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+      'https://api.zhihu.com/images',
+      'https://api.zhihu.com/images/reused-image-id',
+    ]);
+  });
+
   it.each([302, 0])('maps image negotiation redirect %s to AUTH_REQUIRED', async (status) => {
     const fetch = vi.fn().mockResolvedValue(redirectResponse(status));
     await expect(createZhihuAdapter().uploadImage({ fetch, withHeaderRules: withRules }, new Blob(['png'], { type: 'image/png' }), 'hero.png'))

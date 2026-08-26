@@ -194,7 +194,7 @@ function skipLeadingTrivia(source, start) {
   return cursor;
 }
 
-function* topLevelWxObjectStarts(source) {
+function* wxObjectStarts(source, allowNested) {
   const assignmentPattern = /\bwindow\s*\.\s*wx\s*=\s*\{/gi;
   let cursor = 0;
   let braceDepth = 0;
@@ -212,8 +212,14 @@ function* topLevelWxObjectStarts(source) {
     }
     let previous = assignment.index - 1;
     while (previous >= 0 && /\s/.test(source[previous])) previous -= 1;
-    if (braceDepth || bracketDepth || parenDepth) continue;
-    if (previous >= 0 && source[previous] !== ';' && source[previous] !== '}') continue;
+    const nested = braceDepth || bracketDepth || parenDepth;
+    if (nested) {
+      const blockStart = source.lastIndexOf('{', assignment.index);
+      const guarded = allowNested && braceDepth === 1 && !bracketDepth && !parenDepth && blockStart >= 0
+        && /(?:^|[;}])\s*if\s*\(\s*!\s*window\s*\.\s*wx\s*\)\s*$/iu.test(source.slice(0, blockStart));
+      if (!guarded) continue;
+    }
+    if (previous >= 0 && !';{}'.includes(source[previous])) continue;
     yield assignment.index + assignment[0].lastIndexOf('{');
   }
 }
@@ -266,7 +272,7 @@ function parseObjectProperties(source) {
   return null;
 }
 
-function* bootstrapObjects(html) {
+function* bootstrapObjects(html, allowNested = false) {
   const scriptPattern = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi;
   for (const match of String(html).matchAll(scriptPattern)) {
     if (!isExecutableScript(match[1])) continue;
@@ -274,7 +280,7 @@ function* bootstrapObjects(html) {
     const masked = maskJavascript(script);
     const cursor = skipLeadingTrivia(script, 0);
     if (cursor < 0 || script.startsWith('<!--', cursor)) continue;
-    for (const objectStart of topLevelWxObjectStarts(masked)) {
+    for (const objectStart of wxObjectStarts(masked, allowNested)) {
       const objectEnd = balancedEnd(masked, objectStart);
       if (objectEnd < 0) continue;
       const properties = parseObjectProperties(script.slice(objectStart, objectEnd));
@@ -288,15 +294,15 @@ function stringProperty(properties, key) {
   return property?.type === 'string' && property.value ? property.value : null;
 }
 
-function parseBootstrap(html) {
-  for (const properties of bootstrapObjects(html)) {
+function parseBootstrap(html, expectedToken = '') {
+  for (const properties of bootstrapObjects(html, Boolean(expectedToken))) {
     const data = parseObjectProperties(properties.get('data')?.raw || '');
     const token = stringProperty(data, 't');
-    if (!token) continue;
-    const ticket = stringProperty(properties, 'ticket') || '';
-    const userName = stringProperty(properties, 'user_name') || '';
-    const nickName = stringProperty(properties, 'nick_name') || '';
-    const time = properties.get('time');
+    if (!token || (expectedToken && token !== expectedToken)) continue;
+    const ticket = stringProperty(data, 'ticket') || stringProperty(properties, 'ticket') || '';
+    const userName = stringProperty(data, 'user_name') || stringProperty(properties, 'user_name') || '';
+    const nickName = stringProperty(data, 'nick_name') || stringProperty(properties, 'nick_name') || '';
+    const time = data?.get('time') || properties.get('time');
     const svrTime = time?.type === 'string' && /^\d+$/.test(time.value)
       ? time.value
       : time?.type === 'bare' && /^\d+$/.test(time.value)
@@ -564,7 +570,8 @@ export function createWeixinAdapter() {
           if (isRoot) throw networkError('微信公众号登录页读取失败');
           continue;
         }
-        session = parseBootstrap(text);
+        const expectedToken = isRoot ? '' : new URL(url).searchParams.get('token') || '';
+        session = parseBootstrap(text, expectedToken);
         if (session) return { authenticated: true, userId: session.userName, username: session.nickName };
       }
       return { authenticated: false };

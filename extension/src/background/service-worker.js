@@ -32,7 +32,8 @@ const PLATFORM_ORIGINS = Object.freeze({
     'https://zhihu-pics-upload.zhimg.com/*',
   ]),
   juejin: Object.freeze([
-    'https://juejin.cn/*', 'https://api.juejin.cn/*', 'https://imagex.bytedanceapi.com/*', 'https://*.volces.com/*',
+    'https://juejin.cn/*', 'https://api.juejin.cn/*', 'https://imagex.bytedanceapi.com/*',
+    'https://tos-d-x-lf.douyin.com/*', 'https://*.volces.com/*',
   ]),
   woshipm: Object.freeze(['https://www.woshipm.com/*']),
 });

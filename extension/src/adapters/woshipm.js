@@ -616,19 +616,6 @@ function parseJson(text, message) {
   return data;
 }
 
-function assertDraftUrl(value, draftId) {
-  const fallback = `https://www.woshipm.com/writing?pid=${encodeURIComponent(draftId)}`;
-  if (value == null || value === '') return fallback;
-  if (typeof value !== 'string' || /[\u0000-\u001f\u007f]/u.test(value)) throw platformChanged('人人草稿响应返回了未批准地址');
-  let url;
-  try { url = new URL(value); } catch (_error) { throw platformChanged('人人草稿响应返回了未批准地址'); }
-  if (url.protocol !== 'https:' || url.hostname !== 'www.woshipm.com' || hasExplicitPort(value) || url.username || url.password
-    || url.pathname !== '/writing' || url.hash || url.searchParams.size !== 1 || url.searchParams.get('pid') !== draftId) {
-    throw platformChanged('人人草稿响应返回了未批准地址');
-  }
-  return fallback;
-}
-
 function unknownAfterCleanup(draftId) {
   return new PlatformError('UNKNOWN_REMOTE_STATE', '人人草稿请求已返回但请求头清理失败，请人工检查草稿箱', { draftId, retryable: false });
 }
@@ -774,13 +761,7 @@ export function createWoshipmAdapter() {
           throw new PlatformError('DRAFT_CREATE_FAILED', '人人草稿创建失败', { retryable: true });
         }
         if (!draftId) throw platformChanged('人人草稿响应缺少安全 post_id', { httpStatus: status });
-        let draftUrl;
-        try {
-          draftUrl = assertDraftUrl(data.url, draftId);
-        } catch (error) {
-          if (error instanceof PlatformError) throw new PlatformError(error.code, error.message, { ...error, draftId, retryable: false });
-          throw error;
-        }
+        const draftUrl = `https://www.woshipm.com/writing?pid=${encodeURIComponent(draftId)}`;
         completedDraft = { draftId, draftUrl };
         return completedDraft;
       });

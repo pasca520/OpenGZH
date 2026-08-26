@@ -30,6 +30,7 @@ const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/u;
 const SAFE_TOKEN = /^[^\u0000-\u001f\u007f]{1,4096}$/u;
 const STORE_URI = /^[A-Za-z0-9][A-Za-z0-9._~!$&'()*+,;=:@/-]{0,1023}$/u;
 const SAFE_TEXT = /^[^\u0000-\u001f\u007f<>]{1,128}$/u;
+const CURRENT_TOS_HOST = 'tos-d-x-lf.douyin.com';
 
 function platformChanged(message, details = {}) {
   return new PlatformError('PLATFORM_CHANGED', message, { retryable: false, ...details });
@@ -120,7 +121,9 @@ function safeUploadUrl(host, storeUri) {
   } catch (_error) {
     throw platformChanged('ImageX 返回了未批准上传主机');
   }
-  if (url.protocol !== 'https:' || url.hostname === 'volces.com' || !url.hostname.endsWith('.volces.com') || url.port || url.username || url.password) {
+  const approvedHost = url.hostname === CURRENT_TOS_HOST
+    || (url.hostname !== 'volces.com' && url.hostname.endsWith('.volces.com'));
+  if (url.protocol !== 'https:' || !approvedHost || url.port || url.username || url.password) {
     throw platformChanged('ImageX 返回了未批准上传主机');
   }
   return `https://${url.hostname}/${storeUri}`;

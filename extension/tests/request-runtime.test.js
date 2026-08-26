@@ -18,6 +18,7 @@ describe('fixed request runtime', () => {
     expect(() => assertFixedUrl('weixin', 'https://evil.mp.weixin.qq.com/')).toThrowError(expect.objectContaining({ code: 'PLATFORM_CHANGED' }));
     expect(() => assertFixedUrl('juejin', 'https://volces.com/upload')).toThrowError(expect.objectContaining({ code: 'PLATFORM_CHANGED' }));
     expect(() => assertFixedUrl('weixin', 'https://mp.weixin.qq.com:8443/')).toThrowError(expect.objectContaining({ code: 'PLATFORM_CHANGED' }));
+    expect(assertFixedUrl('juejin', 'https://tos-d-x-lf.douyin.com/upload').hostname).toBe('tos-d-x-lf.douyin.com');
     expect(assertFixedUrl('juejin', 'https://upload.volces.com/upload').hostname).toBe('upload.volces.com');
   });
 
@@ -26,6 +27,8 @@ describe('fixed request runtime', () => {
     const runtime = createRequestRuntime({ platformId: 'juejin', taskId: 'task', imageBroker: { requestImage: vi.fn() }, fetchImpl });
     await runtime.fetch('https://imagex.bytedanceapi.com/?Action=Apply', { credentials: 'include', redirect: 'follow' });
     expect(fetchImpl).toHaveBeenCalledWith('https://imagex.bytedanceapi.com/?Action=Apply', expect.objectContaining({ redirect: 'manual', credentials: 'omit' }));
+    await runtime.fetch('https://tos-d-x-lf.douyin.com/upload', { credentials: 'include', redirect: 'follow' });
+    expect(fetchImpl).toHaveBeenLastCalledWith('https://tos-d-x-lf.douyin.com/upload', expect.objectContaining({ redirect: 'manual', credentials: 'omit' }));
     await runtime.fetch('https://api.juejin.cn/user', { credentials: 'omit', redirect: 'follow' });
     expect(fetchImpl).toHaveBeenLastCalledWith('https://api.juejin.cn/user', expect.objectContaining({ redirect: 'manual', credentials: 'include' }));
   });

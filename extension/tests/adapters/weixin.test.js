@@ -27,7 +27,7 @@ describe('WeChat adapter', () => {
   });
 
   it('uses an open backend page when the WeChat root redirects after login', async () => {
-    const backendUrl = 'https://mp.weixin.qq.com/cgi-bin/home?t=home/index&lang=zh_CN&token=browser-secret-token';
+    const backendUrl = 'https://mp.weixin.qq.com/cgi-bin/home?t=home/index&lang=zh_CN&token=test-token-123';
     const fetch = vi.fn(async (url) => url === backendUrl
       ? response(home)
       : { status: 0, ok: false, type: 'opaqueredirect', async text() { return ''; } });
@@ -39,7 +39,48 @@ describe('WeChat adapter', () => {
     const result = await createWeixinAdapter().checkAuth(runtime);
 
     expect(result).toEqual({ authenticated: true, userId: 'test-user-789', username: '测试账号' });
-    expect(JSON.stringify(result)).not.toContain('browser-secret-token');
+    expect(JSON.stringify(result)).not.toContain('test-token-123');
+  });
+
+  it('reads the current backend wx object inside a page guard with account fields under data', async () => {
+    const backendUrl = 'https://mp.weixin.qq.com/cgi-bin/home?t=home/index&lang=zh_CN&token=1234567890';
+    const currentHome = `<script>
+      if (!window.wx) {
+        window.wx = { data: { t: "1234567890", ticket: "test-ticket-456", user_name: "test-user-789", nick_name: "测试账号", time: "1787529600" } };
+      }
+    </script>`;
+    const fetch = vi.fn(async (url) => url === backendUrl
+      ? response(currentHome)
+      : { status: 0, ok: false, type: 'opaqueredirect', async text() { return ''; } });
+    const runtime = {
+      ...runtimeFor(fetch),
+      listOpenPageUrls: vi.fn(async () => [backendUrl]),
+    };
+
+    await expect(createWeixinAdapter().checkAuth(runtime))
+      .resolves.toEqual({ authenticated: true, userId: 'test-user-789', username: '测试账号' });
+  });
+
+  it('does not accept a matching-token backend bootstrap hidden inside a function', async () => {
+    const backendUrl = 'https://mp.weixin.qq.com/cgi-bin/home?t=home/index&lang=zh_CN&token=1234567890';
+    const currentHome = `<script>
+      function decoy() {
+        window.wx = { data: { t: "1234567890", ticket: "decoy-ticket", user_name: "decoy-user", nick_name: "伪账号", time: "1787529600" } };
+      }
+      if (!window.wx) {
+        window.wx = { data: { t: "1234567890", ticket: "test-ticket-456", user_name: "test-user-789", nick_name: "测试账号", time: "1787529600" } };
+      }
+    </script>`;
+    const fetch = vi.fn(async (url) => url === backendUrl
+      ? response(currentHome)
+      : { status: 0, ok: false, type: 'opaqueredirect', async text() { return ''; } });
+    const runtime = {
+      ...runtimeFor(fetch),
+      listOpenPageUrls: vi.fn(async () => [backendUrl]),
+    };
+
+    await expect(createWeixinAdapter().checkAuth(runtime))
+      .resolves.toEqual({ authenticated: true, userId: 'test-user-789', username: '测试账号' });
   });
 
   it('accepts reordered fields and either quote style only inside the wx bootstrap object', async () => {

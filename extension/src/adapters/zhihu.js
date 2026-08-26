@@ -360,22 +360,25 @@ async function defaultHmacSha1Base64(key, message) {
   return bytesToBase64(new Uint8Array(signature));
 }
 
-function validateUploadFile(uploadFile) {
+function validateUploadFile(uploadFile, imageHash) {
   if (!uploadFile || typeof uploadFile !== 'object' || Array.isArray(uploadFile)) return null;
-  const imageId = safeOpaqueId(uploadFile.image_id, IMAGE_ID);
-  const objectKey = safeObjectKey(uploadFile.object_key);
-  if (!Number.isInteger(uploadFile.state) || ![0, 1].includes(uploadFile.state) || !imageId || !objectKey) return null;
-  return { state: uploadFile.state, imageId, objectKey };
+  const rawImageId = uploadFile.image_id ?? uploadFile.imageId;
+  const imageId = safeOpaqueId(Number.isSafeInteger(rawImageId) && rawImageId > 0 ? String(rawImageId) : rawImageId, IMAGE_ID);
+  if (!Number.isInteger(uploadFile.state) || ![0, 1, 2].includes(uploadFile.state) || !imageId) return null;
+  if (uploadFile.state === 2) return { state: 2, imageId, objectKey: `v2-${imageHash}`, current: true };
+  const objectKey = safeObjectKey(uploadFile.object_key ?? uploadFile.objectKey);
+  return { state: uploadFile.state, imageId, ...(objectKey ? { objectKey } : {}) };
 }
 
 function validateUploadToken(uploadToken) {
   if (!uploadToken || typeof uploadToken !== 'object' || Array.isArray(uploadToken)) return null;
-  const keys = Reflect.ownKeys(uploadToken);
-  if (keys.length !== 3 || !['access_id', 'access_key', 'access_token'].every((key) => keys.includes(key))) return null;
-  if (typeof uploadToken.access_id !== 'string' || !/^[A-Za-z0-9._-]{1,128}$/u.test(uploadToken.access_id)) return null;
-  if (typeof uploadToken.access_key !== 'string' || !/^[^\u0000-\u001f\u007f]{1,4096}$/u.test(uploadToken.access_key)) return null;
-  if (typeof uploadToken.access_token !== 'string' || !/^[^\u0000-\u001f\u007f]{1,4096}$/u.test(uploadToken.access_token)) return null;
-  return uploadToken;
+  const accessId = uploadToken.access_id ?? uploadToken.accessId;
+  const accessKey = uploadToken.access_key ?? uploadToken.accessKey;
+  const accessToken = uploadToken.access_token ?? uploadToken.accessToken;
+  if (typeof accessId !== 'string' || !/^[A-Za-z0-9._-]{1,128}$/u.test(accessId)) return null;
+  if (typeof accessKey !== 'string' || !/^[^\u0000-\u001f\u007f]{1,4096}$/u.test(accessKey)) return null;
+  if (typeof accessToken !== 'string' || !/^[^\u0000-\u001f\u007f]{1,4096}$/u.test(accessToken)) return null;
+  return { access_id: accessId, access_key: accessKey, access_token: accessToken };
 }
 
 async function negotiateImage(runtime, bytes) {
@@ -394,12 +397,15 @@ async function negotiateImage(runtime, bytes) {
   if (isRedirect(response)) throw authRequired();
   if (!isOk(response)) throw imageUploadError(`知乎图片协商失败: ${status}`, { httpStatus: status });
   const data = parseObject(await readResponseText(response));
-  const uploadFile = validateUploadFile(data?.upload_file);
+  const imageHash = md5Hex(bytes);
+  const uploadFile = validateUploadFile(data?.upload_file ?? data?.uploadFile, imageHash);
   if (!uploadFile) throw platformChanged('知乎图片凭证结构已变化', { httpStatus: status });
-  if (uploadFile.state === 1) return uploadFile;
-  const uploadToken = validateUploadToken(data?.upload_token);
+  const rawUploadToken = data?.upload_token ?? data?.uploadToken;
+  const uploadRequired = uploadFile.state === 2 || (uploadFile.state === 0 && uploadFile.objectKey && rawUploadToken != null);
+  if (!uploadRequired) return uploadFile;
+  const uploadToken = validateUploadToken(rawUploadToken);
   if (!uploadToken) throw platformChanged('知乎 OSS 凭证结构已变化', { httpStatus: status });
-  return { ...uploadFile, uploadToken };
+  return { ...uploadFile, uploadRequired: true, uploadToken };
 }
 
 async function pollImage(runtime, imageId, delay) {
@@ -416,7 +422,16 @@ async function pollImage(runtime, imageId, delay) {
     if (!isOk(response)) throw imageUploadError(`知乎图片状态查询失败: ${status}`, { httpStatus: status });
     const data = parseObject(await readResponseText(response));
     const hash = safeOpaqueId(data?.original_hash, IMAGE_HASH);
-    if (hash) return hash;
+    if (hash) return `https://pic4.zhimg.com/${hash}`;
+    const source = safeImageSource(data?.src ?? data?.original_src ?? data?.originalSrc ?? data?.watermark_src ?? data?.watermarkSrc);
+    if (data?.status === 'success') {
+      if (!source) throw platformChanged('知乎图片状态响应格式已变化', { httpStatus: status });
+      return source;
+    }
+    if (typeof data?.status === 'string' && /^[A-Za-z][A-Za-z0-9_-]{0,31}$/u.test(data.status)) {
+      if (attempt < 9) await delay(1000);
+      continue;
+    }
     if (!data || (Object.hasOwn(data, 'original_hash') && data.original_hash != null) || ![0, 1].includes(data.state)) {
       throw platformChanged('知乎图片状态响应格式已变化', { httpStatus: status });
     }
@@ -434,12 +449,12 @@ async function putOss(runtime, negotiated, blob, bytes, hmacSha1Base64, now) {
   const token = negotiated.uploadToken;
   const contentType = blob.type || 'application/octet-stream';
   const date = now().toUTCString();
-  const contentMd5 = md5Base64(bytes);
+  const contentMd5 = negotiated.current ? '' : md5Base64(bytes);
   const headers = {
-    'Content-MD5': contentMd5,
     'x-oss-date': date,
     'x-oss-security-token': token.access_token,
     'x-oss-user-agent': 'aliyun-sdk-js/6.8.0',
+    ...(contentMd5 ? { 'Content-MD5': contentMd5 } : {}),
   };
   const canonicalHeaders = Object.keys(headers)
     .filter((key) => key.toLowerCase().startsWith('x-oss-'))
@@ -462,7 +477,6 @@ async function putOss(runtime, negotiated, blob, bytes, hmacSha1Base64, now) {
       body: blob,
       headers: {
         'Content-Type': contentType,
-        'Content-MD5': contentMd5,
         Authorization: `OSS ${token.access_id}:${signature}`,
         ...headers,
       },
@@ -474,6 +488,22 @@ async function putOss(runtime, negotiated, blob, bytes, hmacSha1Base64, now) {
   if ([401, 403].includes(status)) throw authRequired();
   if (isRedirect(response)) throw platformChanged('知乎图片上传地址发生跳转', { httpStatus: status });
   if (!isOk(response)) throw imageUploadError(`知乎图片上传失败: ${status}`, { httpStatus: status });
+}
+
+async function notifyUploadingStatus(runtime, imageId) {
+  let response;
+  try {
+    response = await runtime.fetch(`https://api.zhihu.com/images/${encodeURIComponent(imageId)}/uploading_status`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ upload_result: 'success' }),
+    });
+  } catch (_error) {
+    throw networkError('知乎图片状态通知网络异常');
+  }
+  const status = responseStatus(response);
+  if ([401, 403].includes(status) || isRedirect(response)) throw authRequired();
+  if (!isOk(response)) throw imageUploadError(`知乎图片状态通知失败: ${status}`, { httpStatus: status });
 }
 
 export function createZhihuAdapter({
@@ -510,16 +540,17 @@ export function createZhihuAdapter({
     async uploadImage(runtime, blob) {
       if (typeof Blob === 'undefined' || !(blob instanceof Blob)) throw new PlatformError('IMAGE_UPLOAD_FAILED', '知乎图片必须是 Blob', { retryable: false });
       const bytes = new Uint8Array(await blob.arrayBuffer());
-      const negotiated = await runtime.withHeaderRules(API_RULES, async () => {
-        const value = await negotiateImage(runtime, bytes);
-        if (value.state === 1) value.originalHash = await pollImage(runtime, value.imageId, delay);
-        return value;
-      });
-      if (negotiated.state === 1) {
-        if (!safeOpaqueId(negotiated.originalHash, IMAGE_HASH)) throw platformChanged('知乎图片处理结果已变化');
-        return `https://pic4.zhimg.com/${negotiated.originalHash}`;
+      const negotiated = await runtime.withHeaderRules(API_RULES, () => negotiateImage(runtime, bytes));
+      if (!negotiated.uploadRequired) {
+        return runtime.withHeaderRules(API_RULES, () => pollImage(runtime, negotiated.imageId, delay));
       }
       await runtime.withHeaderRules(OSS_RULES, () => putOss(runtime, negotiated, blob, bytes, hmacSha1Base64, now));
+      if (negotiated.current) {
+        return runtime.withHeaderRules(API_RULES, async () => {
+          await notifyUploadingStatus(runtime, negotiated.imageId);
+          return pollImage(runtime, negotiated.imageId, delay);
+        });
+      }
       return uploadUrl(negotiated.objectKey, blob);
     },
 

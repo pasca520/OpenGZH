@@ -5,11 +5,11 @@ import { PlatformError, redactSecrets } from './platform-errors.js';
 const ALLOWED_HOSTS = Object.freeze({
   weixin: Object.freeze(['mp.weixin.qq.com']),
   zhihu: Object.freeze(['www.zhihu.com', 'zhuanlan.zhihu.com', 'api.zhihu.com', 'zhihu-pics-upload.zhimg.com']),
-  juejin: Object.freeze(['juejin.cn', 'api.juejin.cn', 'imagex.bytedanceapi.com', '*.volces.com']),
+  juejin: Object.freeze(['juejin.cn', 'api.juejin.cn', 'imagex.bytedanceapi.com', 'tos-d-x-lf.douyin.com', '*.volces.com']),
   woshipm: Object.freeze(['www.woshipm.com']),
 });
 
-const CREDENTIALLESS_HOSTS = new Set(['imagex.bytedanceapi.com']);
+const CREDENTIALLESS_HOSTS = new Set(['imagex.bytedanceapi.com', 'tos-d-x-lf.douyin.com']);
 const TAB_QUERY_PATTERNS = Object.freeze({
   weixin: Object.freeze(['https://mp.weixin.qq.com/*']),
 });

@@ -437,13 +437,23 @@ describe('Woshipm adapter', () => {
     expect(body.get('post_content')).not.toContain('img://');
   });
 
+  it('derives the edit URL from the validated post ID instead of trusting the response address', async () => {
+    const fetch = vi.fn().mockResolvedValue(response(JSON.stringify({ post_id: 42, url: '/writing?pid=42' })));
+
+    await expect(createWoshipmAdapter().saveDraft(
+      { fetch, withHeaderRules: withRules },
+      { title: '标题', semanticHtml: '<p>正文</p>' },
+      new Map(),
+    )).resolves.toEqual({ draftId: '42', draftUrl: 'https://www.woshipm.com/writing?pid=42' });
+  });
+
   it('accepts safe multiline semantic HTML and retains post ID when its URL is unsafe', async () => {
     const fetch = vi.fn().mockResolvedValue(response(JSON.stringify({ post_id: 42, url: 'https://evil.example/draft' })));
-    const error = await createWoshipmAdapter().saveDraft(
+    const result = await createWoshipmAdapter().saveDraft(
       { fetch, withHeaderRules: withRules },
       { title: '标题', semanticHtml: '<p>第一行</p>\n<p>第二行</p>' }, new Map(),
-    ).catch((value) => value);
-    expect(error).toMatchObject({ code: 'PLATFORM_CHANGED', draftId: '42', retryable: false });
+    );
+    expect(result).toEqual({ draftId: '42', draftUrl: 'https://www.woshipm.com/writing?pid=42' });
   });
 
   it('rejects unmapped local refs and unsafe article input before create', async () => {
@@ -497,10 +507,10 @@ describe('Woshipm adapter', () => {
     'https://www.woshipm.com/writing?pid=42#fragment',
     'https://user@www.woshipm.com/writing?pid=42',
     'https://www.woshipm.com:443/writing?pid=42',
-  ])('rejects unsafe draft URL %s', async (url) => {
+  ])('ignores untrusted draft URL %s and derives the canonical address', async (url) => {
     const fetch = vi.fn().mockResolvedValue(response(JSON.stringify({ post_id: 42, url })));
     await expect(createWoshipmAdapter().saveDraft({ fetch, withHeaderRules: withRules }, { title: '标题', semanticHtml: '<p>正文</p>' }, new Map()))
-      .rejects.toMatchObject({ code: 'PLATFORM_CHANGED' });
+      .resolves.toEqual({ draftId: '42', draftUrl: 'https://www.woshipm.com/writing?pid=42' });
   });
 
   it('keeps the draft ID when header-rule cleanup fails after create and clears token on terminal success', async () => {
