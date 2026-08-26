@@ -568,6 +568,7 @@
       authCompleted: new Set(),
       operationId: null,
       draftUrls: new Map(),
+      pendingLoginPlatforms: new Set(),
       portConnected: Boolean(port),
       disposed: false,
       panelOpen: false,
@@ -587,7 +588,10 @@
       if (!nextAnchor) return false;
       if (currentAnchor !== nextAnchor) currentAnchor.setAttribute?.('aria-expanded', 'false');
       currentAnchor = nextAnchor;
+      currentAnchor.setAttribute?.('aria-haspopup', 'dialog');
+      currentAnchor.setAttribute?.('aria-controls', 'opengzh-panel');
       currentAnchor.setAttribute?.('aria-expanded', state.panelOpen ? 'true' : 'false');
+      if (state.panelOpen) positionPanel();
       return true;
     }
 
@@ -595,22 +599,25 @@
     shell.className = 'opengzh-extension-shell';
     const panel = doc.createElement('section');
     panel.className = 'opengzh-panel';
+    panel.id = 'opengzh-panel';
     panel.hidden = true;
     panel.setAttribute('role', 'dialog');
-    panel.setAttribute('aria-modal', 'true');
     panel.setAttribute('aria-label', 'OpenGZH');
     const header = doc.createElement('header');
     header.className = 'opengzh-header';
     const heading = doc.createElement('div');
     heading.className = 'opengzh-heading';
-    const title = textElement(doc, 'h2', '同步到内容平台', 'opengzh-title');
+    const title = textElement(doc, 'h2', '同步草稿', 'opengzh-title');
     title.id = 'opengzh-title';
+    const selectedCount = textElement(doc, 'span', '已选 4', 'opengzh-selected-count');
     panel.setAttribute('aria-labelledby', title.id);
     const subtitle = textElement(doc, 'p', SUBTITLE, 'opengzh-subtitle');
+    subtitle.id = 'opengzh-description';
+    panel.setAttribute('aria-describedby', subtitle.id);
     const close = textElement(doc, 'button', '×', 'opengzh-close');
     close.type = 'button';
     close.setAttribute('aria-label', '关闭');
-    heading.append(title, subtitle);
+    heading.append(title, selectedCount, subtitle);
     header.append(heading, close);
     const rows = doc.createElement('div');
     rows.className = 'opengzh-platforms';
@@ -649,19 +656,23 @@
       draft.setAttribute('aria-label', `${PLATFORMS[platformId].name}打开草稿`);
       draft.hidden = true;
       checkbox.setAttribute('aria-label', `${PLATFORMS[platformId].name}同步选择`);
-      actions.append(login, retry, draft);
+      const actionHint = textElement(doc, 'span', '登录后自动更新', 'opengzh-action-hint');
+      actionHint.hidden = true;
+      actions.append(login, retry, draft, actionHint);
       row.append(checkbox, icon, details, actions);
       rows.append(row);
-      rowMap.set(platformId, { row, checkbox, status, login, retry, draft, canRetry: false, statusKey: 'unknown' });
+      rowMap.set(platformId, { row, checkbox, status, login, retry, draft, actionHint, canRetry: false, statusKey: 'unknown' });
       listen(checkbox, 'change', () => {
         if (state.busy) return;
         state.selectionRevision += 1;
         invalidateAuth();
         state.selected = PLATFORM_IDS.filter((id) => rowMap.get(id).checkbox.checked);
+        updateSelectedCount();
         setLocked(state.busy);
         persistSelection(storage, state.selected).catch(() => setAlert('选择未保存'));
       });
       listen(login, 'click', () => {
+        state.pendingLoginPlatforms.add(platformId);
         windowObject.open?.(PLATFORMS[platformId].loginUrl, '_blank', 'noopener');
       });
       listen(retry, 'click', () => {
@@ -682,183 +693,223 @@
     const alert = textElement(doc, 'p', '', 'opengzh-alert');
     alert.setAttribute('role', 'alert');
     alert.setAttribute('aria-live', 'polite');
-    const start = textElement(doc, 'button', '保存草稿并打开', 'opengzh-start');
+    const start = textElement(doc, 'button', '保存草稿', 'opengzh-start');
     start.type = 'button';
     const content = doc.createElement('div');
     content.className = 'opengzh-content';
     content.append(rows, alert);
     const footer = doc.createElement('footer');
     footer.className = 'opengzh-footer';
-    const footerNote = textElement(doc, 'p', '只保存草稿，不会自动发布', 'opengzh-footer-note');
+    const footerNote = textElement(doc, 'p', '仅保存草稿，不会发布', 'opengzh-footer-note');
     footer.append(footerNote, start);
-    const backdrop = doc.createElement('div');
-    backdrop.className = 'opengzh-backdrop';
-    backdrop.hidden = true;
     panel.append(header, content, footer);
-    backdrop.append(panel);
-    shell.append(backdrop);
+    shell.append(panel);
     const style = doc.createElement('style');
     style.textContent = `
       :host {
         all: initial;
-        --ogzh-text: #172033;
-        --ogzh-muted: #667085;
-        --ogzh-border: #e3e8ef;
-        --ogzh-surface: #ffffff;
-        --ogzh-primary: #1769e0;
-        --ogzh-primary-hover: #1259c2;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --ogzh-surface: #fffdf8;
+        --ogzh-surface-muted: #f7f1e8;
+        --ogzh-surface-strong: #efe6db;
+        --ogzh-text: #332821;
+        --ogzh-muted: #6f5e52;
+        --ogzh-border: #d8c8b8;
+        --ogzh-border-strong: #bda896;
+        --ogzh-primary: #b64b39;
+        --ogzh-primary-hover: #a94333;
+        display: inline-block;
+        position: relative;
+        width: 0;
+        height: 0;
+        overflow: visible;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
         color: var(--ogzh-text);
       }
       * { box-sizing: border-box; }
-      .opengzh-extension-shell { display: inline-block; position: relative; z-index: 2147483646; }
+      .opengzh-extension-shell { width: 0; height: 0; pointer-events: none; }
       button, a, input { font: inherit; }
       button, a { -webkit-tap-highlight-color: transparent; }
       button { cursor: pointer; }
-      button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid rgba(23, 105, 224, .38); outline-offset: 2px; }
-      .opengzh-backdrop {
-        position: fixed;
-        inset: 0;
-        display: grid;
-        place-items: center;
-        padding: 16px;
-        background: rgba(15, 23, 42, .48);
-        backdrop-filter: blur(4px);
-      }
+      button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid rgba(182, 75, 57, .28); outline-offset: 2px; }
       .opengzh-panel {
-        width: min(560px, calc(100vw - 32px));
-        max-height: min(720px, calc(100vh - 32px));
+        position: fixed;
         display: grid;
         grid-template-rows: auto minmax(0, 1fr) auto;
+        top: 72px;
+        right: 16px;
+        z-index: 2147483646;
+        width: min(420px, calc(100vw - 16px));
+        max-height: min(620px, calc(100vh - 80px));
         overflow: hidden;
-        border: 1px solid rgba(255, 255, 255, .64);
-        border-radius: 18px;
+        border: 1px solid var(--ogzh-border);
+        border-radius: 14px;
         background: var(--ogzh-surface);
-        box-shadow: 0 24px 72px rgba(15, 23, 42, .28), 0 2px 8px rgba(15, 23, 42, .08);
+        box-shadow: 0 20px 46px rgba(79, 57, 42, .18), 0 3px 10px rgba(79, 57, 42, .08);
+        color: var(--ogzh-text);
+        pointer-events: auto;
       }
       .opengzh-header {
         display: flex;
-        align-items: flex-start;
+        align-items: center;
         justify-content: space-between;
-        gap: 20px;
-        padding: 24px 24px 18px;
-        border-bottom: 1px solid #edf0f4;
+        gap: 12px;
+        min-height: 58px;
+        padding: 11px 12px 10px 16px;
+        border-bottom: 1px solid rgba(216, 200, 184, .72);
       }
-      .opengzh-heading { min-width: 0; }
-      .opengzh-title { margin: 0; color: #111827; font-size: 22px; font-weight: 700; line-height: 1.3; letter-spacing: -.02em; }
-      .opengzh-subtitle { margin: 7px 0 0; color: var(--ogzh-muted); font-size: 14px; line-height: 1.55; }
+      .opengzh-heading { min-width: 0; display: flex; align-items: center; gap: 9px; }
+      .opengzh-title { margin: 0; color: var(--ogzh-text); font-size: 16px; font-weight: 720; line-height: 1.35; letter-spacing: -.01em; }
+      .opengzh-selected-count {
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        padding: 0 8px;
+        border: 1px solid rgba(182, 75, 57, .16);
+        border-radius: 999px;
+        background: rgba(182, 75, 57, .09);
+        color: var(--ogzh-primary);
+        font-size: 12px;
+        font-weight: 650;
+        white-space: nowrap;
+      }
+      .opengzh-subtitle {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
       .opengzh-close {
         flex: 0 0 auto;
-        width: 44px;
+        width: 36px;
         min-height: 44px;
         border: 0;
-        border-radius: 12px;
+        border-radius: 8px;
         background: transparent;
-        color: #667085;
-        font-size: 27px;
-        font-weight: 300;
+        color: var(--ogzh-muted);
+        font-size: 22px;
+        font-weight: 400;
         line-height: 1;
-        transition: color 180ms ease, background 180ms ease, transform 180ms ease;
+        transition: color 160ms ease, background 160ms ease, transform 160ms ease;
       }
-      .opengzh-close:hover { background: #f2f4f7; color: #111827; }
+      .opengzh-close:hover { background: var(--ogzh-surface-strong); color: var(--ogzh-text); }
       .opengzh-close:active { transform: scale(.96); }
-      .opengzh-content { min-height: 0; overflow: auto; padding: 18px 24px 20px; }
-      .opengzh-platforms { display: grid; gap: 10px; }
+      .opengzh-content { min-height: 0; overflow: auto; }
+      .opengzh-platforms { display: grid; }
       .opengzh-platform-row {
-        min-height: 72px;
+        min-height: 62px;
         display: grid;
-        grid-template-columns: 20px 40px minmax(0, 1fr) auto;
-        gap: 12px;
+        grid-template-columns: 18px 30px minmax(0, 1fr) auto;
+        gap: 10px;
         align-items: center;
-        padding: 12px 14px;
-        border: 1px solid var(--ogzh-border);
-        border-radius: 12px;
+        padding: 10px 16px;
+        border-bottom: 1px solid rgba(216, 200, 184, .6);
         background: var(--ogzh-surface);
-        transition: border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+        transition: background 160ms ease;
       }
-      .opengzh-platform-row:hover { border-color: #cbd5e1; box-shadow: 0 4px 14px rgba(15, 23, 42, .05); }
-      .opengzh-platform-row:has(input:checked) { border-color: #cbdcf7; background: #fbfdff; }
-      .opengzh-platform-row input[type="checkbox"] { width: 18px; height: 18px; margin: 0; accent-color: var(--ogzh-primary); cursor: pointer; }
+      .opengzh-platform-row:last-child { border-bottom: 0; }
+      .opengzh-platform-row:hover { background: #fbf7f0; }
+      .opengzh-platform-row[data-status="auth-required"] { background: rgba(182, 75, 57, .035); }
+      .opengzh-platform-row input[type="checkbox"] { width: 17px; height: 17px; margin: 0; accent-color: var(--ogzh-primary); cursor: pointer; }
       .opengzh-platform-row input[type="checkbox"]:disabled { cursor: not-allowed; opacity: .55; }
       .platform-icon {
         display: inline-grid;
         place-items: center;
-        width: 40px;
-        height: 40px;
-        border-radius: 11px;
-        background: #eaf2ff;
-        color: #184b93;
-        font-size: 18px;
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        background: var(--ogzh-surface-strong);
+        color: var(--ogzh-muted);
+        font-size: 14px;
         font-weight: 700;
       }
-      .opengzh-platform-details { display: grid; gap: 4px; min-width: 0; }
-      .opengzh-platform-name { color: #172033; font-size: 15px; font-weight: 650; line-height: 1.35; }
+      .platform-icon[data-platform-id="weixin"] { background: #e7f3e9; color: #287b46; }
+      .platform-icon[data-platform-id="zhihu"] { background: #e8f0fa; color: #286aa6; }
+      .platform-icon[data-platform-id="juejin"] { background: #e8eff8; color: #356fa5; }
+      .platform-icon[data-platform-id="woshipm"] { background: #f3e4dd; color: #a24d3d; }
+      .opengzh-platform-details { display: grid; gap: 2px; min-width: 0; }
+      .opengzh-platform-name { color: var(--ogzh-text); font-size: 14px; font-weight: 650; line-height: 1.4; }
       .opengzh-platform-status {
         min-width: 0;
         display: inline-flex;
-        align-items: flex-start;
-        gap: 7px;
+        align-items: center;
+        gap: 6px;
         color: var(--ogzh-muted);
-        font-size: 13px;
-        line-height: 1.45;
+        font-size: 12px;
+        line-height: 1.4;
         overflow-wrap: anywhere;
       }
-      .opengzh-platform-status::before { content: ""; flex: 0 0 auto; width: 7px; height: 7px; margin-top: 6px; border-radius: 999px; background: #98a2b3; }
-      .opengzh-platform-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+      .opengzh-platform-status::before { content: ""; flex: 0 0 auto; width: 6px; height: 6px; border-radius: 999px; background: #9b8b7e; }
+      .opengzh-platform-actions {
+        display: grid;
+        grid-template-columns: repeat(2, auto);
+        gap: 5px 6px;
+        justify-content: end;
+        align-items: center;
+      }
       .opengzh-login, .opengzh-retry, .opengzh-draft {
-        min-height: 44px;
+        min-height: 34px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        padding: 0 12px;
-        border: 1px solid #d0d5dd;
-        border-radius: 10px;
-        background: #fff;
-        color: #344054;
-        font-size: 13px;
+        padding: 0 10px;
+        border: 1px solid var(--ogzh-border);
+        border-radius: 7px;
+        background: var(--ogzh-surface);
+        color: var(--ogzh-muted);
+        font-size: 12px;
         font-weight: 650;
         line-height: 1;
+        white-space: nowrap;
         text-decoration: none;
-        transition: color 180ms ease, border-color 180ms ease, background 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+        transition: color 160ms ease, border-color 160ms ease, background 160ms ease, transform 160ms ease;
       }
-      .opengzh-login:hover, .opengzh-retry:hover, .opengzh-draft:hover { border-color: #98a2b3; background: #f9fafb; color: #101828; }
+      .opengzh-login { border-color: rgba(182, 75, 57, .55); color: var(--ogzh-primary); }
+      .opengzh-login:hover { border-color: var(--ogzh-primary); background: rgba(182, 75, 57, .07); color: var(--ogzh-primary-hover); }
+      .opengzh-retry:hover, .opengzh-draft:hover { border-color: var(--ogzh-border-strong); background: var(--ogzh-surface-muted); color: var(--ogzh-text); }
       .opengzh-login:active, .opengzh-retry:active, .opengzh-draft:active { transform: translateY(1px); }
-      .opengzh-alert { margin: 14px 0 0; color: #b42318; font-size: 13px; line-height: 1.5; }
+      .opengzh-action-hint { grid-column: 1 / -1; color: #8a6d60; font-size: 11px; line-height: 1.3; text-align: right; }
+      .opengzh-alert { margin: 0; padding: 9px 16px; border-top: 1px solid rgba(179, 61, 48, .16); background: rgba(179, 61, 48, .055); color: #9f3429; font-size: 12px; line-height: 1.45; }
       .opengzh-alert:empty { display: none; }
       .opengzh-footer {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 20px;
-        padding: 16px 24px 20px;
-        border-top: 1px solid #edf0f4;
-        background: rgba(255, 255, 255, .98);
+        gap: 14px;
+        padding: 13px 16px 15px;
+        border-top: 1px solid rgba(216, 200, 184, .72);
+        background: var(--ogzh-surface-muted);
       }
-      .opengzh-footer-note { margin: 0; color: var(--ogzh-muted); font-size: 13px; line-height: 1.45; }
+      .opengzh-footer-note { margin: 0; color: var(--ogzh-muted); font-size: 12px; line-height: 1.45; }
       .opengzh-start {
         min-height: 44px;
-        padding: 0 18px;
+        min-width: 112px;
+        padding: 0 17px;
         border: 1px solid var(--ogzh-primary);
-        border-radius: 10px;
+        border-radius: 8px;
         background: var(--ogzh-primary);
         color: #fff;
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 700;
         line-height: 1;
-        box-shadow: 0 7px 18px rgba(23, 105, 224, .2);
-        transition: background 180ms ease, border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+        box-shadow: 0 6px 14px rgba(182, 75, 57, .18);
+        transition: background 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
       }
-      .opengzh-start:hover { border-color: var(--ogzh-primary-hover); background: var(--ogzh-primary-hover); box-shadow: 0 9px 22px rgba(23, 105, 224, .25); }
+      .opengzh-start:hover { border-color: var(--ogzh-primary-hover); background: var(--ogzh-primary-hover); box-shadow: 0 8px 18px rgba(182, 75, 57, .24); }
       .opengzh-start:active { transform: translateY(1px); }
-      .opengzh-start:disabled { cursor: not-allowed; border-color: #d0d5dd; background: #e4e7ec; color: #98a2b3; box-shadow: none; }
+      .opengzh-start:disabled { cursor: not-allowed; border-color: #d4c7bb; background: #e4dbd1; color: #9a897d; box-shadow: none; }
       .opengzh-platform-row[data-status="authenticated"] .opengzh-platform-status,
-      .opengzh-platform-row[data-status="success"] .opengzh-platform-status { color: #137a4b; }
+      .opengzh-platform-row[data-status="success"] .opengzh-platform-status { color: #3d7657; }
       .opengzh-platform-row[data-status="authenticated"] .opengzh-platform-status::before,
-      .opengzh-platform-row[data-status="success"] .opengzh-platform-status::before { background: #12a56a; }
-      .opengzh-platform-row[data-status="auth-required"] .opengzh-platform-status { color: #a15c00; }
-      .opengzh-platform-row[data-status="auth-required"] .opengzh-platform-status::before { background: #e99518; }
-      .opengzh-platform-row[data-status="failed"] .opengzh-platform-status { color: #b42318; }
-      .opengzh-platform-row[data-status="failed"] .opengzh-platform-status::before { background: #d92d20; }
+      .opengzh-platform-row[data-status="success"] .opengzh-platform-status::before { background: #5b936f; }
+      .opengzh-platform-row[data-status="auth-required"] .opengzh-platform-status { color: #9a4637; }
+      .opengzh-platform-row[data-status="auth-required"] .opengzh-platform-status::before { background: var(--ogzh-primary); }
+      .opengzh-platform-row[data-status="failed"] .opengzh-platform-status { color: #9f3429; }
+      .opengzh-platform-row[data-status="failed"] .opengzh-platform-status::before { background: #b33d30; }
       .opengzh-platform-row[data-status="checking-auth"] .opengzh-platform-status::before,
       .opengzh-platform-row[data-status="uploading-images"] .opengzh-platform-status::before,
       .opengzh-platform-row[data-status="saving-draft"] .opengzh-platform-status::before {
@@ -866,18 +917,20 @@
         animation: opengzh-pulse 1.1s ease-in-out infinite;
       }
       @keyframes opengzh-pulse { 50% { opacity: .28; transform: scale(.78); } }
-      .opengzh-draft[hidden], .opengzh-login[hidden], .opengzh-retry[hidden], .opengzh-backdrop[hidden] { display: none; }
+      .opengzh-panel[hidden], .opengzh-draft[hidden], .opengzh-login[hidden], .opengzh-retry[hidden], .opengzh-action-hint[hidden] { display: none; }
       @media (max-width: 560px) {
-        .opengzh-platform-row { grid-template-columns: 20px 40px minmax(0, 1fr); }
-        .opengzh-platform-actions { grid-column: 2 / 4; justify-content: flex-start; }
+        .opengzh-panel { width: min(420px, calc(100vw - 16px)); }
+        .opengzh-platform-row { padding-inline: 13px; gap: 9px; }
+        .opengzh-login, .opengzh-retry, .opengzh-draft { min-height: 40px; }
       }
       @media (max-width: 390px) {
-        .opengzh-backdrop { padding: 8px; }
-        .opengzh-panel { width: calc(100vw - 16px); max-height: calc(100vh - 16px); border-radius: 16px; }
-        .opengzh-header { padding: 20px 16px 16px; }
-        .opengzh-content { padding: 14px 16px 18px; }
-        .opengzh-footer { display: grid; gap: 12px; padding: 14px 16px 16px; }
-        .opengzh-start { width: 100%; }
+        .opengzh-panel { width: calc(100vw - 16px); border-radius: 12px; }
+        .opengzh-header { padding-left: 14px; }
+        .opengzh-platform-row { grid-template-columns: 18px 28px minmax(0, 1fr) auto; padding: 9px 12px; }
+        .platform-icon { width: 28px; height: 28px; }
+        .opengzh-login, .opengzh-retry, .opengzh-draft { min-height: 44px; }
+        .opengzh-footer { padding: 11px 12px 12px; }
+        .opengzh-footer-note { max-width: 112px; }
       }
       @media (prefers-reduced-motion: reduce) {
         *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
@@ -935,6 +988,11 @@
 
     function renderSelection() {
       for (const platformId of PLATFORM_IDS) rowMap.get(platformId).checkbox.checked = state.selected.includes(platformId);
+      updateSelectedCount();
+    }
+
+    function updateSelectedCount() {
+      selectedCount.textContent = `已选 ${state.selected.length}`;
     }
 
     function updateRowPresentation(row) {
@@ -943,6 +1001,7 @@
       row.login.hidden = row.statusKey !== 'auth-required';
       row.retry.hidden = state.busy || !row.canRetry;
       row.retry.disabled = state.busy || !row.canRetry;
+      row.actionHint.hidden = row.statusKey !== 'auth-required';
     }
 
     function setLocked(locked) {
@@ -1102,9 +1161,9 @@
         if (!connected || state.disposed || !state.portConnected) return false;
       }
       panel.hidden = false;
-      backdrop.hidden = false;
       state.panelOpen = true;
       currentAnchor.setAttribute('aria-expanded', 'true');
+      positionPanel();
       close.focus();
       ready.then(() => {
         if (state.disposed || !state.portConnected || !state.panelOpen || state.busy) return;
@@ -1113,12 +1172,33 @@
       return true;
     }
 
-    function closePanel() {
+    function closePanel({ restoreFocus = true } = {}) {
       state.panelOpen = false;
-      backdrop.hidden = true;
       panel.hidden = true;
       currentAnchor.setAttribute('aria-expanded', 'false');
-      currentAnchor.focus();
+      if (restoreFocus) currentAnchor.focus();
+    }
+
+    function positionPanel() {
+      if (!state.panelOpen || !panel.style) return;
+      const anchorRect = currentAnchor.getBoundingClientRect?.();
+      const viewportWidth = Number(windowObject.innerWidth || doc.documentElement?.clientWidth);
+      const viewportHeight = Number(windowObject.innerHeight || doc.documentElement?.clientHeight);
+      if (!anchorRect || !Number.isFinite(viewportWidth) || !Number.isFinite(viewportHeight)
+        || viewportWidth <= 0 || viewportHeight <= 0) return;
+      const margin = 8;
+      const gap = 8;
+      const width = Math.min(420, Math.max(0, viewportWidth - margin * 2));
+      const left = Math.max(margin, Math.min(anchorRect.right - width, viewportWidth - width - margin));
+      const panelHeight = Number(panel.getBoundingClientRect?.().height) || 0;
+      let top = anchorRect.bottom + gap;
+      if (panelHeight && top + panelHeight > viewportHeight - margin && anchorRect.top - panelHeight - gap >= margin) {
+        top = anchorRect.top - panelHeight - gap;
+      }
+      panel.style.left = `${Math.round(left)}px`;
+      panel.style.right = 'auto';
+      panel.style.top = `${Math.round(Math.max(margin, top))}px`;
+      panel.style.maxHeight = `${Math.max(180, Math.floor(viewportHeight - Math.max(margin, top) - margin))}px`;
     }
 
     function focusableControls() {
@@ -1321,15 +1401,28 @@
       }
     };
     setPort(port);
+    setAnchor(currentAnchor);
     listen(doc, PAGE_EVENTS.open, onOpenRequest);
     listen(close, 'click', closePanel);
-    listen(backdrop, 'click', (event) => {
-      if (event.target === backdrop) closePanel();
+    listen(doc, 'pointerdown', (event) => {
+      if (!state.panelOpen) return;
+      const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+      if (event.target === currentAnchor || event.target === host || path.includes(currentAnchor) || path.includes(host)) return;
+      closePanel({ restoreFocus: false });
     });
     const onDocumentKeydown = (event) => {
-      if (event.key === 'Escape' && !backdrop.hidden) closePanel();
+      if (event.key === 'Escape' && state.panelOpen) closePanel();
     };
     listen(doc, 'keydown', onDocumentKeydown);
+    listen(windowObject, 'resize', positionPanel);
+    listen(windowObject, 'scroll', positionPanel);
+    listen(windowObject, 'focus', () => {
+      if (!state.panelOpen || state.busy || state.authRequestId) return;
+      const platformIds = state.selected.filter((platformId) => state.pendingLoginPlatforms.has(platformId));
+      if (!platformIds.length) return;
+      for (const platformId of platformIds) state.pendingLoginPlatforms.delete(platformId);
+      sendCheckAuth(platformIds);
+    });
     listen(panel, 'keydown', onPanelKeydown);
     listen(start, 'click', startBatch);
     renderSelection();
@@ -1353,10 +1446,10 @@
       state.disposed = true;
       state.panelOpen = false;
       currentAnchor.setAttribute?.('aria-expanded', 'false');
-      backdrop.hidden = true;
       panel.hidden = true;
       abortSnapshot();
       invalidateAuth();
+      state.pendingLoginPlatforms.clear();
       state.busy = false;
       state.taskId = null;
       state.operationId = null;
@@ -1375,9 +1468,9 @@
       get anchor() { return currentAnchor; },
       setAnchor,
       panel,
-      backdrop,
       header,
       title,
+      selectedCount,
       subtitle,
       footer,
       footerNote,
@@ -1388,6 +1481,7 @@
       rows: rowMap,
       openPanel,
       closePanel,
+      positionPanel,
       startBatch,
       onMessage,
       imageResponder,

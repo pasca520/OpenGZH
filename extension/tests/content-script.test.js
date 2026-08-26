@@ -35,11 +35,16 @@ class FakeEvent {
     this.detail = init.detail;
     this.key = init.key;
     this.shiftKey = Boolean(init.shiftKey);
+    this.path = init.composedPath;
     this.defaultPrevented = false;
   }
 
   preventDefault() {
     this.defaultPrevented = true;
+  }
+
+  composedPath() {
+    return this.path || [this.target];
   }
 }
 
@@ -56,6 +61,7 @@ class FakeElement extends FakeEventTarget {
     this.checked = false;
     this.textContent = '';
     this.className = '';
+    this.style = {};
     this.nextSibling = null;
     this.ownerDocument = null;
   }
@@ -381,10 +387,11 @@ describe('content script source contract', () => {
     expect(source).toContain('opengzh:distribution:opened');
     expect(source).toContain('data-opengzh-extension-host');
     expect(source).toContain('platform-icon');
-    expect(source).toContain('保存草稿并打开');
+    expect(source).toContain('保存草稿');
     expect(source).not.toContain('同步到平台');
     expect(source).not.toContain('opengzh-trigger');
     expect(source).toContain('选择平台，确认登录状态后保存为草稿。');
+    expect(source).not.toContain('opengzh-backdrop');
     expect(source).not.toContain('chrome.permissions');
     expect(source).not.toContain('permissions.request');
     expect(source).not.toContain('cookies');
@@ -412,7 +419,11 @@ describe('content script shadow DOM UI', () => {
     expect(ui.host.shadowRoot).toBe(ui.shadow);
     expect(ui.trigger).toBeUndefined();
     expect(ui.shadow.children.find((child) => child.tagName === 'STYLE').textContent).not.toContain('opengzh-trigger');
-    expect(ui.shadow.children.find((child) => child.className === 'opengzh-extension-shell').children).toHaveLength(1);
+    expect(ui.shadow.children.find((child) => child.className === 'opengzh-extension-shell').children[0]).toBe(ui.panel);
+    expect(ui.panel.attributes.get('aria-modal')).toBeUndefined();
+    expect(ui.title.textContent).toBe('同步草稿');
+    expect(ui.selectedCount.textContent).toBe('已选 4');
+    expect(ui.start.textContent).toBe('保存草稿');
     expect(ui.rows.get('weixin').row.children[1].className).toBe('platform-icon');
     expect(ui.rows.get('weixin').row.children[1].textContent).toBe('微');
     expect(ui.rows.get('weixin').row.children[1].attributes.get('aria-hidden')).toBe('true');
@@ -462,6 +473,8 @@ describe('content script shadow DOM UI', () => {
     expect(row.row.dataset.status).toBe('auth-required');
     expect(row.login.hidden).toBe(false);
     expect(row.retry.hidden).toBe(false);
+    expect(row.actionHint.hidden).toBe(false);
+    expect(row.actionHint.textContent).toBe('登录后自动更新');
 
     ui.state.taskId = 'task';
     ui.state.operationId = 'operation';
@@ -469,6 +482,7 @@ describe('content script shadow DOM UI', () => {
     ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task', operationId: 'operation', platformId: 'weixin', status: 'failed', error: { message: '平台结构变化' } });
     expect(row.login.hidden).toBe(true);
     expect(row.retry.hidden).toBe(true);
+    expect(row.actionHint.hidden).toBe(true);
 
     ui.onMessage({ type: 'BATCH_COMPLETE', taskId: 'task', operationId: 'operation' });
     expect(row.login.hidden).toBe(true);
@@ -480,6 +494,54 @@ describe('content script shadow DOM UI', () => {
       platform.checkbox.dispatchEvent(new FakeEvent('change'));
     }
     expect(ui.start.disabled).toBe(true);
+    expect(ui.selectedCount.textContent).toBe('已选 0');
+  });
+
+  it('rechecks the platform when focus returns after opening a login page', async () => {
+    const { createUi } = loadTestApi();
+    const { doc, anchor } = makeUiDom();
+    const messages = [];
+    const browserWindow = new FakeEventTarget();
+    browserWindow.open = vi.fn();
+    const ui = createUi({
+      document: doc,
+      anchor,
+      storage: { get: async () => ({ 'opengzh.selectedPlatformIds': ['weixin'] }), set: async () => {}, remove: async () => {} },
+      port: { postMessage: (message) => messages.push(message) },
+      windowObject: browserWindow,
+    });
+    await ui.ready;
+    await ui.openPanel();
+    ui.onMessage({ type: 'AUTH_RESULT', requestId: messages.at(-1).requestId, platformId: 'weixin', authenticated: false });
+
+    ui.rows.get('weixin').login.dispatchEvent(new FakeEvent('click'));
+    expect(browserWindow.open).toHaveBeenCalledWith('https://mp.weixin.qq.com/', '_blank', 'noopener');
+    browserWindow.dispatchEvent(new FakeEvent('focus'));
+    expect(messages.filter((message) => message.type === 'CHECK_AUTH')).toHaveLength(2);
+    expect(messages.at(-1).platformIds).toEqual(['weixin']);
+  });
+
+  it('pins the popover to the trigger and keeps it inside a 390px viewport', async () => {
+    const { createUi } = loadTestApi();
+    const { doc, anchor } = makeUiDom();
+    anchor.getBoundingClientRect = () => ({ top: 12, right: 220, bottom: 50, left: 80, width: 140, height: 38 });
+    const browserWindow = new FakeEventTarget();
+    browserWindow.innerWidth = 390;
+    browserWindow.innerHeight = 844;
+    const ui = createUi({
+      document: doc,
+      anchor,
+      storage: { get: async () => ({}), set: async () => {}, remove: async () => {} },
+      port: { postMessage: () => {} },
+      windowObject: browserWindow,
+    });
+    ui.panel.getBoundingClientRect = () => ({ height: 382 });
+    await ui.openPanel();
+    ui.positionPanel();
+
+    expect(ui.panel.style.left).toBe('8px');
+    expect(ui.panel.style.top).toBe('58px');
+    expect(ui.panel.style.maxHeight).toBe('778px');
   });
 });
 
@@ -499,7 +561,7 @@ describe('content script distribution open protocol', () => {
     await ui.ready;
     doc.dispatchEvent(new FakeEvent(PAGE_EVENTS.open, { detail: { requestId: 'page-request-1' } }));
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(ui.backdrop.hidden).toBe(false);
+    expect(ui.panel.hidden).toBe(false);
     expect(anchor.attributes.get('aria-expanded')).toBe('true');
     expect(doc.events.filter((event) => event.type === PAGE_EVENTS.opened)).toHaveLength(1);
     expect(doc.events.at(-1)).toMatchObject({ type: PAGE_EVENTS.opened, detail: { requestId: 'page-request-1' } });
@@ -527,7 +589,7 @@ describe('content script distribution open protocol', () => {
     }
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(invalidDom.doc.events.some((event) => event.type === PAGE_EVENTS.opened)).toBe(false);
-    expect(invalidUi.backdrop.hidden).toBe(true);
+    expect(invalidUi.panel.hidden).toBe(true);
 
     const disconnectedDom = makeUiDom();
     const disconnectedUi = createUi({
@@ -542,7 +604,7 @@ describe('content script distribution open protocol', () => {
     disconnectedDom.doc.dispatchEvent(new FakeEvent(PAGE_EVENTS.open, { detail: { requestId: 'no-port' } }));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(disconnectedDom.doc.events.some((event) => event.type === PAGE_EVENTS.opened)).toBe(false);
-    expect(disconnectedUi.backdrop.hidden).toBe(true);
+    expect(disconnectedUi.panel.hidden).toBe(true);
   });
 
   it('stops acknowledging requests after port disconnect and removes the open listener on dispose', async () => {
@@ -568,7 +630,7 @@ describe('content script distribution open protocol', () => {
     doc.dispatchEvent(new FakeEvent(PAGE_EVENTS.open, { detail: { requestId: 'after-disconnect' } }));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(doc.events.some((event) => event.type === PAGE_EVENTS.opened)).toBe(false);
-    expect(ui.backdrop.hidden).toBe(true);
+    expect(ui.panel.hidden).toBe(true);
     ui.dispose();
     expect(doc.listenerCount(PAGE_EVENTS.open)).toBe(0);
   });
@@ -591,7 +653,7 @@ describe('content script distribution open protocol', () => {
     });
     doc.dispatchEvent(new FakeEvent(PAGE_EVENTS.open, { detail: { requestId: 'fast-open' } }));
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(ui.backdrop.hidden).toBe(false);
+    expect(ui.panel.hidden).toBe(false);
     expect(doc.events.at(-1)).toMatchObject({ type: PAGE_EVENTS.opened, detail: { requestId: 'fast-open' } });
     expect(messages).toEqual([]);
     resolveSelection({ 'opengzh.selectedPlatformIds': ['weixin'] });
@@ -623,7 +685,7 @@ describe('content script distribution open protocol', () => {
     });
     doc.dispatchEvent(new FakeEvent(PAGE_EVENTS.open, { detail: { requestId: 'disconnect-race' } }));
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(ui.backdrop.hidden).toBe(false);
+    expect(ui.panel.hidden).toBe(false);
     onDisconnect();
     resolveSelection({ 'opengzh.selectedPlatformIds': ['weixin'] });
     await ui.ready;
@@ -703,7 +765,7 @@ describe('content script distribution open protocol', () => {
     expect(connectPort).toHaveBeenCalledTimes(1);
     expect(newPort.messages.some((message) => message.type === 'PING')).toBe(true);
     expect(doc.events.at(-1)).toMatchObject({ type: 'opengzh:distribution:opened', detail: { requestId: 'reconnect-1' } });
-    expect(controller.ui.backdrop.hidden).toBe(false);
+    expect(controller.ui.panel.hidden).toBe(false);
     controller.disconnect();
   });
 
@@ -719,13 +781,13 @@ describe('content script distribution open protocol', () => {
     doc.dispatchEvent(new FakeEvent('opengzh:distribution:open', { detail: { requestId: 'reconnect-wait' } }));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(newPort.messages.find((message) => message.type === 'PING')).toBeTruthy();
-    expect(controller.ui.backdrop.hidden).toBe(true);
+    expect(controller.ui.panel.hidden).toBe(true);
     expect(doc.events.some((event) => event.type === 'opengzh:distribution:opened')).toBe(false);
     const ping = newPort.messages.find((message) => message.type === 'PING');
     newPort.receive({ type: 'PONG', requestId: ping.requestId });
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(disconnect).not.toHaveBeenCalled();
-    expect(controller.ui.backdrop.hidden).toBe(false);
+    expect(controller.ui.panel.hidden).toBe(false);
     expect(doc.events.at(-1)).toMatchObject({ type: 'opengzh:distribution:opened', detail: { requestId: 'reconnect-wait' } });
     controller.disconnect();
   });
@@ -749,7 +811,7 @@ describe('content script distribution open protocol', () => {
     expect(controller.ui.state.portConnected).toBe(false);
     newPort.receive({ type: 'PONG', requestId: ping.requestId });
     await vi.advanceTimersByTimeAsync(0);
-    expect(controller.ui.backdrop.hidden).toBe(true);
+    expect(controller.ui.panel.hidden).toBe(true);
     expect(doc.events.some((event) => event.type === 'opengzh:distribution:opened')).toBe(false);
     controller.disconnect();
   });
@@ -782,7 +844,7 @@ describe('content script distribution open protocol', () => {
     doc.dispatchEvent(new FakeEvent('opengzh:distribution:open', { detail: { requestId: 'reconnect-fail' } }));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(doc.events.some((event) => event.type === 'opengzh:distribution:opened')).toBe(false);
-    expect(controller.ui.backdrop.hidden).toBe(true);
+    expect(controller.ui.panel.hidden).toBe(true);
     controller.disconnect();
   });
 
@@ -803,7 +865,7 @@ describe('content script distribution open protocol', () => {
     oldPort.receive({ type: 'FATAL_ERROR', message: 'stale old port error' });
     oldPort.disconnect();
     expect(controller.ui.state.portConnected).toBe(true);
-    expect(controller.ui.backdrop.hidden).toBe(false);
+    expect(controller.ui.panel.hidden).toBe(false);
     controller.disconnect();
   });
 
@@ -1224,7 +1286,7 @@ describe('Task5 quality runtime contracts', () => {
     expect(messages).toEqual([]);
     expect(ui.state.busy).toBe(false);
     expect(ui.state.taskId).toBe(null);
-    expect(ui.backdrop.hidden).toBe(true);
+    expect(ui.panel.hidden).toBe(true);
   });
 
   it('passes AbortSignal to snapshots and aborts on finish or dispose', async () => {
@@ -1676,24 +1738,30 @@ describe('Shadow DOM CSS, accessibility, and focus contract', () => {
     const ui = createUi({ document: doc, anchor, storage: { get: async () => ({}), set: async () => {}, remove: async () => {} }, port: { postMessage: () => {} } });
     const style = ui.shadow.children.find((child) => child.tagName === 'STYLE');
     expect(style).toBeTruthy();
-    expect(ui.title.textContent).toBe('同步到内容平台');
+    expect(ui.title.textContent).toBe('同步草稿');
+    expect(ui.selectedCount.textContent).toBe('已选 4');
     expect(ui.subtitle.textContent).toBe('选择平台，确认登录状态后保存为草稿。');
     expect(ui.header.className).toBe('opengzh-header');
     expect(ui.footer.className).toBe('opengzh-footer');
-    expect(ui.footerNote.textContent).toBe('只保存草稿，不会自动发布');
+    expect(ui.footerNote.textContent).toBe('仅保存草稿，不会发布');
+    expect(ui.start.textContent).toBe('保存草稿');
     expect(ui.close.textContent).toBe('×');
     expect(style.textContent).toContain('.opengzh-platform-details');
     expect(style.textContent).toContain('.opengzh-platform-actions');
     expect(style.textContent).toContain('.opengzh-platform-row[data-status="authenticated"]');
     expect(style.textContent).toContain('min-height: 44px');
+    expect(style.textContent).toContain('width: min(420px, calc(100vw - 16px))');
+    expect(style.textContent).toContain('--ogzh-surface: #fffdf8');
+    expect(style.textContent).toContain('--ogzh-primary: #b64b39');
+    expect(style.textContent).toContain('position: fixed');
     expect(style.textContent).toContain('@media (max-width: 560px)');
     expect(style.textContent).toContain('@media (prefers-reduced-motion: reduce)');
-    expect(style.textContent).toContain('backdrop-filter: blur(4px)');
-    expect(style.textContent).toContain('grid-column: 2 / 4');
+    expect(style.textContent).not.toContain('backdrop-filter');
     expect(ui.rows.get('weixin').row.children[2].className).toBe('opengzh-platform-details');
     expect(ui.rows.get('weixin').row.children[3].className).toBe('opengzh-platform-actions');
     expect(ui.anchor).toBe(anchor);
     expect(ui.panel.attributes.get('aria-labelledby')).toBe('opengzh-title');
+    expect(ui.panel.attributes.get('aria-modal')).toBeUndefined();
     expect(ui.rows.get('weixin').checkbox.attributes.get('aria-label')).toContain('微信公众号');
     expect(ui.rows.get('weixin').login.attributes.get('aria-label')).toContain('微信公众号');
     expect(ui.rows.get('weixin').retry.attributes.get('aria-label')).toContain('微信公众号');
@@ -1712,8 +1780,10 @@ describe('Shadow DOM CSS, accessibility, and focus contract', () => {
     expect(doc.activeElement).toBe(anchor);
     expect(anchor.attributes.get('aria-expanded')).toBe('false');
     await ui.openPanel();
-    ui.backdrop.dispatchEvent(new FakeEvent('click'));
-    expect(doc.activeElement).toBe(anchor);
+    doc.dispatchEvent(new FakeEvent('pointerdown', { composedPath: [ui.panel, ui.shadow, ui.host] }));
+    expect(ui.panel.hidden).toBe(false);
+    doc.dispatchEvent(new FakeEvent('pointerdown', { composedPath: [doc] }));
+    expect(ui.panel.hidden).toBe(true);
     expect(anchor.attributes.get('aria-expanded')).toBe('false');
   });
 
