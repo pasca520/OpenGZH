@@ -635,10 +635,10 @@
       details.append(name, status);
       const actions = doc.createElement('div');
       actions.className = 'opengzh-platform-actions';
-      const login = textElement(doc, 'button', '登录', 'opengzh-login');
+      const login = textElement(doc, 'button', '去登录', 'opengzh-login');
       login.type = 'button';
       login.hidden = true;
-      login.setAttribute('aria-label', `${PLATFORMS[platformId].name}登录`);
+      login.setAttribute('aria-label', `${PLATFORMS[platformId].name}去登录`);
       const retry = textElement(doc, 'button', '重新检测', 'opengzh-retry');
       retry.type = 'button';
       retry.hidden = true;

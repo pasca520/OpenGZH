@@ -422,6 +422,7 @@ describe('content script shadow DOM UI', () => {
     expect(ui.rows.get('woshipm').row.children[2].className).toBe('opengzh-platform-details');
     expect(ui.rows.get('woshipm').row.children[2].children[0].textContent).toBe('人人都是产品经理');
     expect(ui.rows.get('woshipm').row.children[3].className).toBe('opengzh-platform-actions');
+    expect(ui.rows.get('weixin').login.textContent).toBe('去登录');
     expect(createUi({ document: doc, anchor, port, storage })).toMatchObject({ existing: true, host: ui.host });
     await ui.openPanel();
     await new Promise((resolve) => setTimeout(resolve, 0));
