@@ -49,9 +49,17 @@ describe('WeChat adapter', () => {
       .resolves.toEqual({ authenticated: true, userId: 'test-user-789', username: '测试账号' });
   });
 
-  it('fails closed for missing required fields or fields split across unrelated scripts', async () => {
-    const missing = '<script>window.wx = { data: { t: "test-token-123" }, user_name: "test-user-789" };</script>';
-    const split = '<script>window.wx = { data: { t: "test-token-123" } };</script><script>ticket: "test-ticket-456", user_name: "test-user-789"</script>';
+  it('treats a structured bootstrap token as authenticated when optional account fields are absent', async () => {
+    const tokenOnly = '<script>window.wx = { data: { t: "test-token-123" } };</script>';
+    const adapter = createWeixinAdapter();
+
+    await expect(adapter.checkAuth(runtimeFor(vi.fn(async () => response(tokenOnly)))))
+      .resolves.toEqual({ authenticated: true, userId: '', username: '' });
+  });
+
+  it('fails closed when the bootstrap token is missing or appears outside the bootstrap object', async () => {
+    const missing = '<script>window.wx = { ticket: "test-ticket-456", user_name: "test-user-789" };</script>';
+    const split = '<script>window.wx = { data: {} };</script><script>const t = "test-token-123";</script>';
     for (const html of [missing, split]) {
       const adapter = createWeixinAdapter();
       await expect(adapter.checkAuth(runtimeFor(vi.fn(async () => response(html)))))

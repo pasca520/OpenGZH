@@ -387,10 +387,11 @@ describe('content script source contract', () => {
     expect(source).toContain('opengzh:distribution:opened');
     expect(source).toContain('data-opengzh-extension-host');
     expect(source).toContain('platform-icon');
-    expect(source).toContain('保存草稿');
+    expect(source).toContain('同步到草稿');
+    expect(source).not.toContain('保存草稿');
     expect(source).not.toContain('同步到平台');
     expect(source).not.toContain('opengzh-trigger');
-    expect(source).toContain('选择平台，确认登录状态后保存为草稿。');
+    expect(source).toContain('选择平台，确认登录状态后同步到各平台草稿箱。');
     expect(source).not.toContain('opengzh-backdrop');
     expect(source).not.toContain('chrome.permissions');
     expect(source).not.toContain('permissions.request');
@@ -421,9 +422,9 @@ describe('content script shadow DOM UI', () => {
     expect(ui.shadow.children.find((child) => child.tagName === 'STYLE').textContent).not.toContain('opengzh-trigger');
     expect(ui.shadow.children.find((child) => child.className === 'opengzh-extension-shell').children[0]).toBe(ui.panel);
     expect(ui.panel.attributes.get('aria-modal')).toBeUndefined();
-    expect(ui.title.textContent).toBe('同步草稿');
+    expect(ui.title.textContent).toBe('同步到草稿');
     expect(ui.selectedCount.textContent).toBe('已选 4');
-    expect(ui.start.textContent).toBe('保存草稿');
+    expect(ui.start.textContent).toBe('同步到草稿');
     expect(ui.rows.get('weixin').row.children[1].className).toBe('platform-icon');
     expect(ui.rows.get('weixin').row.children[1].textContent).toBe('微');
     expect(ui.rows.get('weixin').row.children[1].attributes.get('aria-hidden')).toBe('true');
@@ -800,6 +801,49 @@ describe('content script distribution open protocol', () => {
     controller.disconnect();
   });
 
+  it('recovers an open panel after a port disconnect and refreshes auth automatically', async () => {
+    const { boot } = loadTestApi();
+    const { doc } = makeUiDom();
+    const oldPort = makePort();
+    const newPort = makePort({ autoPong: true });
+    const connectPort = vi.fn(() => newPort);
+    const controller = boot({ document: doc, port: oldPort, connectPort, CustomEventCtor: FakeEvent });
+    await controller.ui.ready;
+    doc.dispatchEvent(new FakeEvent('opengzh:distribution:open', { detail: { requestId: 'recover-open-panel' } }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const firstAuth = oldPort.messages.find((message) => message.type === 'CHECK_AUTH');
+
+    oldPort.disconnect();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const refreshedAuth = newPort.messages.find((message) => message.type === 'CHECK_AUTH');
+    expect(connectPort).toHaveBeenCalledTimes(1);
+    expect(refreshedAuth).toMatchObject({ type: 'CHECK_AUTH', requestId: expect.any(String), platformIds: allPlatforms });
+    expect(refreshedAuth.requestId).not.toBe(firstAuth.requestId);
+    expect(controller.ui.alert.textContent).toBe('');
+    expect(controller.ui.start.disabled).toBe(false);
+    controller.disconnect();
+  });
+
+  it('asks for a page refresh and blocks syncing when an open panel cannot reconnect', async () => {
+    const { boot } = loadTestApi();
+    const { doc } = makeUiDom();
+    const oldPort = makePort();
+    const controller = boot({ document: doc, port: oldPort, connectPort: () => null, CustomEventCtor: FakeEvent });
+    await controller.ui.ready;
+    doc.dispatchEvent(new FakeEvent('opengzh:distribution:open', { detail: { requestId: 'stale-extension-page' } }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    oldPort.disconnect();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(controller.ui.alert.textContent).toBe('扩展连接已中断，请刷新当前页面后重试');
+    expect(controller.ui.rows.get('weixin').status.textContent).toBe('连接已中断');
+    expect(controller.ui.rows.get('weixin').retry.hidden).toBe(true);
+    expect(controller.ui.start.disabled).toBe(true);
+    controller.disconnect();
+  });
+
   it('waits for the new port PONG before opening or acknowledging a request', async () => {
     const { boot } = loadTestApi();
     const { doc } = makeUiDom();
@@ -1139,7 +1183,7 @@ describe('batch lifecycle, status progress, and connectivity', () => {
     await ui.openPanel();
     await ui.startBatch();
     expect(ui.state.busy).toBe(false);
-    expect(ui.alert.textContent).toBe('无法连接同步服务');
+    expect(ui.alert.textContent).toBe('扩展连接已中断，请刷新当前页面后重试');
     const disconnect = { addListener: vi.fn() };
     const ui2Dom = makeUiDom();
     const ui2 = createUi({ document: ui2Dom.doc, anchor: ui2Dom.anchor, port: { postMessage: () => { throw new Error('gone'); }, onDisconnect: disconnect }, storage: { get: async () => ({}), set: async () => {}, remove: async () => {} } });
@@ -1147,7 +1191,7 @@ describe('batch lifecycle, status progress, and connectivity', () => {
     expect(disconnect.addListener).toHaveBeenCalled();
     disconnect.addListener.mock.calls[0][0]();
     expect(ui2.state.busy).toBe(false);
-    expect(ui2.alert.textContent).toBe('无法连接同步服务');
+    expect(ui2.alert.textContent).toBe('扩展连接已中断，请刷新当前页面后重试');
   });
 });
 
@@ -1769,13 +1813,13 @@ describe('Shadow DOM CSS, accessibility, and focus contract', () => {
     const ui = createUi({ document: doc, anchor, storage: { get: async () => ({}), set: async () => {}, remove: async () => {} }, port: { postMessage: () => {} } });
     const style = ui.shadow.children.find((child) => child.tagName === 'STYLE');
     expect(style).toBeTruthy();
-    expect(ui.title.textContent).toBe('同步草稿');
+    expect(ui.title.textContent).toBe('同步到草稿');
     expect(ui.selectedCount.textContent).toBe('已选 4');
-    expect(ui.subtitle.textContent).toBe('选择平台，确认登录状态后保存为草稿。');
+    expect(ui.subtitle.textContent).toBe('选择平台，确认登录状态后同步到各平台草稿箱。');
     expect(ui.header.className).toBe('opengzh-header');
     expect(ui.footer.className).toBe('opengzh-footer');
-    expect(ui.footerNote.textContent).toBe('仅保存草稿，不会发布');
-    expect(ui.start.textContent).toBe('保存草稿');
+    expect(ui.footerNote.textContent).toBe('同步到所选平台草稿箱，不会发布');
+    expect(ui.start.textContent).toBe('同步到草稿');
     expect(ui.close.textContent).toBe('×');
     expect(style.textContent).toContain('.opengzh-platform-details');
     expect(style.textContent).toContain('.opengzh-platform-actions');

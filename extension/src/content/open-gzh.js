@@ -9,7 +9,7 @@
     woshipm: Object.freeze({ name: '人人都是产品经理', loginUrl: 'https://www.woshipm.com/login.html' }),
   });
   const PLATFORM_ICONS = Object.freeze({ weixin: '微', zhihu: '知', juejin: '掘', woshipm: '人' });
-  const SUBTITLE = '选择平台，确认登录状态后保存为草稿。';
+  const SUBTITLE = '选择平台，确认登录状态后同步到各平台草稿箱。';
   const PORT_NAME = 'opengzh-distribution-v1';
   const STORAGE_KEY = 'opengzh.selectedPlatformIds';
   const PAGE_EVENTS = Object.freeze({
@@ -33,9 +33,10 @@
     'checking-auth': '检测登录中',
     'auth-required': '需要登录',
     'uploading-images': '上传图片中',
-    'saving-draft': '保存草稿中',
+    'saving-draft': '同步到草稿中',
     success: '已完成',
     failed: '失败',
+    'connection-lost': '连接已中断',
     unselected: '未选择',
     unknown: '未知状态',
   });
@@ -608,7 +609,7 @@
     header.className = 'opengzh-header';
     const heading = doc.createElement('div');
     heading.className = 'opengzh-heading';
-    const title = textElement(doc, 'h2', '同步草稿', 'opengzh-title');
+    const title = textElement(doc, 'h2', '同步到草稿', 'opengzh-title');
     title.id = 'opengzh-title';
     const selectedCount = textElement(doc, 'span', '已选 4', 'opengzh-selected-count');
     panel.setAttribute('aria-labelledby', title.id);
@@ -694,14 +695,14 @@
     const alert = textElement(doc, 'p', '', 'opengzh-alert');
     alert.setAttribute('role', 'alert');
     alert.setAttribute('aria-live', 'polite');
-    const start = textElement(doc, 'button', '保存草稿', 'opengzh-start');
+    const start = textElement(doc, 'button', '同步到草稿', 'opengzh-start');
     start.type = 'button';
     const content = doc.createElement('div');
     content.className = 'opengzh-content';
     content.append(rows, alert);
     const footer = doc.createElement('footer');
     footer.className = 'opengzh-footer';
-    const footerNote = textElement(doc, 'p', '仅保存草稿，不会发布', 'opengzh-footer-note');
+    const footerNote = textElement(doc, 'p', '同步到所选平台草稿箱，不会发布', 'opengzh-footer-note');
     footer.append(footerNote, start);
     panel.append(header, content, footer);
     shell.append(panel);
@@ -909,8 +910,10 @@
       .opengzh-platform-row[data-status="success"] .opengzh-platform-status::before { background: #5b936f; }
       .opengzh-platform-row[data-status="auth-required"] .opengzh-platform-status { color: #9a4637; }
       .opengzh-platform-row[data-status="auth-required"] .opengzh-platform-status::before { background: var(--ogzh-primary); }
-      .opengzh-platform-row[data-status="failed"] .opengzh-platform-status { color: #9f3429; }
-      .opengzh-platform-row[data-status="failed"] .opengzh-platform-status::before { background: #b33d30; }
+      .opengzh-platform-row[data-status="failed"] .opengzh-platform-status,
+      .opengzh-platform-row[data-status="connection-lost"] .opengzh-platform-status { color: #9f3429; }
+      .opengzh-platform-row[data-status="failed"] .opengzh-platform-status::before,
+      .opengzh-platform-row[data-status="connection-lost"] .opengzh-platform-status::before { background: #b33d30; }
       .opengzh-platform-row[data-status="checking-auth"] .opengzh-platform-status::before,
       .opengzh-platform-row[data-status="uploading-images"] .opengzh-platform-status::before,
       .opengzh-platform-row[data-status="saving-draft"] .opengzh-platform-status::before {
@@ -974,7 +977,7 @@
       if (state.disposed) return false;
       if (!activePort || typeof activePort.postMessage !== 'function') {
         state.portConnected = false;
-        finishTask('无法连接同步服务');
+        finishTask('扩展连接已中断，请刷新当前页面后重试');
         return false;
       }
       try {
@@ -982,7 +985,7 @@
         return true;
       } catch {
         state.portConnected = false;
-        finishTask('无法连接同步服务');
+        finishTask('扩展连接已中断，请刷新当前页面后重试');
         return false;
       }
     }
@@ -1006,7 +1009,7 @@
     }
 
     function setLocked(locked) {
-      start.disabled = locked || !state.selected.length;
+      start.disabled = locked || !state.portConnected || !state.selected.length;
       for (const row of rowMap.values()) {
         row.checkbox.disabled = locked;
         updateRowPresentation(row);
@@ -1344,11 +1347,31 @@
 
     function onPortDisconnect(connection) {
       if (state.disposed || activePort !== connection) return;
+      const shouldReconnect = state.panelOpen && !state.busy && typeof reconnectPort === 'function';
       state.portConnected = false;
       detachPort(connection);
       if (handshake?.port === connection) settleHandshake(false);
       invalidateAuth();
-      finishTask('无法连接同步服务', { clearRetry: true });
+      for (const platformId of PLATFORM_IDS) {
+        if (rowMap.get(platformId)?.statusKey === 'checking-auth') setStatus(platformId, 'connection-lost');
+      }
+      finishTask(shouldReconnect ? '连接已中断，正在重连…' : '扩展连接已中断，请刷新当前页面后重试', { clearRetry: true });
+      if (!shouldReconnect) return;
+      Promise.resolve()
+        .then(() => reconnectPort())
+        .then((connected) => {
+          if (state.disposed || !state.panelOpen) return;
+          if (!connected || !state.portConnected) {
+            setAlert('扩展连接已中断，请刷新当前页面后重试');
+            return;
+          }
+          setLocked(false);
+          setAlert('');
+          sendCheckAuth();
+        })
+        .catch(() => {
+          if (!state.disposed && state.panelOpen) setAlert('扩展连接已中断，请刷新当前页面后重试');
+        });
     }
 
     function setPort(nextPort, { ready: isReady = true } = {}) {

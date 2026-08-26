@@ -269,9 +269,9 @@ function parseBootstrap(html) {
   for (const properties of bootstrapObjects(html)) {
     const data = parseObjectProperties(properties.get('data')?.raw || '');
     const token = stringProperty(data, 't');
-    const ticket = stringProperty(properties, 'ticket');
-    const userName = stringProperty(properties, 'user_name');
-    if (!token || !ticket || !userName) continue;
+    if (!token) continue;
+    const ticket = stringProperty(properties, 'ticket') || '';
+    const userName = stringProperty(properties, 'user_name') || '';
     const nickName = stringProperty(properties, 'nick_name') || '';
     const time = properties.get('time');
     const svrTime = time?.type === 'string' && /^\d+$/.test(time.value)
