@@ -384,7 +384,7 @@ describe('content script source contract', () => {
     expect(source).toContain('保存草稿并打开');
     expect(source).not.toContain('同步到平台');
     expect(source).not.toContain('opengzh-trigger');
-    expect(source).toContain('微信公众号、知乎、掘金、人人都是产品经理文章同步助手');
+    expect(source).toContain('选择平台，确认登录状态后保存为草稿。');
     expect(source).not.toContain('chrome.permissions');
     expect(source).not.toContain('permissions.request');
     expect(source).not.toContain('cookies');
@@ -467,9 +467,12 @@ describe('content script shadow DOM UI', () => {
     ui.state.busy = true;
     ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task', operationId: 'operation', platformId: 'weixin', status: 'failed', error: { message: '平台结构变化' } });
     expect(row.login.hidden).toBe(true);
+    expect(row.retry.hidden).toBe(true);
+
+    ui.onMessage({ type: 'BATCH_COMPLETE', taskId: 'task', operationId: 'operation' });
+    expect(row.login.hidden).toBe(true);
     expect(row.retry.hidden).toBe(false);
 
-    ui.state.busy = false;
     for (const platformId of allPlatforms) {
       const platform = ui.rows.get(platformId);
       platform.checkbox.checked = false;
@@ -1672,8 +1675,19 @@ describe('Shadow DOM CSS, accessibility, and focus contract', () => {
     const ui = createUi({ document: doc, anchor, storage: { get: async () => ({}), set: async () => {}, remove: async () => {} }, port: { postMessage: () => {} } });
     const style = ui.shadow.children.find((child) => child.tagName === 'STYLE');
     expect(style).toBeTruthy();
+    expect(ui.title.textContent).toBe('同步到内容平台');
+    expect(ui.subtitle.textContent).toBe('选择平台，确认登录状态后保存为草稿。');
+    expect(ui.header.className).toBe('opengzh-header');
+    expect(ui.footer.className).toBe('opengzh-footer');
+    expect(ui.footerNote.textContent).toBe('只保存草稿，不会自动发布');
+    expect(ui.close.textContent).toBe('×');
     expect(style.textContent).toContain('.opengzh-platform-details');
     expect(style.textContent).toContain('.opengzh-platform-actions');
+    expect(style.textContent).toContain('.opengzh-platform-row[data-status="authenticated"]');
+    expect(style.textContent).toContain('min-height: 44px');
+    expect(style.textContent).toContain('@media (max-width: 560px)');
+    expect(style.textContent).toContain('@media (prefers-reduced-motion: reduce)');
+    expect(style.textContent).toContain('backdrop-filter: blur(4px)');
     expect(style.textContent).toContain('grid-column: 2 / 4');
     expect(ui.rows.get('weixin').row.children[2].className).toBe('opengzh-platform-details');
     expect(ui.rows.get('weixin').row.children[3].className).toBe('opengzh-platform-actions');
