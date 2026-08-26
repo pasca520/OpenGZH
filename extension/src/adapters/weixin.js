@@ -194,6 +194,30 @@ function skipLeadingTrivia(source, start) {
   return cursor;
 }
 
+function* topLevelWxObjectStarts(source) {
+  const assignmentPattern = /\bwindow\s*\.\s*wx\s*=\s*\{/gi;
+  let cursor = 0;
+  let braceDepth = 0;
+  let bracketDepth = 0;
+  let parenDepth = 0;
+  for (const assignment of source.matchAll(assignmentPattern)) {
+    while (cursor < assignment.index) {
+      const character = source[cursor++];
+      if (character === '{') braceDepth += 1;
+      else if (character === '}') braceDepth = Math.max(0, braceDepth - 1);
+      else if (character === '[') bracketDepth += 1;
+      else if (character === ']') bracketDepth = Math.max(0, bracketDepth - 1);
+      else if (character === '(') parenDepth += 1;
+      else if (character === ')') parenDepth = Math.max(0, parenDepth - 1);
+    }
+    let previous = assignment.index - 1;
+    while (previous >= 0 && /\s/.test(source[previous])) previous -= 1;
+    if (braceDepth || bracketDepth || parenDepth) continue;
+    if (previous >= 0 && source[previous] !== ';' && source[previous] !== '}') continue;
+    yield assignment.index + assignment[0].lastIndexOf('{');
+  }
+}
+
 function parseObjectProperties(source) {
   if (!source.startsWith('{')) return null;
   const properties = new Map();
@@ -250,13 +274,12 @@ function* bootstrapObjects(html) {
     const masked = maskJavascript(script);
     const cursor = skipLeadingTrivia(script, 0);
     if (cursor < 0 || script.startsWith('<!--', cursor)) continue;
-    const assignment = /^window\s*\.\s*wx\s*=\s*\{/i.exec(masked.slice(cursor));
-    if (!assignment) continue;
-    const objectStart = cursor + assignment[0].lastIndexOf('{');
-    const objectEnd = balancedEnd(masked, objectStart);
-    if (objectEnd < 0) continue;
-    const properties = parseObjectProperties(script.slice(objectStart, objectEnd));
-    if (properties) yield properties;
+    for (const objectStart of topLevelWxObjectStarts(masked)) {
+      const objectEnd = balancedEnd(masked, objectStart);
+      if (objectEnd < 0) continue;
+      const properties = parseObjectProperties(script.slice(objectStart, objectEnd));
+      if (properties) yield properties;
+    }
   }
 }
 

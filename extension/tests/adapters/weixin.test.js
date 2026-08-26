@@ -57,6 +57,18 @@ describe('WeChat adapter', () => {
       .resolves.toEqual({ authenticated: true, userId: '', username: '' });
   });
 
+  it('detects a top-level wx bootstrap after ordinary page initialization code', async () => {
+    const html = `<script>
+      var pageReady = true;
+      const config = { locale: "zh_CN" };
+      window.wx = { data: { t: "test-token-123" }, ticket: "test-ticket-456", user_name: "test-user-789", nick_name: "测试账号" };
+    </script>`;
+    const adapter = createWeixinAdapter();
+
+    await expect(adapter.checkAuth(runtimeFor(vi.fn(async () => response(html)))))
+      .resolves.toEqual({ authenticated: true, userId: 'test-user-789', username: '测试账号' });
+  });
+
   it('fails closed when the bootstrap token is missing or appears outside the bootstrap object', async () => {
     const missing = '<script>window.wx = { ticket: "test-ticket-456", user_name: "test-user-789" };</script>';
     const split = '<script>window.wx = { data: {} };</script><script>const t = "test-token-123";</script>';
@@ -68,26 +80,31 @@ describe('WeChat adapter', () => {
   });
 
   it.each([
-    ['single and double quoted strings', `const single = 'window.wx = { data: { t: "bad-token" } }'; const double = "window.wx = { ticket: 'bad-ticket' }";`, false],
-    ['template strings', 'const template = `window.wx = { data: { t: "bad-token" }, ticket: "bad-ticket", user_name: "bad-user" }`;', false],
-    ['line and block comments', '// window.wx = { data: { t: "bad-token" }, ticket: "bad-ticket", user_name: "bad-user" };\n/* window.wx = { data: { t: "bad-token" }, ticket: "bad-ticket", user_name: "bad-user" } */', true],
-  ])('handles %s before the real bootstrap assignment', async (_label, decoy, accepted) => {
+    ['single and double quoted strings', `const single = 'window.wx = { data: { t: "bad-token" } }'; const double = "window.wx = { ticket: 'bad-ticket' }";`],
+    ['template strings', 'const template = `window.wx = { data: { t: "bad-token" }, ticket: "bad-ticket", user_name: "bad-user" }`;'],
+    ['line and block comments', '// window.wx = { data: { t: "bad-token" }, ticket: "bad-ticket", user_name: "bad-user" };\n/* window.wx = { data: { t: "bad-token" }, ticket: "bad-ticket", user_name: "bad-user" } */'],
+    ['regex literals', '/window.wx = { data: { t: "bad-token" }, ticket: "bad-ticket", user_name: "bad-user" }/;'],
+    ['conditional bodies', 'if (false) { window.wx = { data: { t: "bad-token" }, ticket: "bad-ticket", user_name: "bad-user" }; }'],
+    ['function bodies', 'function bootstrap() { window.wx = { data: { t: "bad-token" }, ticket: "bad-ticket", user_name: "bad-user" }; }'],
+  ])('ignores %s before the real top-level bootstrap assignment', async (_label, decoy) => {
     const valid = 'window.wx = { data: { t: "test-token-123" }, ticket: "test-ticket-456", user_name: "test-user-789", nick_name: "测试账号", time: "1787529600" };';
     const html = `<script>${decoy}\n${valid}</script>`;
     const adapter = createWeixinAdapter();
     await expect(adapter.checkAuth(runtimeFor(vi.fn(async () => response(html)))))
-      .resolves.toEqual(accepted ? { authenticated: true, userId: 'test-user-789', username: '测试账号' } : { authenticated: false });
+      .resolves.toEqual({ authenticated: true, userId: 'test-user-789', username: '测试账号' });
   });
 
   it.each([
+    ['single quoted string', `const decoy = 'window.wx = { data: { t: "bad-token" } }';`],
+    ['template string', 'const decoy = `window.wx = { data: { t: "bad-token" } }`;'],
+    ['line comment', '// window.wx = { data: { t: "bad-token" } };'],
     ['regex literal', '/window.wx = { data: { t: "bad-token" }, ticket: "bad-ticket", user_name: "bad-user" }/;'],
     ['HTML comment', '<!-- window.wx = { data: { t: "bad-token" }, ticket: "bad-ticket", user_name: "bad-user" } -->'],
     ['conditional body', 'if (false) { window.wx = { data: { t: "bad-token" }, ticket: "bad-ticket", user_name: "bad-user" }; }'],
     ['function body', 'function bootstrap() { window.wx = { data: { t: "bad-token" }, ticket: "bad-ticket", user_name: "bad-user" }; }'],
-  ])('rejects %s instead of scanning nested or non-code assignments', async (_label, source) => {
-    const valid = 'window.wx = { data: { t: "test-token-123" }, ticket: "test-ticket-456", user_name: "test-user-789" };';
+  ])('rejects a decoy in a %s', async (_label, source) => {
     const adapter = createWeixinAdapter();
-    await expect(adapter.checkAuth(runtimeFor(vi.fn(async () => response(`<script>${source}\n${valid}</script>`)))))
+    await expect(adapter.checkAuth(runtimeFor(vi.fn(async () => response(`<script>${source}</script>`)))))
       .resolves.toEqual({ authenticated: false });
   });
 
