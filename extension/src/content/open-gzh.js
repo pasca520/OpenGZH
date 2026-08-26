@@ -569,6 +569,7 @@
       operationId: null,
       draftUrls: new Map(),
       pendingLoginPlatforms: new Set(),
+      loginRecheckQueued: false,
       portConnected: Boolean(port),
       disposed: false,
       panelOpen: false,
@@ -1092,7 +1093,8 @@
     function sendCheckAuth(platformIds = state.selected.slice()) {
       if (state.disposed || state.busy || state.authRequestId) return false;
       for (const platformId of PLATFORM_IDS) {
-        setStatus(platformId, platformIds.includes(platformId) ? 'checking-auth' : 'unselected');
+        if (platformIds.includes(platformId)) setStatus(platformId, 'checking-auth');
+        else if (!state.selected.includes(platformId)) setStatus(platformId, 'unselected');
       }
       if (!platformIds.length) {
         invalidateAuth();
@@ -1106,6 +1108,19 @@
       setAlert('');
       if (!post({ type: 'CHECK_AUTH', requestId, platformIds: platformIds.slice() })) invalidateAuth();
       return true;
+    }
+
+    function recheckPendingLoginPlatforms() {
+      if (!state.panelOpen || state.busy) return false;
+      const platformIds = state.selected.filter((platformId) => state.pendingLoginPlatforms.has(platformId));
+      if (!platformIds.length) return false;
+      if (state.authRequestId) {
+        state.loginRecheckQueued = true;
+        return false;
+      }
+      state.loginRecheckQueued = false;
+      for (const platformId of platformIds) state.pendingLoginPlatforms.delete(platformId);
+      return sendCheckAuth(platformIds);
     }
 
     async function startBatch() {
@@ -1251,7 +1266,10 @@
           }
           state.authCompleted.add(result.platformId);
         }
-        if (state.authPlatforms.every((platformId) => state.authCompleted.has(platformId))) invalidateAuth();
+        if (state.authPlatforms.every((platformId) => state.authCompleted.has(platformId))) {
+          invalidateAuth();
+          if (state.loginRecheckQueued) recheckPendingLoginPlatforms();
+        }
         return;
       }
       if (message?.type === 'PLATFORM_STATE') {
@@ -1416,13 +1434,7 @@
     listen(doc, 'keydown', onDocumentKeydown);
     listen(windowObject, 'resize', positionPanel);
     listen(windowObject, 'scroll', positionPanel);
-    listen(windowObject, 'focus', () => {
-      if (!state.panelOpen || state.busy || state.authRequestId) return;
-      const platformIds = state.selected.filter((platformId) => state.pendingLoginPlatforms.has(platformId));
-      if (!platformIds.length) return;
-      for (const platformId of platformIds) state.pendingLoginPlatforms.delete(platformId);
-      sendCheckAuth(platformIds);
-    });
+    listen(windowObject, 'focus', recheckPendingLoginPlatforms);
     listen(panel, 'keydown', onPanelKeydown);
     listen(start, 'click', startBatch);
     renderSelection();
@@ -1450,6 +1462,7 @@
       abortSnapshot();
       invalidateAuth();
       state.pendingLoginPlatforms.clear();
+      state.loginRecheckQueued = false;
       state.busy = false;
       state.taskId = null;
       state.operationId = null;

@@ -521,6 +521,37 @@ describe('content script shadow DOM UI', () => {
     expect(messages.at(-1).platformIds).toEqual(['weixin']);
   });
 
+  it('rechecks a logged-in platform after the current auth request finishes', async () => {
+    const { createUi } = loadTestApi();
+    const { doc, anchor } = makeUiDom();
+    const messages = [];
+    const browserWindow = new FakeEventTarget();
+    browserWindow.open = vi.fn();
+    const ui = createUi({
+      document: doc,
+      anchor,
+      storage: { get: async () => ({}), set: async () => {}, remove: async () => {} },
+      port: { postMessage: (message) => messages.push(message) },
+      windowObject: browserWindow,
+    });
+    await ui.ready;
+    await ui.openPanel();
+    const firstRequestId = messages.at(-1).requestId;
+    ui.onMessage({ type: 'AUTH_RESULT', requestId: firstRequestId, platformId: 'weixin', authenticated: false });
+
+    ui.rows.get('weixin').login.dispatchEvent(new FakeEvent('click'));
+    browserWindow.dispatchEvent(new FakeEvent('focus'));
+    expect(messages.filter((message) => message.type === 'CHECK_AUTH')).toHaveLength(1);
+
+    for (const platformId of ['zhihu', 'juejin', 'woshipm']) {
+      ui.onMessage({ type: 'AUTH_RESULT', requestId: firstRequestId, platformId, authenticated: true });
+    }
+    expect(messages.filter((message) => message.type === 'CHECK_AUTH')).toHaveLength(2);
+    expect(messages.at(-1).platformIds).toEqual(['weixin']);
+    expect(['zhihu', 'juejin', 'woshipm'].map((platformId) => ui.rows.get(platformId).status.textContent))
+      .toEqual(['已登录', '已登录', '已登录']);
+  });
+
   it('pins the popover to the trigger and keeps it inside a 390px viewport', async () => {
     const { createUi } = loadTestApi();
     const { doc, anchor } = makeUiDom();
