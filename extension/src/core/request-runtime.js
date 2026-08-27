@@ -2,6 +2,25 @@ import { dataUrlToBlob } from './data-url.js';
 import { withSessionHeaderRules } from './header-rules.js';
 import { PlatformError, redactSecrets } from './platform-errors.js';
 
+const IN_PAGE_FETCH_FUNCTION = async (options) => {
+  const init = { ...options.init };
+  const body = options.init?.body;
+  if (body && typeof body === 'object' && body.form) {
+    const form = new FormData();
+    for (const [key, value] of (body.form.fields || [])) form.append(String(key), String(value));
+    if (body.form.file) {
+      const blob = new Blob([body.form.file.bytes], { type: body.form.file.mimeType || 'application/octet-stream' });
+      form.append(body.form.fileName || 'files', blob, body.form.file.filename);
+    }
+    init.body = form;
+  }
+  const response = await fetch(options.url, { ...init, credentials: 'include', redirect: 'manual' });
+  const text = await response.text();
+  const headers = {};
+  response.headers.forEach((value, key) => { headers[key] = value; });
+  return { status: response.status, ok: response.ok, type: response.type, headers, text };
+};
+
 const ALLOWED_HOSTS = Object.freeze({
   weixin: Object.freeze(['mp.weixin.qq.com']),
   zhihu: Object.freeze(['www.zhihu.com', 'zhuanlan.zhihu.com', 'api.zhihu.com', 'zhihu-pics-upload.zhimg.com']),
@@ -105,11 +124,51 @@ export function createPortImageBroker(port, { timeoutMs = 30000, idFactory = ran
   };
 }
 
+export function createInTabFetcher({ scriptingApi, tabsApi, logSink = console }) {
+  if (typeof scriptingApi?.executeScript !== 'function' || typeof tabsApi?.query !== 'function') return null;
+  return async function inTabFetch(input, init = {}) {
+    let url;
+    try {
+      url = new URL(input);
+    } catch (_error) {
+      throw new PlatformError('PLATFORM_CHANGED', '平台请求地址无效', { retryable: false });
+    }
+    let found = [];
+    try {
+      found = await tabsApi.query({ url: [`${url.origin}/*`] });
+    } catch (_error) {
+      found = [];
+    }
+    const tab = Array.isArray(found) ? found.find((entry) => Number.isInteger(entry?.id)) : undefined;
+    if (!tab) {
+      throw new PlatformError('NETWORK_ERROR', '未找到已打开的平台页面，无法在页面内发起请求', { retryable: true });
+    }
+    let injected;
+    try {
+      injected = await scriptingApi.executeScript({
+        target: { tabId: tab.id },
+        func: IN_PAGE_FETCH_FUNCTION,
+        args: [{ url: url.href, init }],
+        world: 'MAIN',
+      });
+    } catch (error) {
+      throw new PlatformError('NETWORK_ERROR', `页面内请求执行失败: ${String(error?.message || error)}`, { retryable: true });
+    }
+    const value = injected?.[0]?.result;
+    if (!value || typeof value !== 'object' || !Number.isInteger(value.status)) {
+      throw new PlatformError('PLATFORM_CHANGED', '页面内请求响应格式无效', { retryable: false });
+    }
+    logSink?.info?.('[OpenGZH]', redactSecrets({ scope: 'in-page-fetch', host: url.hostname, status: value.status }));
+    return value;
+  };
+}
+
 export function createRequestRuntime({
   platformId,
   taskId,
   imageBroker,
   fetchImpl = globalThis.fetch,
+  inTabFetch = null,
   declarativeNetRequest = globalThis.chrome?.declarativeNetRequest,
   tabsApi = globalThis.chrome?.tabs,
   logSink = console,
@@ -125,6 +184,11 @@ export function createRequestRuntime({
         credentials: credentialPolicy(url),
         redirect: 'manual',
       });
+    },
+    async fetchInPage(input, init = {}) {
+      const url = assertFixedUrl(platformId, input);
+      if (typeof inTabFetch !== 'function') return null;
+      return inTabFetch(url.href, init);
     },
     async listOpenPageUrls() {
       const patterns = TAB_QUERY_PATTERNS[platformId];

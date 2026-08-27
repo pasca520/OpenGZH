@@ -1,7 +1,7 @@
 import { createDistributionRunner } from './distribution-runner.js';
 import { PLATFORM_IDS, assertAdapter } from '../core/adapter-contract.js';
 import { validateArticle } from '../core/article-validator.js';
-import { createPortImageBroker, createRequestRuntime } from '../core/request-runtime.js';
+import { createPortImageBroker, createRequestRuntime, createInTabFetcher } from '../core/request-runtime.js';
 import { PlatformError, serializeError } from '../core/platform-errors.js';
 import { createWeixinAdapter } from '../adapters/weixin.js';
 import { createZhihuAdapter } from '../adapters/zhihu.js';
@@ -196,7 +196,12 @@ export function registerServiceWorker(chromeApi = globalThis.chrome, adapterFact
       adapterFactories,
       runtimeFactory: (platformId, taskId) => {
         if (disposed) throw new PlatformError('NETWORK_ERROR', '页面连接已断开', { retryable: true });
-        return createRequestRuntime({ platformId, taskId, imageBroker });
+        return createRequestRuntime({
+          platformId,
+          taskId,
+          imageBroker,
+          inTabFetch: createInTabFetcher({ scriptingApi: chromeApi?.scripting, tabsApi: chromeApi?.tabs }),
+        });
       },
       onState: (message) => send(sanitizePlatformState(message)),
       persist,
@@ -257,7 +262,12 @@ export function registerServiceWorker(chromeApi = globalThis.chrome, adapterFact
           for (const platformId of message.platformIds) {
             try {
               const adapter = getPlatformAdapter(platformId, adapterFactories);
-              const runtime = createRequestRuntime({ platformId, taskId: `auth:${message.requestId}`, imageBroker });
+              const runtime = createRequestRuntime({
+                platformId,
+                taskId: `auth:${message.requestId}`,
+                imageBroker,
+                inTabFetch: createInTabFetcher({ scriptingApi: chromeApi?.scripting, tabsApi: chromeApi?.tabs }),
+              });
               const auth = await adapter.checkAuth(runtime);
               if (typeof auth?.authenticated !== 'boolean') throw new PlatformError('PLATFORM_CHANGED', '鉴权响应格式无效', { retryable: false });
               send({ type: 'AUTH_RESULT', requestId: message.requestId, platformId, authenticated: auth.authenticated });

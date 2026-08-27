@@ -29,8 +29,8 @@ describe('OpenGZH MV3 manifest', () => {
     });
   });
 
-  it('has only the two base API permissions and exact required hosts', () => {
-    expect(manifest.permissions).toEqual(['storage', 'declarativeNetRequestWithHostAccess']);
+  it('has only the three base API permissions and exact required hosts', () => {
+    expect(manifest.permissions).toEqual(['storage', 'scripting', 'declarativeNetRequestWithHostAccess']);
     expect(manifest.host_permissions).toEqual([
       'https://mp.weixin.qq.com/*',
       'https://www.zhihu.com/*',

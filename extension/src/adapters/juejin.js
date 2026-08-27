@@ -48,6 +48,10 @@ function imageUploadError(message = '掘金图片上传失败', details = {}) {
   return new PlatformError('IMAGE_UPLOAD_FAILED', message, { retryable: true, ...details });
 }
 
+function causeOf(error) {
+  return String(error?.message ?? error).replace(/[\u0000-\u001f\u007f]/gu, ' ').replace(/\s+/gu, ' ').trim().slice(0, 60) || '网络异常';
+}
+
 function isRecord(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const prototype = Object.getPrototypeOf(value);
@@ -324,7 +328,7 @@ export function createJuejinAdapter({
             }),
           });
         } catch (_error) {
-          throw remoteStateError(_error, '无法确认掘金是否已创建草稿');
+          throw remoteStateError(_error, `无法确认掘金是否已创建草稿（${causeOf(_error)}）`);
         }
         const status = responseStatus(response);
         if ([401, 403].includes(status) || isRedirect(response)) throw authRequired();
@@ -333,13 +337,13 @@ export function createJuejinAdapter({
         try {
           data = await parseJson(response);
         } catch (error) {
-          if (status >= 500 || isOk(response)) throw new PlatformError('UNKNOWN_REMOTE_STATE', '无法确认掘金是否已创建草稿', { httpStatus: status, retryable: false });
+          if (status >= 500 || isOk(response)) throw new PlatformError('UNKNOWN_REMOTE_STATE', `无法确认掘金是否已创建草稿（HTTP ${status}）`, { httpStatus: status, retryable: false });
           throw error;
         }
         const responseDraftId = safeId(data.data?.id);
         if (responseDraftId) createdDraftId = responseDraftId;
         if (!isOk(response)) {
-          if (status >= 500) throw new PlatformError('UNKNOWN_REMOTE_STATE', '无法确认掘金是否已创建草稿', { httpStatus: status, ...(createdDraftId ? { draftId: createdDraftId } : {}), retryable: false });
+          if (status >= 500) throw new PlatformError('UNKNOWN_REMOTE_STATE', `无法确认掘金是否已创建草稿（HTTP ${status}）`, { httpStatus: status, ...(createdDraftId ? { draftId: createdDraftId } : {}), retryable: false });
           throw new PlatformError('DRAFT_CREATE_FAILED', '掘金草稿创建失败', { httpStatus: status, ...(createdDraftId ? { draftId: createdDraftId } : {}), retryable: false });
         }
         if (!Number.isInteger(data.err_no)) throw platformChanged('掘金草稿响应格式已变化', { httpStatus: status });

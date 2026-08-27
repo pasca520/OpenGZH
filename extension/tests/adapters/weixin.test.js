@@ -407,4 +407,27 @@ describe('WeChat adapter', () => {
     await expect(adapter.saveDraft(runtime, { title: '标题', wechatHtml: '<p>正文</p>' }, new Map()))
       .rejects.toMatchObject({ code: 'PLATFORM_CHANGED', retryable: false });
   });
+
+  it('prefers the in-page fetch for auth and falls back to the direct fetch when unavailable', async () => {
+    const inPage = { status: 200, ok: true, type: 'basic', headers: {}, text: home };
+    const fetchInPage = vi.fn(async () => inPage);
+    const fetch = vi.fn(async () => ({ status: 0, ok: false, type: 'opaqueredirect', async text() { return ''; } }));
+    const runtime = { ...runtimeFor(fetch), fetchInPage };
+    const adapter = createWeixinAdapter();
+    await expect(adapter.checkAuth(runtime))
+      .resolves.toEqual({ authenticated: true, userId: 'test-user-789', username: '测试账号' });
+    expect(fetchInPage).toHaveBeenCalledTimes(1);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('treats a non-zero server logicret header as unauthenticated', async () => {
+    const inPage = { status: 200, ok: true, type: 'basic', headers: { logicret: '200003' }, text: home };
+    const runtime = {
+      ...runtimeFor(vi.fn()),
+      fetchInPage: vi.fn(async () => inPage),
+      listOpenPageUrls: vi.fn(async () => []),
+    };
+    const adapter = createWeixinAdapter();
+    await expect(adapter.checkAuth(runtime)).resolves.toEqual({ authenticated: false });
+  });
 });

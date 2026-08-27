@@ -1038,7 +1038,8 @@
       row.canRetry = status === 'failed' || status === 'auth-required';
       if (status !== 'success') clearDraft(row);
       if (status === 'unknown') {
-        row.status.textContent = '请检查平台草稿箱';
+        const detail = typeof message?.error === 'string' ? message.error : message?.error?.message;
+        row.status.textContent = detail ? `请检查草稿箱：${String(detail).slice(0, 120)}` : '请检查平台草稿箱';
         row.statusKey = 'unknown';
         row.canRetry = false;
         updateRowPresentation(row);

@@ -24,6 +24,33 @@ function networkError(message, httpStatus) {
   });
 }
 
+// 微信公众号的会话 Cookie 大多不带 SameSite=__; 在扩展内部跨站请求中不会发送，
+// 因此登录态请求必须从打开的 mp.weixin.qq.com 页面上下文（同站）发起。
+// fetchInPage 返回 { status, ok, type, headers, text } 与 Response 形状兼容。
+function responseLike(value) {
+  if (!value) return null;
+  return {
+    status: value.status,
+    ok: value.ok,
+    type: value.type,
+    async text() { return typeof value.text === 'string' ? value.text : ''; },
+    header(name) { return value?.headers?.[String(name).toLowerCase()] ?? null; },
+  };
+}
+
+async function fetchPlatformPage(runtime, url) {
+  const inPage = typeof runtime?.fetchInPage === 'function' ? await runtime.fetchInPage(url, { method: 'GET' }) : null;
+  if (inPage) return responseLike(inPage);
+  const response = await runtime.fetch(url, { method: 'GET' });
+  return {
+    status: responseStatus(response),
+    ok: response?.ok,
+    type: response?.type,
+    async text() { return response.text(); },
+    header(name) { return response?.headers?.get?.(name) ?? null; },
+  };
+}
+
 function decodeUnicodeEscapes(value) {
   return String(value).replace(/\\u([0-9a-f]{4})/gi, (_match, code) => String.fromCharCode(Number.parseInt(code, 16)));
 }
@@ -548,11 +575,14 @@ export function createWeixinAdapter() {
         const isRoot = url === HOME_URL;
         let response;
         try {
-          response = await runtime.fetch(url, { method: 'GET' });
+          response = await fetchPlatformPage(runtime, url);
         } catch (_error) {
           if (isRoot) throw networkError('微信公众号登录检测网络异常');
           continue;
         }
+        // 服务端以 logicret 头明确返回登录态：非 0 表示当前请求没有有效会话。
+        const logicret = response?.header?.('logicret');
+        if (logicret !== null && logicret !== undefined && logicret !== '' && logicret !== '0') continue;
         if (isAuthResponse(response)) continue;
         const status = responseStatus(response);
         if (status >= 500) {
@@ -580,25 +610,46 @@ export function createWeixinAdapter() {
     async uploadImage(runtime, blob, filename) {
       const current = requireSession();
       if (!(blob instanceof Blob)) throw new PlatformError('IMAGE_UPLOAD_FAILED', '微信公众号图片数据无效', { retryable: true });
+      const form = new FormData();
+      const stamp = Date.now();
+      form.append('id', String(stamp));
+      form.append('size', String(blob.size));
+      form.append('file', blob, filename);
+      const query = new URLSearchParams({
+        action: 'upload_material', f: 'json', scene: '8', writetype: 'doublewrite', groupid: '1',
+        ticket_id: current.userName, ticket: current.ticket, svr_time: current.svrTime,
+        token: current.token, lang: 'zh_CN', seq: String(stamp), t: String(Math.random()),
+      });
+      const url = `https://mp.weixin.qq.com/cgi-bin/filetransfer?${query}`;
       return runtime.withHeaderRules(HEADER_RULES, async () => {
-        const stamp = Date.now();
-        const form = new FormData();
-        form.append('type', blob.type || 'application/octet-stream');
-        form.append('id', String(stamp));
-        form.append('name', filename);
-        form.append('lastModifiedDate', new Date(stamp).toString());
-        form.append('size', String(blob.size));
-        form.append('file', blob, filename);
-        const query = new URLSearchParams({
-          action: 'upload_material', f: 'json', scene: '8', writetype: 'doublewrite', groupid: '1',
-          ticket_id: current.userName, ticket: current.ticket, svr_time: current.svrTime,
-          token: current.token, lang: 'zh_CN', seq: String(stamp), t: String(Math.random()),
-        });
-        let response;
+        let response = null;
         try {
-          response = await runtime.fetch(`https://mp.weixin.qq.com/cgi-bin/filetransfer?${query}`, { method: 'POST', body: form });
+          const inPageInit = {
+            method: 'POST',
+            body: {
+              form: {
+                fields: [
+                  ['type', blob.type || 'application/octet-stream'],
+                  ['id', String(stamp)],
+                  ['name', filename],
+                  ['lastModifiedDate', new Date(stamp).toString()],
+                  ['size', String(blob.size)],
+                ],
+                file: { bytes: await blob.arrayBuffer(), mimeType: blob.type || 'application/octet-stream', filename, fileName: 'file' },
+              },
+            },
+          };
+          const inPage = typeof runtime.fetchInPage === 'function' ? await runtime.fetchInPage(url, inPageInit) : null;
+          response = inPage ? responseLike(inPage) : null;
         } catch (_error) {
-          throw networkError('微信公众号图片上传网络异常');
+          response = null;
+        }
+        if (!response) {
+          try {
+            response = await runtime.fetch(url, { method: 'POST', body: form });
+          } catch (_error) {
+            throw networkError('微信公众号图片上传网络异常');
+          }
         }
         if (isAuthResponse(response)) {
           session = null;
@@ -624,56 +675,70 @@ export function createWeixinAdapter() {
     async saveDraft(runtime, article, imageMap) {
       const current = requireSession();
       const content = stripExternalLinks(applyImageMap(article?.wechatHtml, imageMap));
+      const draftUrl = `https://mp.weixin.qq.com/cgi-bin/operate_appmsg?t=ajax-response&sub=create&type=77&token=${encodeURIComponent(current.token)}&lang=zh_CN`;
+      const draftBody = createDraftBody(article?.title || '', content, current.token);
       let completedDraft = null;
       try {
         return await runtime.withHeaderRules(HEADER_RULES, async () => {
-        let response;
-        try {
-          response = await runtime.fetch(
-            `https://mp.weixin.qq.com/cgi-bin/operate_appmsg?t=ajax-response&sub=create&type=77&token=${encodeURIComponent(current.token)}&lang=zh_CN`,
-            { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: createDraftBody(article?.title || '', content, current.token) },
-          );
-        } catch (error) {
-          throw remoteStateError(error);
-        }
-        if (isAuthResponse(response)) {
-          session = null;
-          throw new PlatformError('AUTH_REQUIRED', '微信公众号登录已失效', { retryable: true });
-        }
-        const status = responseStatus(response);
-        let text;
-        try { text = await response.text(); } catch (error) { throw remoteStateError(error); }
-        const data = parseRemoteJson(text, '微信公众号草稿响应格式已变化', status);
-        const baseResp = data.base_resp && typeof data.base_resp === 'object' && !Array.isArray(data.base_resp)
-          ? data.base_resp
-          : null;
-        if (!baseResp || !Number.isInteger(baseResp.ret)) {
-          throw new PlatformError('PLATFORM_CHANGED', '微信公众号草稿响应缺少 base_resp', { httpStatus: status, remoteSummary: safeRemoteSummary(text), retryable: false });
-        }
-        if (baseResp.ret !== 0) {
-          throw new PlatformError('DRAFT_CREATE_FAILED', safeRemoteSummary(baseResp.err_msg || '微信公众号草稿创建失败'), {
-            httpStatus: status, remoteSummary: safeRemoteSummary(text), retryable: true,
-          });
-        }
-        if (isResponseNotOk(response)) {
-          if (status >= 500) {
-            const draftId = normalizeDraftId(data.appMsgId);
-            throw new PlatformError('UNKNOWN_REMOTE_STATE', '微信公众号草稿请求状态未知，请人工检查草稿箱', {
-              ...(draftId ? { draftId } : {}),
-              httpStatus: status, remoteSummary: safeRemoteSummary(text), retryable: false,
+          let response = null;
+          try {
+            const inPage = typeof runtime.fetchInPage === 'function' ? await runtime.fetchInPage(draftUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: draftBody.toString(),
+            }) : null;
+            response = inPage ? responseLike(inPage) : null;
+          } catch (_error) {
+            response = null;
+          }
+          if (!response) {
+            try {
+              response = await runtime.fetch(
+                draftUrl,
+                { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: draftBody },
+              );
+            } catch (error) {
+              throw remoteStateError(error);
+            }
+          }
+          if (isAuthResponse(response)) {
+            session = null;
+            throw new PlatformError('AUTH_REQUIRED', '微信公众号登录已失效', { retryable: true });
+          }
+          const status = responseStatus(response);
+          let text;
+          try { text = await response.text(); } catch (error) { throw remoteStateError(error); }
+          const data = parseRemoteJson(text, '微信公众号草稿响应格式已变化', status);
+          const baseResp = data.base_resp && typeof data.base_resp === 'object' && !Array.isArray(data.base_resp)
+            ? data.base_resp
+            : null;
+          if (!baseResp || !Number.isInteger(baseResp.ret)) {
+            throw new PlatformError('PLATFORM_CHANGED', '微信公众号草稿响应缺少 base_resp', { httpStatus: status, remoteSummary: safeRemoteSummary(text), retryable: false });
+          }
+          if (baseResp.ret !== 0) {
+            throw new PlatformError('DRAFT_CREATE_FAILED', safeRemoteSummary(baseResp.err_msg || '微信公众号草稿创建失败'), {
+              httpStatus: status, remoteSummary: safeRemoteSummary(text), retryable: true,
             });
           }
-          throw new PlatformError('DRAFT_CREATE_FAILED', `微信公众号草稿创建失败: ${status}`, {
-            httpStatus: status, remoteSummary: safeRemoteSummary(text), retryable: true,
-          });
-        }
-        const draftId = normalizeDraftId(data.appMsgId);
-        if (!draftId) {
-          throw new PlatformError('PLATFORM_CHANGED', '微信公众号草稿响应缺少 appMsgId', { httpStatus: status, remoteSummary: safeRemoteSummary(text), retryable: false });
-        }
-        const draftUrl = `https://mp.weixin.qq.com/cgi-bin/appmsg?t=media/appmsg_edit&action=edit&type=77&appmsgid=${encodeURIComponent(draftId)}&token=${encodeURIComponent(current.token)}&lang=zh_CN`;
-        completedDraft = { draftId, draftUrl };
-        return completedDraft;
+          if (isResponseNotOk(response)) {
+            if (status >= 500) {
+              const draftId = normalizeDraftId(data.appMsgId);
+              throw new PlatformError('UNKNOWN_REMOTE_STATE', `微信公众号草稿请求状态未知(HTTP ${status})，请人工检查草稿箱`, {
+                ...(draftId ? { draftId } : {}),
+                httpStatus: status, remoteSummary: safeRemoteSummary(text), retryable: false,
+              });
+            }
+            throw new PlatformError('DRAFT_CREATE_FAILED', `微信公众号草稿创建失败: ${status}`, {
+              httpStatus: status, remoteSummary: safeRemoteSummary(text), retryable: true,
+            });
+          }
+          const draftId = normalizeDraftId(data.appMsgId);
+          if (!draftId) {
+            throw new PlatformError('PLATFORM_CHANGED', '微信公众号草稿响应缺少 appMsgId', { httpStatus: status, remoteSummary: safeRemoteSummary(text), retryable: false });
+          }
+          const draftLink = `https://mp.weixin.qq.com/cgi-bin/appmsg?t=media/appmsg_edit&action=edit&type=77&appmsgid=${encodeURIComponent(draftId)}&token=${encodeURIComponent(current.token)}&lang=zh_CN`;
+          completedDraft = { draftId, draftUrl: draftLink };
+          return completedDraft;
         });
       } catch (error) {
         if (completedDraft) throw unknownRemoteAfterCleanup(completedDraft, error);

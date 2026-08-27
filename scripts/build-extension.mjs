@@ -11,7 +11,7 @@ const OUTPUT_DIR = path.join(DIST_DIR, 'extension');
 const VERSION = '0.1.0';
 const ARCHIVE_PATH = path.join(DIST_DIR, `OpenGZH-extension-v${VERSION}.zip`);
 const FORBIDDEN_PERMISSIONS = ['<all_urls>', 'cookies', 'unlimitedStorage'];
-const REQUIRED_PERMISSIONS = Object.freeze(['storage', 'declarativeNetRequestWithHostAccess']);
+const REQUIRED_PERMISSIONS = Object.freeze(['storage', 'scripting', 'declarativeNetRequestWithHostAccess']);
 const REQUIRED_HOST_PERMISSIONS = Object.freeze([
   'https://mp.weixin.qq.com/*',
   'https://www.zhihu.com/*',

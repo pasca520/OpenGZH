@@ -47,6 +47,10 @@ function imageUploadError(message = '知乎图片上传失败', details = {}) {
   return new PlatformError('IMAGE_UPLOAD_FAILED', message, { retryable: true, ...details });
 }
 
+function causeOf(error) {
+  return String(error?.message ?? error).replace(/[\u0000-\u001f\u007f]/gu, ' ').replace(/\s+/gu, ' ').trim().slice(0, 60) || '网络异常';
+}
+
 function isRedirect(response) {
   return response?.type === 'opaqueredirect' || response?.status === 0 || (response?.status >= 300 && response?.status < 400);
 }
@@ -573,7 +577,7 @@ export function createZhihuAdapter({
                 body: JSON.stringify({ title: article?.title, content: '', delta_time: 0 }),
               });
             } catch (error) {
-              throw remoteStateError(error, '无法确认知乎是否已创建空草稿');
+              throw remoteStateError(error, `无法确认知乎是否已创建草稿（${causeOf(error)}）`);
             }
             const status = responseStatus(createResponse);
             if ([401, 403].includes(status)) throw authRequired();
@@ -582,7 +586,7 @@ export function createZhihuAdapter({
             try {
               text = await readResponseTextStrict(createResponse);
             } catch (_error) {
-              throw new PlatformError('UNKNOWN_REMOTE_STATE', '无法确认知乎是否已创建空草稿', { httpStatus: status, retryable: false });
+              throw new PlatformError('UNKNOWN_REMOTE_STATE', '无法确认知乎是否已创建草稿（响应读取失败）', { httpStatus: status, retryable: false });
             }
             const data = parseObject(text);
             const returnedId = safeOpaqueId(data?.id);
@@ -592,7 +596,7 @@ export function createZhihuAdapter({
             }
             if (!isOk(createResponse)) {
               if (returnedId) throw new PlatformError('DRAFT_CREATE_FAILED', `知乎创建草稿失败: ${status}`, { draftId: returnedId, httpStatus: status, retryable: false });
-              if (status >= 500 || status === 0) throw new PlatformError('UNKNOWN_REMOTE_STATE', '无法确认知乎是否已创建空草稿', { httpStatus: status, retryable: false });
+              if (status >= 500 || status === 0) throw new PlatformError('UNKNOWN_REMOTE_STATE', `无法确认知乎是否已创建草稿（HTTP ${status}）`, { httpStatus: status, retryable: false });
               throw new PlatformError('DRAFT_CREATE_FAILED', `知乎创建草稿失败: ${status}`, { httpStatus: status, retryable: true });
             }
             if (!returnedId) throw platformChanged('知乎创建草稿响应缺少安全 id', { httpStatus: status });

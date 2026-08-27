@@ -33,6 +33,10 @@ function imageUploadError(message = '人人图片上传失败', details = {}) {
   return new PlatformError('IMAGE_UPLOAD_FAILED', message, { retryable: true, ...details });
 }
 
+function causeOf(error) {
+  return String(error?.message ?? error).replace(/[\u0000-\u001f\u007f]/gu, ' ').replace(/\s+/gu, ' ').trim().slice(0, 60) || '网络异常';
+}
+
 function isRecord(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const prototype = Object.getPrototypeOf(value);
@@ -71,16 +75,36 @@ function hasExplicitPort(value) {
 }
 
 function safeCdnUrl(value) {
-  if (typeof value !== 'string' || !value || /[\u0000-\u001f\u007f]/u.test(value)) return null;
+  if (typeof value !== 'string' || !value || /[\u0000-\u001f\u007f"'<> ]/u.test(value)) return null;
   try {
     const url = new URL(value);
     const host = url.hostname.toLowerCase();
-    const approved = host === 'woshipm.com' || host.endsWith('.woshipm.com');
-    if (url.protocol !== 'https:' || !approved || hasExplicitPort(value) || url.username || url.password || url.search || url.hash || !url.pathname || url.pathname === '/') return null;
+    // 图片 CDN 域名可能由平台 CDN 服务动态分配，不再限定 *.woshipm.com；
+    // 仍然拒绝非 https、显式端口、用户凭据、查询/哈希与路径穿越，且要求域名形态合法。
+    if (url.protocol !== 'https:' || hasExplicitPort(value) || url.username || url.password || url.search || url.hash || !url.pathname || url.pathname === '/') return null;
+    if (!/^[a-z0-9.-]{1,253}$/iu.test(host) || !host.includes('.') || host.split('.').some((part) => !part || part.length > 63)) return null;
     if (url.pathname.split('/').some((part) => part === '.' || part === '..')) return null;
     return url.href;
   } catch (_error) {
     return null;
+  }
+}
+
+function reportedHost(value) {
+  try {
+    return new URL(value).hostname;
+  } catch (_error) {
+    return '无效地址';
+  }
+}
+
+function isWoshipmCdn(value) {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase();
+    return url.protocol === 'https:' && (host === 'woshipm.com' || host.endsWith('.woshipm.com'));
+  } catch (_error) {
+    return false;
   }
 }
 
@@ -628,8 +652,13 @@ function validateArticle(article, imageMap) {
   const mapping = imageMap instanceof Map ? imageMap : new Map(Object.entries(imageMap || {}));
   for (const value of mapping.values()) if (!safeCdnUrl(value)) throw new PlatformError('ARTICLE_INVALID', '人人图片地址未通过安全校验', { retryable: false });
   const content = applyImageMap(article.semanticHtml, mapping);
+  const uploaded = new Set(mapping.values());
   for (const { value } of imageReferencesInContent(content, false)) {
-    if (!safeCdnUrl(value)) throw new PlatformError('ARTICLE_INVALID', '人人正文包含未批准图片地址', { retryable: false });
+    // 正文中的图片地址必须来自本地上传返回（映射值），或是人人官方 CDN；
+    // 其余外部地址一律拒绝，避免第三方 URL 进入同步内容。
+    if (!safeCdnUrl(value) || (!uploaded.has(value) && !isWoshipmCdn(value))) {
+      throw new PlatformError('ARTICLE_INVALID', `人人正文包含未批准图片地址: ${reportedHost(value)}`, { retryable: false });
+    }
   }
   return { title: article.title, content };
 }
@@ -711,7 +740,7 @@ export function createWoshipmAdapter() {
         if (data.error) throw imageUploadError('人人图片上传失败');
         const imageUrl = data.data?.[0]?.url;
         const safeUrl = safeCdnUrl(imageUrl);
-        if (!safeUrl) throw platformChanged('人人图片响应返回了未批准地址');
+        if (!safeUrl) throw platformChanged(`人人图片响应返回了未批准地址: ${reportedHost(imageUrl)}`);
         return safeUrl;
       });
     } catch (error) {
@@ -733,7 +762,7 @@ export function createWoshipmAdapter() {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: new URLSearchParams({ action: 'add_draft', post_title: title, post_content: content }),
           });
-        } catch (_error) { throw remoteStateError(_error, '无法确认人人是否已创建草稿'); }
+        } catch (_error) { throw remoteStateError(_error, `无法确认人人是否已创建草稿（${causeOf(_error)}）`); }
         const status = responseStatus(response);
         if (isRedirect(response) || [401, 403].includes(status)) throw authRequired();
         if (status === 429) throw new PlatformError('RATE_LIMITED', '人人草稿请求过于频繁', { httpStatus: status, retryable: true });
@@ -741,19 +770,19 @@ export function createWoshipmAdapter() {
         try {
           if (typeof response?.text !== 'function') throw new TypeError('响应不可读取');
           text = await response.text();
-        } catch (_error) { throw new PlatformError('UNKNOWN_REMOTE_STATE', '无法确认人人是否已创建草稿', { httpStatus: status, retryable: false }); }
+        } catch (_error) { throw new PlatformError('UNKNOWN_REMOTE_STATE', `无法确认人人是否已创建草稿（HTTP ${status}）`, { httpStatus: status, retryable: false }); }
         let data;
         try { data = JSON.parse(text); } catch (_error) {
-          if (status >= 500 || isOk(response)) throw new PlatformError('UNKNOWN_REMOTE_STATE', '无法确认人人是否已创建草稿', { httpStatus: status, retryable: false });
+          if (status >= 500 || isOk(response)) throw new PlatformError('UNKNOWN_REMOTE_STATE', `无法确认人人是否已创建草稿（HTTP ${status}）`, { httpStatus: status, retryable: false });
           throw platformChanged('人人草稿响应格式已变化', { httpStatus: status });
         }
         if (!isRecord(data)) {
-          if (status >= 500 || isOk(response)) throw new PlatformError('UNKNOWN_REMOTE_STATE', '无法确认人人是否已创建草稿', { httpStatus: status, retryable: false });
+          if (status >= 500 || isOk(response)) throw new PlatformError('UNKNOWN_REMOTE_STATE', `无法确认人人是否已创建草稿（HTTP ${status}）`, { httpStatus: status, retryable: false });
           throw platformChanged('人人草稿响应格式已变化', { httpStatus: status });
         }
         const draftId = safePostId(data.post_id);
         if (!isOk(response)) {
-          if (status >= 500) throw new PlatformError('UNKNOWN_REMOTE_STATE', '无法确认人人是否已创建草稿', { httpStatus: status, ...(draftId ? { draftId } : {}), retryable: false });
+          if (status >= 500) throw new PlatformError('UNKNOWN_REMOTE_STATE', `无法确认人人是否已创建草稿（HTTP ${status}）`, { httpStatus: status, ...(draftId ? { draftId } : {}), retryable: false });
           throw new PlatformError('DRAFT_CREATE_FAILED', '人人草稿创建失败', { httpStatus: status, ...(draftId ? { draftId } : {}), retryable: !draftId });
         }
         if (data.error) {
@@ -768,7 +797,7 @@ export function createWoshipmAdapter() {
     } catch (error) {
       if (completedDraft) throw unknownAfterCleanup(completedDraft.draftId);
       if (error instanceof PlatformError) throw error;
-      throw remoteStateError(error, '无法确认人人是否已创建草稿');
+      throw remoteStateError(error, `无法确认人人是否已创建草稿（${causeOf(error)}）`);
     } finally {
       jltoken = '';
     }

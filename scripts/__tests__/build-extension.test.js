@@ -12,7 +12,7 @@ const manifest = {
   short_name: 'OpenGZH',
   description: '微信公众号、知乎、掘金、人人都是产品经理文章同步助手',
   version: '0.1.0',
-  permissions: ['storage', 'declarativeNetRequestWithHostAccess'],
+  permissions: ['storage', 'scripting', 'declarativeNetRequestWithHostAccess'],
   host_permissions: [
     'https://mp.weixin.qq.com/*',
     'https://www.zhihu.com/*',

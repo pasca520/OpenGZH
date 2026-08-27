@@ -404,13 +404,14 @@ describe('Woshipm adapter', () => {
   });
 
   it.each([
-    'https://image.woshipm.com.evil.test/x.png',
+    'https://image.woshipm.com/x y.png',
     'http://image.woshipm.com/x.png',
     'https://user:image@image.woshipm.com/x.png',
     'https://image.woshipm.com:443/x.png',
     'https://image.woshipm.com/x.png?token=secret',
     'https://image.woshipm.com/x.png#fragment',
-  ])('rejects unapproved upload CDN URL %s', async (url) => {
+    'https://image.woshipm.com/x.png" onload="alert(1)',
+  ])('rejects unsafe upload CDN URL %s', async (url) => {
     const fetch = vi.fn()
       .mockResolvedValueOnce(response(writingPage))
       .mockResolvedValueOnce(response(JSON.stringify(profile)))
