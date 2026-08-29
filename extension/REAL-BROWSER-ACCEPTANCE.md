@@ -1,6 +1,7 @@
 # OpenGZH Extension 0.1.0 Real-Browser Acceptance
 
-**Acceptance date:** 2026-08-25
+**Browser acceptance date:** 2026-08-25
+**Copy/build verification date:** 2026-08-29
 **Website origin:** `http://localhost:8080`
 **Production origin:** `https://opengzh.pasca.fun`
 **Installed source:** `dist/extension`
@@ -11,8 +12,8 @@
 - [x] `npm run build:extension` completed immediately before installation.
 - [x] A fresh isolated Chrome profile loaded the command-line unpacked build, equivalent to removing any previous installed copy.
 - [x] The unpacked path is the current repository's `dist/extension`.
-- [x] Chrome displays name `OpenGZH`, version `0.1.0`, and description `微信公众号、知乎、掘金、人人都是产品经理文章同步助手`; manifest/runtime errors are 0.
-- [x] Chrome details list 13 site-access patterns: the exact ten locked platform `host_permissions` plus the three content-script origins (`https://opengzh.pasca.fun/*`, `http://localhost/*`, `http://127.0.0.1/*`); `hasAllHosts` is false and there is no Cookie permission. The platform host-permission set remains exactly the ten locked patterns.
+- [ ] Chrome displays name `OpenGZH - Markdown 文章多平台同步`, version `0.1.0`, and description `在 OpenGZH 完成 Markdown 排版后，一键同步到微信公众号、知乎、掘金和人人都是产品经理草稿箱。`; this new identity was not re-observed in Chrome after the 2026-08-29 copy/build verification.
+- [ ] Current manifest review: 11 required platform `host_permissions` patterns plus the three content-script origins (`https://opengzh.pasca.fun/*`, `http://localhost/*`, `http://127.0.0.1/*`); the 13-pattern/10-platform pattern recorded from Chrome on 2026-08-25 was not rechecked against the current build, so this is not current Chrome evidence. `hasAllHosts` and Cookie permission status also await a new Chrome observation.
 - [x] On `http://127.0.0.1:8080/`, the host/shadow UI and “同步到平台” appear in the preview toolbar beside “复制到公众号”; all four checkboxes are selected by default, and `example.com` has no injected host.
 
 ## Disposable article fixtures
@@ -83,19 +84,25 @@ For every successful cell, record the disposable draft ID below without copying 
 
 ## Automated verification
 
-This section records repository-local checks and isolated installed-extension checks. No authenticated platform login, live draft, clipboard paste, or real WeChat regression was performed; the unchecked manual items remain unverified.
+No authenticated platform login, live draft, clipboard paste, or real WeChat regression was performed; the unchecked manual items remain unverified.
 
-- `npm ci` — passed.
+### Historical browser evidence — 2026-08-25
+
 - HEAD `463bad0` passed the Luna specification review.
-- `npm test` — passed: 55 files, 896 tests.
-- `npm run test:extension` — passed: 14 files, 356 tests.
-- All JavaScript and MJS files under `assets/scripts`, `extension/src`, and `scripts` — passed `node --check`.
+- Historical repository checks: `npm test` passed 55 files/896 tests; `npm run test:extension` passed 14 files/356 tests; all JavaScript and MJS files under `assets/scripts`, `extension/src`, and `scripts` passed `node --check`.
+- Historical security scans: first three produced no matches; the credential-pattern scan matched only in-memory/parser/request-construction/redaction references, with no real values or credential-bearing persistence/logging observed.
+- On 2026-08-25, a fresh isolated Chrome 149 profile loaded command-line unpacked `dist/extension`; after startup and hard refresh, the then-current extension remained enabled with name `OpenGZH`, version `0.1.0`, description `微信公众号、知乎、掘金、人人都是产品经理文章同步助手`, exact current dist path, and zero manifest/runtime errors.
+- Historical isolated Chrome 149 logged-out panel check: all four selected platforms showed `需要登录`, login/retry controls were visible, draft links were hidden, alert was empty, and no platform login tab opened automatically.
+
+### Current copy/build verification — 2026-08-29
+
+- `npm test` — passed: 58 files, 1000 tests.
+- `node --check extension/src/content/open-gzh.js` — passed.
+- `node --check scripts/build-extension.mjs` — passed.
 - `git diff --check` — passed with no output.
-- Security scans — first three produced no matches; the credential-pattern scan matched only in-memory/parser/request-construction/redaction references, with no real values or credential-bearing persistence/logging observed.
-- `npm run build:extension` — passed before the isolated Chrome 149 run.
-- Fresh isolated Chrome 149 profile loaded command-line unpacked `dist/extension`; after startup and hard refresh, the extension remained enabled with the exact identity/description, exact current dist path, and zero manifest/runtime errors.
-- `/usr/bin/unzip -t dist/OpenGZH-extension-v0.1.0.zip` — passed with no errors.
-- Packaged manifest/archive inspection — passed; locked permissions/hosts and archive exclusions validated.
-- Archive: `dist/OpenGZH-extension-v0.1.0.zip`, 75750 bytes, SHA-256 `f321ef94c7025c42e2943c5fc7f16ab978222165adadda92fde5e37bb83b74d1`.
-- Isolated Chrome 149 logged-out panel check — all four selected platforms showed `需要登录`, login/retry controls were visible, draft links were hidden, alert was empty, and no platform login tab opened automatically.
-- `git status --short` — pre-existing `.claude/settings.json` modification and this uncommitted acceptance record are present; `dist/` remains ignored and uncommitted.
+- `npm run build:extension` — passed; ZIP integrity check passed with no errors.
+- Package manifest inspection — passed; name `OpenGZH - Markdown 文章多平台同步`, version `0.1.0`, short_name `OpenGZH`, description `在 OpenGZH 完成 Markdown 排版后，一键同步到微信公众号、知乎、掘金和人人都是产品经理草稿箱。`, and action.default_title `OpenGZH - Markdown 文章多平台同步` matched the required values. This was package inspection, not Chrome observation.
+- Copy code was verified through `fd541bf`; subsequent changes are docs-only acceptance-record amendments.
+- Archive: `dist/OpenGZH-extension-v0.1.0.zip`, SHA-256 `ece47208612d513ee8506207cddfbd022beb22c17b8ca5f1388b0c7d81fd8cd5`.
+- The new identity was not re-observed in Chrome during the 2026-08-29 copy/build verification.
+- `git status --short` — acceptance record is committed; `dist/` remains ignored, and only the unrelated `.dsh-computer-use/` directory is untracked.
