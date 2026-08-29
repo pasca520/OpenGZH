@@ -1042,18 +1042,15 @@ function rowMarkerSpec(kind, tokens, presentation = {}) {
 function restoreRowMarkers(section) {
   Array.from(section.children).forEach((list) => {
     if (!['UL', 'OL'].includes(list.tagName)) return;
-    Array.from(list.children).forEach((item) => {
-      if (!item.querySelectorAll) return;
+    const state = ROW_MARKER_STATES.get(list);
+    if (!state) return;
+    state.items.forEach(({ item, style, paragraph, paragraphStyle }) => {
       item.querySelectorAll('[data-ogzh-row-marker]').forEach((marker) => marker.remove());
-      ['border-left', 'border-bottom', 'padding-left', 'padding-right'].forEach((property) => {
-        if (item.style?.removeProperty) item.style.removeProperty(property);
-      });
+      restoreInlineStyle(item, style);
+      if (paragraph) restoreInlineStyle(paragraph, paragraphStyle);
     });
-    if (list.style?.removeProperty) {
-      ['margin-left', 'padding-left', 'padding-right'].forEach((property) => {
-        list.style.removeProperty(property);
-      });
-    }
+    restoreInlineStyle(list, state.style);
+    ROW_MARKER_STATES.delete(list);
   });
 }
 
@@ -1066,7 +1063,18 @@ function applyRowMarkerList(doc, section, presentation, tokens) {
   if (!list) return;
 
   const items = Array.from(list.children).filter((child) => child.tagName === 'LI');
-  items.forEach((item, index) => {
+  const itemStates = items.map((item) => {
+    const paragraph = Array.from(item.children).find((child) => child.tagName === 'P') || null;
+    return {
+      item,
+      style: item.getAttribute('style'),
+      paragraph,
+      paragraphStyle: paragraph?.getAttribute('style') || null
+    };
+  });
+  ROW_MARKER_STATES.set(list, { style: list.getAttribute('style'), items: itemStates });
+
+  itemStates.forEach(({ item, paragraph }, index) => {
     item.querySelectorAll('[data-ogzh-row-marker]').forEach((marker) => marker.remove());
     const marker = doc.createElement('span');
     marker.setAttribute('data-ogzh-row-marker', 'true');
@@ -1076,6 +1084,7 @@ function applyRowMarkerList(doc, section, presentation, tokens) {
     item.insertBefore(marker, item.firstChild);
     const last = index === items.length - 1;
     applyTrustedStyle(item, last ? spec.item.replace(/border-bottom:[^;]+;\s*/i, '') : spec.item);
+    if (paragraph) applyTrustedStyle(paragraph, 'display: inline !important;');
   });
   applyTrustedStyle(list, spec.list);
 }
@@ -1094,6 +1103,12 @@ const BODY_HEADING_RESET_STYLE = 'display: block !important; background: transpa
 const OWNED_DECORATIONS = new WeakSet();
 const NUMBERED_HEADING_STATES = new WeakMap();
 const HISTORY_ROW_STATES = new WeakMap();
+const ROW_MARKER_STATES = new WeakMap();
+
+function restoreInlineStyle(element, styleText) {
+  if (styleText === null) element.removeAttribute('style');
+  else element.setAttribute('style', styleText);
+}
 
 function applyTrustedStyle(element, styleText) {
   String(styleText || '').split(';').forEach((declaration) => {

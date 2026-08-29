@@ -2191,6 +2191,33 @@ describe('card presentation DOM application', () => {
   expect(first.textContent).toBe('第一项内容');
 });
 
+it.each(['check-list', 'timeline', 'index-badge'])(
+  'keeps a loose-list paragraph and its links inline with the %s row marker',
+  (styleId) => {
+    const doc = new FakeDocument();
+    const heading = appendElement(doc, doc.createElement('div'), 'h4', '序列文章');
+    const list = doc.createElement('ol');
+    const item = doc.createElement('li');
+    const paragraph = doc.createElement('p');
+    const link = appendElement(doc, paragraph, 'a', '一个项目管理软件的诞生（一）');
+    item.appendChild(paragraph);
+    list.appendChild(item);
+    const section = createCard(doc, styleId, [heading, list]);
+
+    applyCardStyles(doc, theme);
+
+    expect(item.children.map(({ tagName }) => tagName)).toEqual(['SPAN', 'P']);
+    expect(paragraph.style.getPropertyValue('display')).toBe('inline');
+    expect(paragraph.style.getPropertyPriority('display')).toBe('important');
+    expect(paragraph.children).toEqual([link]);
+
+    section.setAttribute('data-ogzh-card', 'minimal-outline');
+    applyCardStyles(doc, theme);
+    expect(paragraph.style.getPropertyValue('display')).toBe('');
+    expect(item.children.map(({ tagName }) => tagName)).toEqual(['P']);
+  }
+);
+
 it('shows row markers in previews for the three list cards', () => {
   for (const styleId of ['check-list', 'timeline', 'index-badge']) {
     const html = renderCardPreviewHtml(styleId, STYLES['latepost-depth']);
@@ -2252,6 +2279,19 @@ it('styles direct lists and items without replacing standard inline content', ()
     expect(link.style.getPropertyValue('color')).toBe(bodyForeground);
     expect(link.style.getPropertyValue('border-color')).toBe('currentColor');
     expect(link.style.getPropertyValue('text-decoration-color')).toBe('currentColor');
+  });
+
+  it('preserves the theme list gutter on cards that use native markers', () => {
+    const doc = new FakeDocument();
+    const list = doc.createElement('ol');
+    list.setAttribute('style', theme.styles.ol);
+    appendElement(doc, list, 'li', '第一项内容');
+    createCard(doc, 'warning-alert', [list]);
+
+    applyCardStyles(doc, theme);
+
+    expect(list.style.getPropertyValue('padding-left')).toBe('28px');
+    expect(list.style.getPropertyValue('list-style-type')).toBe('decimal');
   });
 
   it('overrides loose-list paragraphs without crossing a nested card boundary', () => {
