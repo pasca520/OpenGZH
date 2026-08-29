@@ -9,6 +9,7 @@ const ARTICLE_KEYS = new Set([
 const IMAGE_KEYS = {
   'indexed-db': new Set(['ref', 'kind', 'imageId', 'mimeType', 'filename', 'alt']),
   'data-url': new Set(['ref', 'kind', 'dataUrl', 'mimeType', 'filename', 'alt']),
+  'remote-url': new Set(['ref', 'kind', 'url', 'filename', 'alt']),
 };
 const CDN_HOSTS = Object.freeze({
   weixin: ['mmbiz.qpic.cn', 'mmbiz.qlogo.cn'],
@@ -64,13 +65,27 @@ function isString(value, allowEmpty = true) {
   return typeof value === 'string' && (allowEmpty || value.trim().length > 0);
 }
 
+function isSafeRemoteImageUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && !url.port && !url.username && !url.password
+      && !/^(?:localhost|.*\.localhost|.*\.local|\d{1,3}(?:\.\d{1,3}){3}|\[.*\])$/i.test(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 function validateImage(image) {
-  if (!isPlainRecord(image) || !['indexed-db', 'data-url'].includes(image.kind)) invalid('图片清单格式错误');
+  if (!isPlainRecord(image) || !['indexed-db', 'data-url', 'remote-url'].includes(image.kind)) invalid('图片清单格式错误');
   if (!hasExactKeys(image, IMAGE_KEYS[image.kind])) invalid('图片字段越界');
-  if (!isString(image.ref, false) || !/^image\/[a-z0-9.+-]+$/i.test(image.mimeType || '')
-    || !isString(image.mimeType, false) || !isString(image.filename, false) || !isString(image.alt)) {
+  if (!isString(image.ref, false) || !isString(image.filename, false) || !isString(image.alt)) {
     invalid('图片元数据错误');
   }
+  if (image.kind === 'remote-url') {
+    if (!isString(image.url, false) || image.ref !== image.url || !isSafeRemoteImageUrl(image.url)) invalid('远程图片地址错误');
+    return;
+  }
+  if (!/^image\/[a-z0-9.+-]+$/i.test(image.mimeType || '') || !isString(image.mimeType, false)) invalid('图片元数据错误');
   if (image.kind === 'indexed-db') {
     if (!isString(image.imageId, false) || image.ref !== `img://${image.imageId}`) invalid('IndexedDB 图片引用错误');
     return;

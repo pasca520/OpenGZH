@@ -1,10 +1,26 @@
 export const PLATFORM_IDS = Object.freeze(['weixin', 'zhihu', 'juejin', 'woshipm']);
 
 export const PLATFORMS = Object.freeze({
-  weixin: Object.freeze({ name: '微信公众号', loginUrl: 'https://mp.weixin.qq.com/' }),
-  zhihu: Object.freeze({ name: '知乎', loginUrl: 'https://www.zhihu.com/signin' }),
-  juejin: Object.freeze({ name: '掘金', loginUrl: 'https://juejin.cn/login' }),
-  woshipm: Object.freeze({ name: '人人都是产品经理', loginUrl: 'https://www.woshipm.com/login.html' }),
+  weixin: Object.freeze({
+    name: '微信公众号', loginUrl: 'https://mp.weixin.qq.com/',
+    content: Object.freeze({ field: 'wechatHtml', format: 'html' }),
+    capabilities: Object.freeze({ imageUpload: true, draftOnly: true, retryUpdate: true }),
+  }),
+  zhihu: Object.freeze({
+    name: '知乎', loginUrl: 'https://www.zhihu.com/signin',
+    content: Object.freeze({ field: 'semanticHtml', format: 'html' }),
+    capabilities: Object.freeze({ imageUpload: true, draftOnly: true, retryUpdate: true }),
+  }),
+  juejin: Object.freeze({
+    name: '掘金', loginUrl: 'https://juejin.cn/login',
+    content: Object.freeze({ field: 'portableMarkdown', format: 'markdown' }),
+    capabilities: Object.freeze({ imageUpload: true, draftOnly: true, retryUpdate: true }),
+  }),
+  woshipm: Object.freeze({
+    name: '人人都是产品经理', loginUrl: 'https://www.woshipm.com/login.html',
+    content: Object.freeze({ field: 'semanticHtml', format: 'html' }),
+    capabilities: Object.freeze({ imageUpload: true, draftOnly: true, retryUpdate: true }),
+  }),
 });
 
 export function assertAdapter(adapter) {
@@ -16,9 +32,14 @@ export function assertAdapter(adapter) {
 }
 
 export function articleContentForPlatform(article, platformId) {
-  if (platformId === 'weixin') return article.wechatHtml;
-  if (platformId === 'juejin') return article.portableMarkdown;
-  return article.semanticHtml;
+  const contract = platformContentContract(platformId);
+  return article?.[contract.field];
+}
+
+export function platformContentContract(platformId) {
+  const contract = PLATFORMS[platformId]?.content;
+  if (!contract) throw new TypeError('未知平台内容契约');
+  return contract;
 }
 
 function findTagEnd(source, start) {

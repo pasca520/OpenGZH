@@ -42,6 +42,7 @@ describe('platform errors', () => {
     expect(serializeError(error)).toEqual({
       code: 'PLATFORM_CHANGED',
       message: '响应字段变化',
+      suggestion: '平台接口可能已变化，请更新扩展或反馈问题',
       httpStatus: 200,
       remoteSummary: 'secret',
       draftId: 'draft-1',
@@ -50,8 +51,19 @@ describe('platform errors', () => {
     expect(serializeError({ code: 'unknown', message: 'bad', secret: 'must not cross' })).toEqual({
       code: 'PLATFORM_CHANGED',
       message: 'bad',
+      suggestion: '平台接口可能已变化，请更新扩展或反馈问题',
       retryable: false,
     });
+  });
+
+  it('adds stable user guidance and an allowlisted failure stage', () => {
+    expect(serializeError(new PlatformError('UNKNOWN_REMOTE_STATE', '状态未知', { retryable: false }), { stage: 'saving-draft' }))
+      .toMatchObject({
+        code: 'UNKNOWN_REMOTE_STATE', stage: 'saving-draft', retryable: false,
+        suggestion: '先人工检查平台草稿箱，不要直接重试',
+      });
+    expect(serializeError(new PlatformError('NETWORK_ERROR', '网络失败'), { stage: 'not-real' }))
+      .not.toHaveProperty('stage');
   });
 
   it('redacts credentials embedded in raw response text and compresses to 160 chars', () => {
@@ -71,6 +83,7 @@ describe('platform errors', () => {
     }))).toEqual({
       code: 'NETWORK_ERROR',
       message: 'safe',
+      suggestion: '检查网络连接后重试',
       remoteSummary: 'Cookie: [REDACTED]',
       draftId: 'Bearer [REDACTED]',
       retryable: false,

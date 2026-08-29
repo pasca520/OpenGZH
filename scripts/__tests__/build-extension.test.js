@@ -26,6 +26,7 @@ const manifest = {
     'https://*.volces.com/*',
     'https://www.woshipm.com/*',
   ],
+  optional_host_permissions: ['https://*/*'],
 };
 
 describe('extension build', () => {

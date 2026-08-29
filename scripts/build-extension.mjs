@@ -25,6 +25,7 @@ const REQUIRED_HOST_PERMISSIONS = Object.freeze([
   'https://*.volces.com/*',
   'https://www.woshipm.com/*',
 ]);
+const REQUIRED_OPTIONAL_HOST_PERMISSIONS = Object.freeze(['https://*/*']);
 const REQUIRED_ARCHIVE_ENTRIES = Object.freeze([
   'manifest.json',
   'src/content/open-gzh.js',
@@ -73,7 +74,9 @@ export function validateExtensionManifest(manifest) {
   if (JSON.stringify(manifest.host_permissions) !== JSON.stringify(REQUIRED_HOST_PERMISSIONS)) {
     throw new Error('Manifest 必须且只能包含已锁定的平台域名');
   }
-  if (Object.hasOwn(manifest, 'optional_host_permissions')) throw new Error('Manifest 不得使用无法由 content script 可靠请求的可选域名权限');
+  if (JSON.stringify(manifest.optional_host_permissions) !== JSON.stringify(REQUIRED_OPTIONAL_HOST_PERMISSIONS)) {
+    throw new Error('Manifest 可选域名权限必须且只能按来源申请 HTTPS 图片权限');
+  }
   const serialized = JSON.stringify(manifest);
   if (FORBIDDEN_PERMISSIONS.some((permission) => serialized.includes(permission))) throw new Error('Manifest 包含禁止权限');
   if (Object.hasOwn(manifest, 'externally_connectable')) throw new Error('禁止 externally_connectable');

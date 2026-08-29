@@ -50,6 +50,44 @@ describe('fixed request runtime', () => {
     await expect(runtime.listOpenPageUrls()).resolves.toEqual([backendUrl]);
     expect(tabsApi.query).toHaveBeenCalledWith({ url: ['https://mp.weixin.qq.com/*'] });
   });
+
+  it('downloads an approved remote image without credentials and bypasses the page image broker', async () => {
+    const remote = 'https://images.example.com/path/hero.png?version=1';
+    const fetchImpl = vi.fn(async () => new Response('png', {
+      status: 200,
+      headers: { 'content-type': 'image/png', 'content-length': '3' },
+    }));
+    const imageBroker = { requestImage: vi.fn() };
+    const runtime = createRequestRuntime({
+      platformId: 'weixin', taskId: 'task', imageBroker, fetchImpl,
+      remoteImageOrigins: ['https://images.example.com'],
+    });
+
+    const blob = await runtime.requestImage({ ref: remote, kind: 'remote-url', url: remote, filename: 'hero.png', alt: '' });
+
+    expect(await blob.text()).toBe('png');
+    expect(blob.type).toBe('image/png');
+    expect(fetchImpl).toHaveBeenCalledWith(remote, expect.objectContaining({
+      method: 'GET', credentials: 'omit', redirect: 'manual', referrerPolicy: 'no-referrer',
+    }));
+    expect(imageBroker.requestImage).not.toHaveBeenCalled();
+  });
+
+  it('fails closed for unapproved origins, redirects, non-images, and oversized remote images', async () => {
+    const remote = { ref: 'https://images.example.com/hero.png', kind: 'remote-url', url: 'https://images.example.com/hero.png', filename: 'hero.png', alt: '' };
+    const runtime = (fetchImpl, origins = ['https://images.example.com']) => createRequestRuntime({
+      platformId: 'weixin', taskId: 'task', imageBroker: { requestImage: vi.fn() }, fetchImpl,
+      remoteImageOrigins: origins,
+    });
+
+    await expect(runtime(vi.fn(), []).requestImage(remote)).rejects.toMatchObject({ code: 'PERMISSION_DENIED' });
+    await expect(runtime(vi.fn(async () => new Response('', { status: 302, headers: { location: 'https://cdn.example.com/hero.png' } }))).requestImage(remote))
+      .rejects.toMatchObject({ code: 'IMAGE_READ_FAILED' });
+    await expect(runtime(vi.fn(async () => new Response('<html>', { status: 200, headers: { 'content-type': 'text/html' } }))).requestImage(remote))
+      .rejects.toMatchObject({ code: 'IMAGE_READ_FAILED' });
+    await expect(runtime(vi.fn(async () => new Response('x', { status: 200, headers: { 'content-type': 'image/png', 'content-length': String(20 * 1024 * 1024 + 1) } }))).requestImage(remote))
+      .rejects.toMatchObject({ code: 'IMAGE_READ_FAILED' });
+  });
 });
 
 describe('image port broker', () => {

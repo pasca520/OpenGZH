@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ADAPTER_FACTORIES, assertHostPermissions, isAllowedSender, openSuccessfulDrafts, registerServiceWorker, sanitizeBatchForSession } from '../src/background/service-worker.js';
+import { ADAPTER_FACTORIES, assertHostPermissions, createAuthCoordinator, ensureRemoteImagePermissions, isAllowedSender, openSuccessfulDrafts, registerServiceWorker, remoteImageOriginsForArticle, sanitizeBatchForSession } from '../src/background/service-worker.js';
 import { PlatformError } from '../src/core/platform-errors.js';
 
 function portFixture() {
@@ -70,6 +70,78 @@ describe('service worker boundary', () => {
     await expect(assertHostPermissions(['weixin'], { contains: vi.fn(async () => false) })).rejects.toMatchObject({ code: 'PERMISSION_DENIED', retryable: true });
   });
 
+  it('requests only the exact HTTPS origins used by remote article images', async () => {
+    const remoteArticle = {
+      ...article,
+      images: [
+        { ref: 'https://images.example.com/a.png', kind: 'remote-url', url: 'https://images.example.com/a.png', filename: 'a.png', alt: '' },
+        { ref: 'https://images.example.com/b.png', kind: 'remote-url', url: 'https://images.example.com/b.png', filename: 'b.png', alt: '' },
+        { ref: 'https://cdn.example.com/c.png', kind: 'remote-url', url: 'https://cdn.example.com/c.png', filename: 'c.png', alt: '' },
+      ],
+    };
+    expect(remoteImageOriginsForArticle(remoteArticle)).toEqual(['https://cdn.example.com', 'https://images.example.com']);
+    const permissions = {
+      contains: vi.fn(async () => false),
+      request: vi.fn(async () => true),
+    };
+
+    await expect(ensureRemoteImagePermissions(remoteArticle, permissions)).resolves.toEqual(['https://cdn.example.com', 'https://images.example.com']);
+    expect(permissions.contains).toHaveBeenCalledWith({ origins: ['https://cdn.example.com/*', 'https://images.example.com/*'] });
+    expect(permissions.request).toHaveBeenCalledWith({ origins: ['https://cdn.example.com/*', 'https://images.example.com/*'] });
+
+    await expect(ensureRemoteImagePermissions(remoteArticle, { contains: async () => false, request: async () => false }))
+      .rejects.toMatchObject({ code: 'PERMISSION_DENIED', retryable: true });
+  });
+
+  it('checks auth with bounded concurrency while preserving platform order', async () => {
+    let active = 0;
+    let maxActive = 0;
+    const releases = [];
+    const coordinator = createAuthCoordinator({ concurrency: 2 });
+    const pending = coordinator.checkMany(['weixin', 'zhihu', 'juejin', 'woshipm'], async (platformId) => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((resolve) => releases.push(resolve));
+      active -= 1;
+      return platformId !== 'woshipm';
+    });
+
+    await vi.waitFor(() => expect(releases).toHaveLength(2));
+    releases.shift()();
+    releases.shift()();
+    await vi.waitFor(() => expect(releases).toHaveLength(2));
+    releases.shift()();
+    releases.shift()();
+
+    await expect(pending).resolves.toEqual([
+      { platformId: 'weixin', authenticated: true },
+      { platformId: 'zhihu', authenticated: true },
+      { platformId: 'juejin', authenticated: true },
+      { platformId: 'woshipm', authenticated: false },
+    ]);
+    expect(maxActive).toBe(2);
+  });
+
+  it('caches positive auth for five minutes, negative auth for thirty seconds, and supports force refresh', async () => {
+    let now = 1_000;
+    const coordinator = createAuthCoordinator({ now: () => now });
+    const checker = vi.fn(async (platformId) => platformId === 'weixin');
+
+    await coordinator.checkMany(['weixin', 'zhihu'], checker);
+    await coordinator.checkMany(['weixin', 'zhihu'], checker);
+    expect(checker).toHaveBeenCalledTimes(2);
+
+    now += 30_001;
+    await coordinator.checkMany(['weixin', 'zhihu'], checker);
+    expect(checker).toHaveBeenCalledTimes(3);
+
+    await coordinator.checkMany(['weixin'], checker, { force: true });
+    expect(checker).toHaveBeenCalledTimes(4);
+    now += 5 * 60 * 1000;
+    await coordinator.checkMany(['weixin'], checker);
+    expect(checker).toHaveBeenCalledTimes(5);
+  });
+
   it('echoes requestId for auth failures and task/operation for batch fatal', async () => {
     const onConnect = { addListener: vi.fn() };
     const port = portFixture();
@@ -128,7 +200,7 @@ describe('service worker boundary', () => {
       { type: 'AUTH_RESULT', requestId: 'auth-isolated', platformId: 'weixin', authenticated: false },
       {
         type: 'AUTH_RESULT', requestId: 'auth-isolated', platformId: 'zhihu',
-        error: { code: 'PLATFORM_CHANGED', message: 'Authorization: Bearer [REDACTED]', retryable: false },
+        error: { code: 'PLATFORM_CHANGED', message: 'Authorization: Bearer [REDACTED]', suggestion: '平台接口可能已变化，请更新扩展或反馈问题', retryable: false },
       },
       { type: 'AUTH_RESULT', requestId: 'auth-isolated', platformId: 'juejin', authenticated: true },
       { type: 'AUTH_RESULT', requestId: 'auth-isolated', platformId: 'woshipm', authenticated: false },
@@ -139,10 +211,10 @@ describe('service worker boundary', () => {
 
   it('sanitizes session results and does not persist article or credentials', () => {
     expect(sanitizeBatchForSession({ taskId: 'task-1', article: { title: 'secret' }, token: 'secret', results: [
-      { platformId: 'weixin', state: 'success', draftId: 'd1', draftUrl: 'https://mp.weixin.qq.com/draft?token=secret&appmsgid=d1&action=edit&safe=1#fragment', error: { code: 'NETWORK_ERROR', message: 'safe' } },
+      { platformId: 'weixin', state: 'success', draftId: 'd1', draftUrl: 'https://mp.weixin.qq.com/draft?token=secret&appmsgid=d1&action=edit&safe=1#fragment', imageTotal: 3, imageUploaded: 2, error: { code: 'NETWORK_ERROR', message: 'safe' } },
       { platformId: 'woshipm', state: 'success', draftUrl: 'https://www.woshipm.com/writing?pid=42&token=secret#fragment' },
     ] })).toEqual({ taskId: 'task-1', results: [
-      { platformId: 'weixin', state: 'success', draftId: 'd1', draftUrl: 'https://mp.weixin.qq.com/draft?appmsgid=d1&action=edit', error: { code: 'NETWORK_ERROR', message: 'safe', retryable: false } },
+      { platformId: 'weixin', state: 'success', draftId: 'd1', draftUrl: 'https://mp.weixin.qq.com/draft?appmsgid=d1&action=edit', imageTotal: 3, imageUploaded: 2, error: { code: 'NETWORK_ERROR', message: 'safe', suggestion: '检查网络连接后重试', retryable: false } },
       { platformId: 'woshipm', state: 'success', draftUrl: 'https://www.woshipm.com/writing?pid=42' },
     ] });
   });
@@ -213,6 +285,85 @@ describe('service worker boundary', () => {
     expect(port.messages.some((message) => message.type === 'FATAL_ERROR')).toBe(false);
     expect(port.messages.find((message) => message.type === 'BATCH_COMPLETE')).toMatchObject({ taskId: 'task-storage', operationId: 'op-storage', results: [{ draftUrl: 'https://mp.weixin.qq.com/d?appmsgid=d' }] });
     expect(chromeApi.tabs.create).toHaveBeenCalledWith({ url: 'https://mp.weixin.qq.com/d?appmsgid=d', active: false });
+  });
+
+  it('restores a failed task after worker restart and verifies the resent article fingerprint before retry', async () => {
+    const sessionValues = {};
+    const localValues = {};
+    const storage = (values) => ({
+      get: vi.fn(async (key) => ({ [key]: values[key] })),
+      set: vi.fn(async (entries) => Object.assign(values, structuredClone(entries))),
+    });
+    const session = storage(sessionValues);
+    const local = storage(localValues);
+    const firstConnect = { addListener: vi.fn() };
+    const firstPort = portFixture();
+    const failedAdapter = {
+      id: 'weixin', checkAuth: vi.fn(async () => ({ authenticated: true })), uploadImage: vi.fn(),
+      saveDraft: vi.fn(async () => { throw new PlatformError('DRAFT_CREATE_FAILED', '创建失败', { retryable: true }); }),
+    };
+    registerServiceWorker({
+      runtime: { onConnect: firstConnect }, permissions: { contains: vi.fn(async () => true) },
+      storage: { session, local }, tabs: { create: vi.fn(), update: vi.fn() },
+    }, { weixin: () => failedAdapter });
+    firstConnect.addListener.mock.calls[0][0](firstPort);
+    await firstPort.receive({ type: 'START_BATCH', taskId: 'task-recover', operationId: 'op-start', platformIds: ['weixin'], article });
+    expect(firstPort.messages.find((message) => message.type === 'BATCH_COMPLETE')).toBeDefined();
+
+    const secondConnect = { addListener: vi.fn() };
+    const secondPort = portFixture();
+    const recoveredAdapter = {
+      id: 'weixin', checkAuth: vi.fn(async () => ({ authenticated: true })), uploadImage: vi.fn(),
+      saveDraft: vi.fn(async () => ({ draftId: 'recovered', draftUrl: 'https://mp.weixin.qq.com/d?appmsgid=recovered' })),
+    };
+    registerServiceWorker({
+      runtime: { onConnect: secondConnect }, permissions: { contains: vi.fn(async () => true) },
+      storage: { session, local }, tabs: { create: vi.fn(async () => ({ id: 1 })), update: vi.fn(async () => {}) },
+    }, { weixin: () => recoveredAdapter });
+    secondConnect.addListener.mock.calls[0][0](secondPort);
+
+    await secondPort.receive({ type: 'RESTORE_TASK', taskId: 'task-recover' });
+    expect(secondPort.messages.at(-1)).toMatchObject({
+      type: 'TASK_RECOVERED', taskId: 'task-recover', platformIds: ['weixin'],
+      results: [{ platformId: 'weixin', state: 'failed' }],
+    });
+    await secondPort.receive({ type: 'RETRY_PLATFORM', taskId: 'task-recover', operationId: 'op-retry', platformId: 'weixin', article });
+    expect(recoveredAdapter.saveDraft).toHaveBeenCalledTimes(1);
+    expect(secondPort.messages.at(-1)).toMatchObject({ type: 'BATCH_COMPLETE', taskId: 'task-recover', operationId: 'op-retry' });
+
+    await secondPort.receive({ type: 'RETRY_PLATFORM', taskId: 'task-recover', operationId: 'op-changed', platformId: 'weixin', article: { ...article, title: '已修改' } });
+    expect(secondPort.messages.at(-1)).toMatchObject({ type: 'FATAL_ERROR', code: 'ARTICLE_INVALID' });
+  });
+
+  it('warns before repeating a recent successful platform and proceeds only after explicit confirmation', async () => {
+    const values = {};
+    const storage = {
+      get: vi.fn(async (key) => ({ [key]: values[key] })),
+      set: vi.fn(async (entries) => Object.assign(values, structuredClone(entries))),
+    };
+    const onConnect = { addListener: vi.fn() };
+    const port = portFixture();
+    const adapter = {
+      id: 'weixin', checkAuth: vi.fn(async () => ({ authenticated: true })), uploadImage: vi.fn(),
+      saveDraft: vi.fn(async () => ({ draftId: `draft-${adapter.saveDraft.mock.calls.length}`, draftUrl: 'https://mp.weixin.qq.com/d?appmsgid=d' })),
+    };
+    registerServiceWorker({
+      runtime: { onConnect }, permissions: { contains: vi.fn(async () => true) },
+      storage: { session: storage, local: storage }, tabs: { create: vi.fn(async () => ({ id: 1 })), update: vi.fn(async () => {}) },
+    }, { weixin: () => adapter });
+    onConnect.addListener.mock.calls[0][0](port);
+
+    await port.receive({ type: 'START_BATCH', taskId: 'task-first', operationId: 'op-first', platformIds: ['weixin'], article });
+    expect(adapter.saveDraft).toHaveBeenCalledTimes(1);
+    await port.receive({ type: 'START_BATCH', taskId: 'task-second', operationId: 'op-second', platformIds: ['weixin'], article });
+    expect(adapter.saveDraft).toHaveBeenCalledTimes(1);
+    expect(port.messages.at(-1)).toMatchObject({
+      type: 'DUPLICATE_WARNING', taskId: 'task-second', operationId: 'op-second', platformIds: ['weixin'],
+    });
+
+    await port.receive({ type: 'START_BATCH', taskId: 'task-confirmed', operationId: 'op-confirmed', platformIds: ['weixin'], article, allowDuplicate: true });
+    expect(adapter.saveDraft).toHaveBeenCalledTimes(2);
+    expect(port.messages.at(-1)).toMatchObject({ type: 'BATCH_COMPLETE', taskId: 'task-confirmed', operationId: 'op-confirmed' });
   });
 
   it('sanitizes PLATFORM_STATE draft URLs before sending them to content', async () => {

@@ -240,7 +240,14 @@ function imageSourcesFromHtml(html) {
 }
 
 function isImageSource(source) {
-  return source.startsWith('img://') || source.startsWith('data:');
+  if (source.startsWith('img://') || source.startsWith('data:')) return true;
+  try {
+    const url = new URL(source);
+    return url.protocol === 'https:' && !url.port && !url.username && !url.password
+      && !/^(?:localhost|.*\.localhost|.*\.local|\d{1,3}(?:\.\d{1,3}){3}|\[.*\])$/i.test(url.hostname);
+  } catch {
+    return false;
+  }
 }
 
 function extensionFromMime(mime) {
@@ -266,6 +273,18 @@ function dataImageAsset(ref, index, alt) {
 
 async function imageAsset(ref, index, imageStore, alt) {
   if (ref.startsWith('data:')) return dataImageAsset(ref, index, alt);
+  if (!ref.startsWith('img://')) {
+    const url = new URL(ref);
+    let filename = '';
+    try {
+      filename = decodeURIComponent(url.pathname.split('/').pop() || '');
+    } catch {
+      filename = '';
+    }
+    filename = filename.replace(/[^\p{L}\p{N}._-]+/gu, '-').slice(0, 120);
+    if (!filename || filename === '.' || filename === '..') filename = `remote-${index}`;
+    return { ref, kind: 'remote-url', url: ref, filename, alt };
+  }
   const imageId = ref.slice('img://'.length);
   let record;
   try {

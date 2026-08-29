@@ -1,8 +1,10 @@
 import { createDistributionRunner } from './distribution-runner.js';
-import { PLATFORM_IDS, assertAdapter } from '../core/adapter-contract.js';
+import { PLATFORM_IDS } from '../core/adapter-contract.js';
+import { createAdapterRegistry } from '../core/adapter-registry.js';
 import { validateArticle } from '../core/article-validator.js';
 import { createPortImageBroker, createRequestRuntime, createInTabFetcher } from '../core/request-runtime.js';
 import { PlatformError, serializeError } from '../core/platform-errors.js';
+import { createTaskStore } from '../core/task-store.js';
 import { createWeixinAdapter } from '../adapters/weixin.js';
 import { createZhihuAdapter } from '../adapters/zhihu.js';
 import { createJuejinAdapter } from '../adapters/juejin.js';
@@ -38,25 +40,67 @@ const PLATFORM_ORIGINS = Object.freeze({
   woshipm: Object.freeze(['https://www.woshipm.com/*']),
 });
 
-function getPlatformAdapter(platformId, adapterFactories) {
-  if (typeof adapterFactories[platformId] !== 'function') throw new PlatformError('PLATFORM_CHANGED', '平台适配器未注册', { retryable: false });
-  let adapter;
-  try {
-    adapter = assertAdapter(adapterFactories[platformId]());
-  } catch (error) {
-    if (error instanceof TypeError) throw new PlatformError('PLATFORM_CHANGED', error.message, { retryable: false });
-    throw error;
-  }
-  if (adapter.id !== platformId) throw new PlatformError('PLATFORM_CHANGED', '平台适配器标识与注册键不一致', { retryable: false });
-  return adapter;
-}
-
 function nonEmpty(value) {
   return typeof value === 'string' && Boolean(value.trim());
 }
 
 function invalid(message) {
   return new PlatformError('ARTICLE_INVALID', message, { retryable: false });
+}
+
+export function createAuthCoordinator({
+  now = Date.now,
+  positiveTtlMs = 5 * 60 * 1000,
+  negativeTtlMs = 30 * 1000,
+  concurrency = 2,
+} = {}) {
+  const cache = new Map();
+  const pending = new Map();
+  const limit = Math.max(1, Math.min(4, Number.isInteger(concurrency) ? concurrency : 2));
+
+  async function checkOne(platformId, checker, force) {
+    const current = cache.get(platformId);
+    if (!force && current?.expiresAt > now()) return current.authenticated;
+    if (pending.has(platformId)) return pending.get(platformId);
+    const promise = Promise.resolve()
+      .then(() => checker(platformId))
+      .then((authenticated) => {
+        if (typeof authenticated !== 'boolean') throw new PlatformError('PLATFORM_CHANGED', '鉴权响应格式无效', { retryable: false });
+        cache.set(platformId, {
+          authenticated,
+          expiresAt: now() + (authenticated ? positiveTtlMs : negativeTtlMs),
+        });
+        return authenticated;
+      })
+      .finally(() => pending.delete(platformId));
+    pending.set(platformId, promise);
+    return promise;
+  }
+
+  return Object.freeze({
+    async checkMany(platformIds, checker, { force = false } = {}) {
+      const results = Array(platformIds.length);
+      let cursor = 0;
+      const worker = async () => {
+        while (cursor < platformIds.length) {
+          const index = cursor;
+          cursor += 1;
+          const platformId = platformIds[index];
+          try {
+            results[index] = { platformId, authenticated: await checkOne(platformId, checker, force) };
+          } catch (error) {
+            results[index] = { platformId, error };
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(limit, platformIds.length) }, worker));
+      return results;
+    },
+    invalidate(platformId) {
+      if (platformId) cache.delete(platformId);
+      else cache.clear();
+    },
+  });
 }
 
 function safeDraftUrl(platformId, value) {
@@ -109,6 +153,33 @@ export async function assertHostPermissions(platformIds, permissionsApi = global
   return true;
 }
 
+export function remoteImageOriginsForArticle(article) {
+  const origins = new Set();
+  for (const image of Array.isArray(article?.images) ? article.images : []) {
+    if (image?.kind !== 'remote-url' || typeof image.url !== 'string') continue;
+    try {
+      origins.add(new URL(image.url).origin);
+    } catch (_error) {
+      throw invalid('远程图片地址无效');
+    }
+  }
+  return [...origins].sort();
+}
+
+export async function ensureRemoteImagePermissions(article, permissionsApi = globalThis.chrome?.permissions) {
+  const origins = remoteImageOriginsForArticle(article);
+  if (!origins.length) return origins;
+  const patterns = origins.map((origin) => `${origin}/*`);
+  if (typeof permissionsApi?.contains !== 'function') {
+    throw new PlatformError('PERMISSION_DENIED', '无法检查远程图片来源权限', { retryable: true });
+  }
+  if (await permissionsApi.contains({ origins: patterns })) return origins;
+  if (typeof permissionsApi?.request !== 'function' || !await permissionsApi.request({ origins: patterns })) {
+    throw new PlatformError('PERMISSION_DENIED', '需要授权读取文章中的远程图片来源', { retryable: true });
+  }
+  return origins;
+}
+
 export function sanitizeBatchForSession(batch) {
   const results = Array.isArray(batch?.results) ? batch.results : [];
   return {
@@ -118,6 +189,9 @@ export function sanitizeBatchForSession(batch) {
       if (result.draftId) output.draftId = String(result.draftId);
       const draftUrl = safeDraftUrl(result.platformId, result.draftUrl);
       if (draftUrl) output.draftUrl = draftUrl;
+      if (Number.isInteger(result.imageTotal) && result.imageTotal >= 0) output.imageTotal = result.imageTotal;
+      if (Number.isInteger(output.imageTotal) && Number.isInteger(result.imageUploaded)
+        && result.imageUploaded >= 0 && result.imageUploaded <= output.imageTotal) output.imageUploaded = result.imageUploaded;
       if (result.error) output.error = serializeError(result.error);
       return output;
     }),
@@ -147,6 +221,12 @@ function messageCorrelation(message) {
 
 export function registerServiceWorker(chromeApi = globalThis.chrome, adapterFactories = ADAPTER_FACTORIES) {
   if (!chromeApi?.runtime?.onConnect?.addListener) return null;
+  const adapterRegistry = createAdapterRegistry(adapterFactories);
+  const authCoordinator = createAuthCoordinator();
+  const taskStore = createTaskStore({
+    sessionStorage: chromeApi.storage?.session,
+    localStorage: chromeApi.storage?.local,
+  });
   chromeApi.runtime.onConnect.addListener((port) => {
     if (port.name !== PORT_NAME || !isAllowedSender(port.sender)) {
       port.disconnect?.();
@@ -160,6 +240,7 @@ export function registerServiceWorker(chromeApi = globalThis.chrome, adapterFact
     let queue = Promise.resolve();
     const taskContexts = new Map();
     const latestResults = new Map();
+    const taskRemoteOrigins = new Map();
     const imageBroker = createPortImageBroker(port);
     const dispose = () => {
       if (disposed) return;
@@ -167,6 +248,7 @@ export function registerServiceWorker(chromeApi = globalThis.chrome, adapterFact
       imageBroker.dispose();
       taskContexts.clear();
       latestResults.clear();
+      taskRemoteOrigins.clear();
       retryReservations.clear();
     };
     const send = (message) => {
@@ -186,11 +268,7 @@ export function registerServiceWorker(chromeApi = globalThis.chrome, adapterFact
       for (const result of batch.results || []) merged.set(result.platformId, result);
       const normalized = { taskId: batch.taskId, results: [...merged.values()] };
       latestResults.set(batch.taskId, normalized.results);
-      try {
-        await chromeApi.storage?.session?.set?.({ [`opengzh.task.${batch.taskId}`]: sanitizeBatchForSession(normalized) });
-      } catch (_error) {
-        // Session persistence is a convenience cache; the in-memory result remains authoritative for this port.
-      }
+      await taskStore.merge({ taskId: batch.taskId, results: sanitizeBatchForSession(normalized).results });
     };
     const runner = createDistributionRunner({
       adapterFactories,
@@ -201,6 +279,7 @@ export function registerServiceWorker(chromeApi = globalThis.chrome, adapterFact
           taskId,
           imageBroker,
           inTabFetch: createInTabFetcher({ scriptingApi: chromeApi?.scripting, tabsApi: chromeApi?.tabs }),
+          remoteImageOrigins: taskRemoteOrigins.get(taskId) || [],
         });
       },
       onState: (message) => send(sanitizePlatformState(message)),
@@ -255,28 +334,42 @@ export function registerServiceWorker(chromeApi = globalThis.chrome, adapterFact
         if (nonEmpty(message.requestId)) send({ type: 'PONG', requestId: message.requestId });
         return;
       }
+      if (message.type === 'RESTORE_TASK') {
+        return enqueue(message, async () => {
+          if (!nonEmpty(message.taskId)) throw invalid('任务关联信息无效');
+          const record = await taskStore.load(message.taskId);
+          if (!record) throw invalid('任务上下文已失效，请重新发起同步');
+          send({
+            type: 'TASK_RECOVERED', taskId: record.taskId,
+            platformIds: record.platformIds, results: sanitizeBatchForSession(record).results,
+          });
+        });
+      }
       if (message.type === 'CHECK_AUTH') {
         return enqueue(message, async () => {
           if (!nonEmpty(message.requestId)) throw invalid('鉴权请求 ID 无效');
           await assertHostPermissions(message.platformIds, chromeApi.permissions);
-          for (const platformId of message.platformIds) {
-            try {
-              const adapter = getPlatformAdapter(platformId, adapterFactories);
-              const runtime = createRequestRuntime({
-                platformId,
-                taskId: `auth:${message.requestId}`,
-                imageBroker,
-                inTabFetch: createInTabFetcher({ scriptingApi: chromeApi?.scripting, tabsApi: chromeApi?.tabs }),
-              });
-              const auth = await adapter.checkAuth(runtime);
-              if (typeof auth?.authenticated !== 'boolean') throw new PlatformError('PLATFORM_CHANGED', '鉴权响应格式无效', { retryable: false });
-              send({ type: 'AUTH_RESULT', requestId: message.requestId, platformId, authenticated: auth.authenticated });
-            } catch (error) {
-              const safe = serializeError(error);
+          const results = await authCoordinator.checkMany(message.platformIds, async (platformId) => {
+            const adapter = adapterRegistry.create(platformId);
+            const runtime = createRequestRuntime({
+              platformId,
+              taskId: `auth:${message.requestId}`,
+              imageBroker,
+              inTabFetch: createInTabFetcher({ scriptingApi: chromeApi?.scripting, tabsApi: chromeApi?.tabs }),
+            });
+            const auth = await adapter.checkAuth(runtime);
+            if (typeof auth?.authenticated !== 'boolean') throw new PlatformError('PLATFORM_CHANGED', '鉴权响应格式无效', { retryable: false });
+            return auth.authenticated;
+          }, { force: message.force === true });
+          for (const result of results) {
+            if (!result.error) {
+              send({ type: 'AUTH_RESULT', requestId: message.requestId, platformId: result.platformId, authenticated: result.authenticated });
+            } else {
+              const safe = serializeError(result.error);
               if (safe.code === 'AUTH_REQUIRED') {
-                send({ type: 'AUTH_RESULT', requestId: message.requestId, platformId, authenticated: false });
+                send({ type: 'AUTH_RESULT', requestId: message.requestId, platformId: result.platformId, authenticated: false });
               } else {
-                send({ type: 'AUTH_RESULT', requestId: message.requestId, platformId, error: safe });
+                send({ type: 'AUTH_RESULT', requestId: message.requestId, platformId: result.platformId, error: safe });
               }
             }
           }
@@ -287,9 +380,23 @@ export function registerServiceWorker(chromeApi = globalThis.chrome, adapterFact
           if (!nonEmpty(message.taskId) || !nonEmpty(message.operationId)) throw invalid('任务关联信息无效');
           await assertHostPermissions(message.platformIds, chromeApi.permissions);
           const article = validateArticle(message.article);
+          if (message.allowDuplicate !== true) {
+            const duplicatePlatforms = await taskStore.recentDuplicates({ documentId: article.documentId, platformIds: message.platformIds });
+            if (duplicatePlatforms.length) {
+              send({
+                type: 'DUPLICATE_WARNING', taskId: message.taskId, operationId: message.operationId,
+                platformIds: duplicatePlatforms, windowMs: 5 * 60 * 1000,
+              });
+              return;
+            }
+          }
+          taskRemoteOrigins.set(message.taskId, await ensureRemoteImagePermissions(article, chromeApi.permissions));
+          for (const platformId of message.platformIds) authCoordinator.invalidate(platformId);
+          await taskStore.start({ taskId: message.taskId, article, platformIds: message.platformIds });
+          taskContexts.set(message.taskId, { article, platformIds: [...message.platformIds] });
           const batch = await runner.runBatch({ taskId: message.taskId, operationId: message.operationId, article, platformIds: message.platformIds });
           if (disposed) return;
-          taskContexts.set(message.taskId, { article, platformIds: [...message.platformIds] });
+          await taskStore.complete(message.taskId);
           await openSuccessfulDrafts(chromeApi.tabs, batch);
           send({ type: 'BATCH_COMPLETE', taskId: message.taskId, operationId: message.operationId, results: sanitizeBatchForSession(batch).results });
         });
@@ -298,12 +405,15 @@ export function registerServiceWorker(chromeApi = globalThis.chrome, adapterFact
         return enqueue(message, async () => {
           if (!nonEmpty(message.taskId) || !nonEmpty(message.operationId) || !nonEmpty(message.platformId)) throw invalid('任务关联信息无效');
           const context = taskContexts.get(message.taskId);
-          if (!context) throw invalid('任务上下文已失效，请重新发起同步');
-          if (!context.platformIds.includes(message.platformId)) throw invalid('平台未包含在原任务选择中');
+          const article = validateArticle(message.article || context?.article);
+          const recovered = await taskStore.assertRetry({ taskId: message.taskId, article, platformId: message.platformId });
           await assertHostPermissions([message.platformId], chromeApi.permissions);
-          const previous = latestResults.get(message.taskId)?.find((result) => result.platformId === message.platformId) || { state: 'idle' };
-          const result = await runner.retryPlatform({ taskId: message.taskId, operationId: message.operationId, article: context.article, platformId: message.platformId, previous });
+          taskRemoteOrigins.set(message.taskId, await ensureRemoteImagePermissions(article, chromeApi.permissions));
+          authCoordinator.invalidate(message.platformId);
+          taskContexts.set(message.taskId, { article, platformIds: recovered.record.platformIds });
+          const result = await runner.retryPlatform({ taskId: message.taskId, operationId: message.operationId, article, platformId: message.platformId, previous: recovered.previous });
           if (disposed) return;
+          await taskStore.complete(message.taskId);
           if (result.state === 'success') await openSuccessfulDrafts(chromeApi.tabs, { results: [result] });
           send({ type: 'BATCH_COMPLETE', taskId: message.taskId, operationId: message.operationId, results: sanitizeBatchForSession({ taskId: message.taskId, results: [result] }).results });
         });

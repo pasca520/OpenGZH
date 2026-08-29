@@ -217,6 +217,17 @@ describe('content script selection and snapshot trust boundary', () => {
     expect(() => validateSnapshot({ ...valid, images: sparse })).toThrowError(/ARTICLE_INVALID/);
     expect(() => validateSnapshot({ ...valid, images: [{ ...valid.images[0], ref: 'img://wrong' }] })).toThrowError(/ARTICLE_INVALID/);
   });
+
+  it('accepts safe remote image metadata and rejects unsafe remote origins at the page boundary', () => {
+    const { validateSnapshot } = loadTestApi();
+    const remote = 'https://images.example.com/hero.png?version=1';
+    expect(validateSnapshot(snapshot({
+      images: [{ ref: remote, kind: 'remote-url', url: remote, filename: 'hero.png', alt: 'Hero' }],
+    })).images[0]).toEqual({ ref: remote, kind: 'remote-url', url: remote, filename: 'hero.png', alt: 'Hero' });
+    expect(() => validateSnapshot(snapshot({
+      images: [{ ref: 'http://images.example.com/hero.png', kind: 'remote-url', url: 'http://images.example.com/hero.png', filename: 'hero.png', alt: '' }],
+    }))).toThrowError(/ARTICLE_INVALID/);
+  });
 });
 
 describe('content script page snapshot request', () => {
@@ -519,7 +530,7 @@ describe('content script shadow DOM UI', () => {
     expect(browserWindow.open).toHaveBeenCalledWith('https://mp.weixin.qq.com/', '_blank', 'noopener');
     browserWindow.dispatchEvent(new FakeEvent('focus'));
     expect(messages.filter((message) => message.type === 'CHECK_AUTH')).toHaveLength(2);
-    expect(messages.at(-1).platformIds).toEqual(['weixin']);
+    expect(messages.at(-1)).toMatchObject({ platformIds: ['weixin'], force: true });
   });
 
   it('rechecks a logged-in platform after the current auth request finishes', async () => {
@@ -548,7 +559,7 @@ describe('content script shadow DOM UI', () => {
       ui.onMessage({ type: 'AUTH_RESULT', requestId: firstRequestId, platformId, authenticated: true });
     }
     expect(messages.filter((message) => message.type === 'CHECK_AUTH')).toHaveLength(2);
-    expect(messages.at(-1).platformIds).toEqual(['weixin']);
+    expect(messages.at(-1)).toMatchObject({ platformIds: ['weixin'], force: true });
     expect(['zhihu', 'juejin', 'woshipm'].map((platformId) => ui.rows.get(platformId).status.textContent))
       .toEqual(['已登录', '已登录', '已登录']);
   });
@@ -1139,6 +1150,77 @@ describe('async extension selection storage and selected-only auth', () => {
 });
 
 describe('batch lifecycle, status progress, and connectivity', () => {
+  it('retains the validated article for a correlated retry request', async () => {
+    const { createUi } = loadTestApi();
+    const { doc, anchor } = makeUiDom();
+    const messages = [];
+    const article = snapshot({ title: '可恢复文章' });
+    const ui = createUi({
+      document: doc, anchor,
+      storage: { get: async () => ({ 'opengzh.selectedPlatformIds': ['weixin'] }), set: async () => {}, remove: async () => {} },
+      port: { postMessage: (message) => messages.push(message) },
+      snapshotRequest: async () => article,
+      idFactory: () => 'task-retry-article',
+      operationIdFactory: vi.fn().mockReturnValueOnce('op-start').mockReturnValueOnce('op-retry'),
+    });
+    await ui.ready;
+    await ui.startBatch();
+    ui.onMessage({ type: 'PLATFORM_STATE', taskId: 'task-retry-article', operationId: 'op-start', platformId: 'weixin', status: 'failed', error: { message: '创建失败' } });
+    ui.onMessage({ type: 'BATCH_COMPLETE', taskId: 'task-retry-article', operationId: 'op-start' });
+
+    ui.rows.get('weixin').retry.dispatchEvent(new FakeEvent('click'));
+
+    expect(messages.at(-1)).toMatchObject({
+      type: 'RETRY_PLATFORM', taskId: 'task-retry-article', operationId: 'op-retry', platformId: 'weixin', article,
+    });
+  });
+
+  it('renders only the matching recovered task result and keeps retry available', async () => {
+    const { createUi } = loadTestApi();
+    const { doc, anchor } = makeUiDom();
+    const ui = createUi({
+      document: doc, anchor,
+      storage: { get: async () => ({ 'opengzh.selectedPlatformIds': ['weixin'] }), set: async () => {}, remove: async () => {} },
+      port: { postMessage: () => {} },
+    });
+    await ui.ready;
+    ui.state.retryTaskId = 'task-recovered';
+    ui.onMessage({ type: 'TASK_RECOVERED', taskId: 'other-task', results: [{ platformId: 'weixin', state: 'failed', error: { message: '旧任务' } }] });
+    expect(ui.rows.get('weixin').status.textContent).not.toBe('旧任务');
+    ui.onMessage({ type: 'TASK_RECOVERED', taskId: 'task-recovered', results: [{ platformId: 'weixin', state: 'failed', error: { message: '已恢复失败' } }] });
+    expect(ui.rows.get('weixin').status.textContent).toBe('已恢复失败');
+    expect(ui.rows.get('weixin').canRetry).toBe(true);
+    ui.onMessage({ type: 'TASK_RECOVERED', taskId: 'task-recovered', results: [{ platformId: 'weixin', state: 'failed', error: { message: '上传失败', suggestion: '检查图片后重试' }, imageUploaded: 1, imageTotal: 2 }] });
+    expect(ui.rows.get('weixin').status.textContent).toBe('上传失败；检查图片后重试（图片 1/2）');
+  });
+
+  it('requires a second explicit click after a correlated duplicate warning', async () => {
+    const { createUi } = loadTestApi();
+    const { doc, anchor } = makeUiDom();
+    const messages = [];
+    const ui = createUi({
+      document: doc, anchor,
+      storage: { get: async () => ({ 'opengzh.selectedPlatformIds': ['weixin'] }), set: async () => {}, remove: async () => {} },
+      port: { postMessage: (message) => messages.push(message) },
+      snapshotRequest: async () => snapshot(),
+      idFactory: vi.fn().mockReturnValueOnce('task-first').mockReturnValueOnce('task-confirmed'),
+      operationIdFactory: vi.fn().mockReturnValueOnce('op-first').mockReturnValueOnce('op-confirmed'),
+    });
+    await ui.ready;
+    await ui.startBatch();
+    ui.onMessage({ type: 'DUPLICATE_WARNING', taskId: 'task-first', operationId: 'op-first', platformIds: ['weixin'] });
+    expect(ui.state.busy).toBe(false);
+    expect(ui.alert.textContent).toContain('5 分钟内');
+    expect(ui.start.textContent).toBe('确认再次同步');
+
+    await ui.startBatch();
+
+    expect(messages.at(-1)).toMatchObject({
+      type: 'START_BATCH', taskId: 'task-confirmed', operationId: 'op-confirmed', allowDuplicate: true,
+    });
+    expect(ui.start.textContent).toBe('同步到草稿');
+  });
+
   it('only checks selected rows, retains taskId after batch complete, and retries the failed platform', async () => {
     const { createUi } = loadTestApi();
     const { doc, anchor } = makeUiDom();
@@ -1288,7 +1370,7 @@ describe('Task5 quality runtime contracts', () => {
     expect(ui.state.busy).toBe(false);
     expect(ui.state.activeTaskId).toBe(null);
     ui.rows.get('weixin').retry.dispatchEvent(new FakeEvent('click'));
-    expect(messages.at(-1)).toEqual({ type: 'RETRY_PLATFORM', taskId: 'task-1', operationId: 'operation-2', platformId: 'weixin' });
+    expect(messages.at(-1)).toEqual({ type: 'RETRY_PLATFORM', taskId: 'task-1', operationId: 'operation-2', platformId: 'weixin', article: snapshot() });
     expect(ui.state.activeOperationId).toBe('operation-2');
     ui.onMessage({ type: 'FATAL_ERROR', taskId: 'task-1', operationId: 'old-operation', message: '旧失败' });
     expect(ui.state.busy).toBe(true);

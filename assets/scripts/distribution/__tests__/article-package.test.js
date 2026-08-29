@@ -230,6 +230,30 @@ describe('article distribution contract', () => {
     ]);
   });
 
+  it('inventories HTTPS images as remote assets without reading the local image store', async () => {
+    const remote = 'https://demo-1257065623.cos.ap-guangzhou.myqcloud.com/%E4%BA%A7%E5%93%81/article-cover.png?version=1';
+    const imageStore = { getImageRecord: vi.fn() };
+
+    const snapshot = await buildDistributionPackage({
+      documentId: 'doc-remote',
+      title: '远程图片',
+      markdown: `![远程图片](${remote})`,
+      renderedHtml: `<p><img src="${remote}" alt="远程图片"></p>`,
+      imageStore,
+      prepareWechatContent: async () => ({ html: `<p><img src="${remote}" alt="远程图片"></p>`, imageFailures: [] }),
+      now: () => 1787529600000
+    });
+
+    expect(snapshot.images).toEqual([{
+      ref: remote,
+      kind: 'remote-url',
+      url: remote,
+      filename: 'article-cover.png',
+      alt: '远程图片'
+    }]);
+    expect(imageStore.getImageRecord).not.toHaveBeenCalled();
+  });
+
   it('does not inventory image-like syntax outside rendered HTML', async () => {
     const markdown = [
       '<!-- ![comment](img://missing) <img src="img://missing"> -->',

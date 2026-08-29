@@ -28,6 +28,7 @@
   const IMAGE_KEYS = Object.freeze({
     'data-url': Object.freeze(['ref', 'kind', 'dataUrl', 'mimeType', 'filename', 'alt']),
     'indexed-db': Object.freeze(['ref', 'kind', 'imageId', 'mimeType', 'filename', 'alt']),
+    'remote-url': Object.freeze(['ref', 'kind', 'url', 'filename', 'alt']),
   });
   const STATUS_LABELS = Object.freeze({
     'checking-auth': '检测登录中',
@@ -122,12 +123,22 @@
   }
 
   function validateImage(image) {
-    if (!isPlainRecord(image) || !['indexed-db', 'data-url'].includes(image.kind)) invalid('图片清单格式错误');
+    if (!isPlainRecord(image) || !['indexed-db', 'data-url', 'remote-url'].includes(image.kind)) invalid('图片清单格式错误');
     const fields = IMAGE_KEYS[image.kind];
     if (!hasExactKeys(image, fields)) invalid('图片字段越界');
-    if (!isString(image.ref, false) || !isString(image.mimeType, false)
-      || !/^image\/[a-z0-9.+-]+$/i.test(image.mimeType)
-      || !isString(image.filename, false) || !isString(image.alt)) invalid('图片元数据错误');
+    if (!isString(image.ref, false) || !isString(image.filename, false) || !isString(image.alt)) invalid('图片元数据错误');
+    if (image.kind === 'remote-url') {
+      let url;
+      try {
+        url = new URL(image.url);
+      } catch {
+        invalid('远程图片地址错误');
+      }
+      if (!isString(image.url, false) || image.ref !== image.url || url.protocol !== 'https:' || url.port || url.username || url.password
+        || /^(?:localhost|.*\.localhost|.*\.local|\d{1,3}(?:\.\d{1,3}){3}|\[.*\])$/i.test(url.hostname)) invalid('远程图片地址错误');
+      return;
+    }
+    if (!isString(image.mimeType, false) || !/^image\/[a-z0-9.+-]+$/i.test(image.mimeType)) invalid('图片元数据错误');
     if (image.kind === 'indexed-db') {
       if (!isString(image.imageId, false) || image.ref !== `img://${image.imageId}`) invalid('IndexedDB 图片引用错误');
       return;
@@ -563,6 +574,7 @@
       busy: false,
       taskId: null,
       retryTaskId: null,
+      retryArticle: null,
       generation: 0,
       authRequestId: null,
       authPlatforms: [],
@@ -575,6 +587,7 @@
       disposed: false,
       panelOpen: false,
       selectionRevision: 0,
+      allowDuplicateOnce: false,
     };
     Object.defineProperties(state, {
       activeTaskId: { get: () => state.taskId, set: (value) => { state.taskId = value; } },
@@ -666,6 +679,8 @@
       rowMap.set(platformId, { row, checkbox, status, login, retry, draft, actionHint, canRetry: false, statusKey: 'unknown' });
       listen(checkbox, 'change', () => {
         if (state.busy) return;
+        state.allowDuplicateOnce = false;
+        start.textContent = '同步到草稿';
         state.selectionRevision += 1;
         invalidateAuth();
         state.selected = PLATFORM_IDS.filter((id) => rowMap.get(id).checkbox.checked);
@@ -686,7 +701,10 @@
           state.generation += 1;
           setStatus(platformId, 'checking-auth');
           setLocked(true);
-          post({ type: 'RETRY_PLATFORM', taskId: state.taskId, operationId: state.operationId, platformId });
+          post({
+            type: 'RETRY_PLATFORM', taskId: state.taskId, operationId: state.operationId, platformId,
+            ...(state.retryArticle ? { article: state.retryArticle } : {}),
+          });
           return;
         }
         sendCheckAuth([platformId]);
@@ -1067,7 +1085,14 @@
       }
       if (status === 'failed') {
         const errorMessage = typeof message?.error === 'string' ? message.error : message?.error?.message;
+        const suggestion = typeof message?.error === 'object' ? message.error?.suggestion : '';
+        const imageUploaded = Number(message?.imageUploaded);
+        const imageTotal = Number(message?.imageTotal);
         if (errorMessage) row.status.textContent = errorMessage;
+        if (suggestion) row.status.textContent += `；${suggestion}`;
+        if (Number.isInteger(imageUploaded) && imageUploaded >= 0 && Number.isInteger(imageTotal) && imageTotal >= imageUploaded) {
+          row.status.textContent += `（图片 ${imageUploaded}/${imageTotal}）`;
+        }
       }
       updateRowPresentation(row);
     }
@@ -1089,12 +1114,15 @@
         state.taskId = null;
         state.operationId = null;
       }
-      if (clearRetry) state.retryTaskId = null;
+      if (clearRetry) {
+        state.retryTaskId = null;
+        state.retryArticle = null;
+      }
       setLocked(false);
       if (message) setAlert(message);
     }
 
-    function sendCheckAuth(platformIds = state.selected.slice()) {
+    function sendCheckAuth(platformIds = state.selected.slice(), { force = false } = {}) {
       if (state.disposed || state.busy || state.authRequestId) return false;
       for (const platformId of PLATFORM_IDS) {
         if (platformIds.includes(platformId)) setStatus(platformId, 'checking-auth');
@@ -1110,7 +1138,7 @@
       state.authPlatforms = platformIds.slice();
       state.authCompleted.clear();
       setAlert('');
-      if (!post({ type: 'CHECK_AUTH', requestId, platformIds: platformIds.slice() })) invalidateAuth();
+      if (!post({ type: 'CHECK_AUTH', requestId, platformIds: platformIds.slice(), ...(force ? { force: true } : {}) })) invalidateAuth();
       return true;
     }
 
@@ -1124,7 +1152,7 @@
       }
       state.loginRecheckQueued = false;
       for (const platformId of platformIds) state.pendingLoginPlatforms.delete(platformId);
-      return sendCheckAuth(platformIds);
+      return sendCheckAuth(platformIds, { force: true });
     }
 
     async function startBatch() {
@@ -1137,6 +1165,9 @@
       }
       abortSnapshot();
       invalidateAuth();
+      const allowDuplicate = state.allowDuplicateOnce;
+      state.allowDuplicateOnce = false;
+      start.textContent = '同步到草稿';
       const generation = state.generation + 1;
       const taskId = idFactory();
       const operationId = operationIdFactory();
@@ -1144,6 +1175,7 @@
       state.taskId = taskId;
       state.operationId = operationId;
       state.retryTaskId = null;
+      state.retryArticle = null;
       state.draftUrls.clear();
       state.busy = true;
       snapshotController = createSnapshotController();
@@ -1160,7 +1192,11 @@
       try {
         const article = await snapshotRequest({ target: doc, signal: snapshotController.signal });
         if (!state.busy || state.taskId !== taskId || state.generation !== generation) return;
-        post({ type: 'START_BATCH', taskId, operationId, platformIds: state.selected.slice(), article });
+        state.retryArticle = article;
+        post({
+          type: 'START_BATCH', taskId, operationId, platformIds: state.selected.slice(), article,
+          ...(allowDuplicate ? { allowDuplicate: true } : {}),
+        });
       } catch (error) {
         if (state.taskId !== taskId || state.generation !== generation) return;
         if (state.disposed) return;
@@ -1292,6 +1328,26 @@
         finishTask();
         return;
       }
+      if (message?.type === 'DUPLICATE_WARNING') {
+        if (!state.taskId || !state.operationId || message.taskId !== state.taskId || message.operationId !== state.operationId) return;
+        const names = (Array.isArray(message.platformIds) ? message.platformIds : [])
+          .filter((platformId) => state.selected.includes(platformId))
+          .map((platformId) => PLATFORMS[platformId]?.name)
+          .filter(Boolean);
+        finishTask();
+        state.allowDuplicateOnce = true;
+        start.textContent = '确认再次同步';
+        setAlert(`${names.join('、') || '所选平台'}在 5 分钟内已有草稿，再次点击确认同步`);
+        return;
+      }
+      if (message?.type === 'TASK_RECOVERED') {
+        if (!state.retryTaskId || message.taskId !== state.retryTaskId || !Array.isArray(message.results)) return;
+        for (const result of message.results) {
+          if (!state.selected.includes(result.platformId)) continue;
+          setStatus(result.platformId, result.state || 'unknown', result);
+        }
+        return;
+      }
       if (message?.type === 'FATAL_ERROR') {
         if (state.busy && (message.taskId !== state.taskId || message.operationId !== state.operationId)) return;
         if (!state.busy && state.authRequestId) {
@@ -1356,7 +1412,7 @@
       for (const platformId of PLATFORM_IDS) {
         if (rowMap.get(platformId)?.statusKey === 'checking-auth') setStatus(platformId, 'connection-lost');
       }
-      finishTask(shouldReconnect ? '连接已中断，正在重连…' : '扩展连接已中断，请刷新当前页面后重试', { clearRetry: true });
+      finishTask(shouldReconnect ? '连接已中断，正在重连…' : '扩展连接已中断，请刷新当前页面后重试', { clearRetry: state.busy });
       if (!shouldReconnect) return;
       Promise.resolve()
         .then(() => reconnectPort())
@@ -1368,6 +1424,7 @@
           }
           setLocked(false);
           setAlert('');
+          if (state.retryTaskId) post({ type: 'RESTORE_TASK', taskId: state.retryTaskId });
           sendCheckAuth();
         })
         .catch(() => {
@@ -1490,6 +1547,9 @@
       state.busy = false;
       state.taskId = null;
       state.operationId = null;
+      state.retryTaskId = null;
+      state.retryArticle = null;
+      state.allowDuplicateOnce = false;
       setAlert('');
       for (const remove of listenerDisposers.splice(0)) remove();
       const portToDisconnect = activePort;

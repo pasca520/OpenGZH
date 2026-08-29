@@ -5,6 +5,22 @@ export const ERROR_CODES = Object.freeze([
   'UNKNOWN_REMOTE_STATE',
 ]);
 
+const ERROR_SUGGESTIONS = Object.freeze({
+  AUTH_REQUIRED: '登录平台后重新检测',
+  PERMISSION_DENIED: '允许所需站点权限后重试',
+  ARTICLE_INVALID: '刷新编辑页并重新发起同步',
+  IMAGE_NOT_LOCAL: '将图片导入本地图片库后重试',
+  IMAGE_READ_FAILED: '检查图片地址或重新导入后重试',
+  IMAGE_UPLOAD_FAILED: '稍后重试图片上传',
+  DRAFT_CREATE_FAILED: '确认平台状态后重试',
+  DRAFT_UPDATE_FAILED: '确认草稿仍存在后重试',
+  PLATFORM_CHANGED: '平台接口可能已变化，请更新扩展或反馈问题',
+  RATE_LIMITED: '稍后再试',
+  NETWORK_ERROR: '检查网络连接后重试',
+  UNKNOWN_REMOTE_STATE: '先人工检查平台草稿箱，不要直接重试',
+});
+const ERROR_STAGES = new Set(['checking-auth', 'uploading-images', 'saving-draft']);
+
 const SECRET_KEY = /^(?:token|ticket|csrf|jltoken|accesskeyid|secretaccesskey|sessiontoken|access_id|access_key|access_token|authorization|cookie|password|secret|x-csrf-token)$/i;
 const SECRET_QUERY = /([?&](?:token|ticket|csrf|jltoken|sessiontoken|access[_-]?key(?:id)?|secret[_-]?access[_-]?key|access[_-]?token|authorization|x-csrf-token)=)[^&#\s]*/gi;
 const SECRET_JSON = /((?:["']?)(?:token|ticket|csrf|jltoken|accesskeyid|secretaccesskey|sessiontoken|access_id|access_key|access_token|authorization|cookie|x-csrf-token)(?:["']?\s*[:=]\s*["']))([\s\S]*?)(?=["'])/gi;
@@ -67,10 +83,14 @@ export function summarizeRemote(value, maxLength = 160) {
     .slice(0, maxLength);
 }
 
-export function serializeError(error) {
+export function serializeError(error, { stage } = {}) {
+  const code = ERROR_CODES.includes(error?.code) ? error.code : 'PLATFORM_CHANGED';
+  const safeStage = ERROR_STAGES.has(stage) ? stage : ERROR_STAGES.has(error?.stage) ? error.stage : null;
   return {
-    code: ERROR_CODES.includes(error?.code) ? error.code : 'PLATFORM_CHANGED',
+    code,
     message: summarizeRemote(error?.message || '平台响应异常'),
+    suggestion: summarizeRemote(error?.suggestion || ERROR_SUGGESTIONS[code]),
+    ...(safeStage ? { stage: safeStage } : {}),
     ...(Number.isInteger(error?.httpStatus) ? { httpStatus: error.httpStatus } : {}),
     ...(error?.remoteSummary != null ? { remoteSummary: summarizeRemote(error.remoteSummary) } : {}),
     ...(error?.draftId != null ? { draftId: summarizeRemote(error.draftId) } : {}),

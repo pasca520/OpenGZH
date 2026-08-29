@@ -70,6 +70,54 @@ describe('distribution runner', () => {
     expect(saveDraft).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.any(Map), expect.anything(), { markdown: true });
   });
 
+  it('uploads a remote asset and fails closed before draft creation when remote download fails', async () => {
+    const remote = 'https://images.example.com/hero.png';
+    const remoteArticle = {
+      ...article,
+      semanticHtml: `<p><img src="${remote}" alt="Hero"></p>`,
+      images: [{ ref: remote, kind: 'remote-url', url: remote, filename: 'hero.png', alt: 'Hero' }],
+    };
+    const saveDraft = vi.fn(async () => ({ draftId: 'draft', draftUrl: 'https://zhuanlan.zhihu.com/p/draft' }));
+    const uploadImage = vi.fn(async () => 'https://picx.zhimg.com/hero.png');
+    const requestImage = vi.fn(async () => { throw new PlatformError('IMAGE_READ_FAILED', '远程图片读取失败', { retryable: true }); });
+    const runner = createDistributionRunner({
+      adapterFactories: { zhihu: () => ({ id: 'zhihu', checkAuth: async () => ({ authenticated: true }), uploadImage, saveDraft }) },
+      runtimeFactory: () => ({ requestImage }), onState: vi.fn(), persist: vi.fn(async () => {}),
+    });
+
+    const result = await runner.runBatch({ taskId: 'task-remote', operationId: 'op-remote', article: remoteArticle, platformIds: ['zhihu'] });
+
+    expect(result.results[0]).toMatchObject({ state: 'failed', error: { code: 'IMAGE_READ_FAILED' } });
+    expect(requestImage).toHaveBeenCalledWith(remoteArticle.images[0]);
+    expect(uploadImage).not.toHaveBeenCalled();
+    expect(saveDraft).not.toHaveBeenCalled();
+  });
+
+  it('records the exact failure stage and completed image count', async () => {
+    const saveDraft = vi.fn();
+    const uploadImage = vi.fn(async (_runtime, _blob, filename) => `https://picx.zhimg.com/${filename}`);
+    const requestImage = vi.fn(async (image) => {
+      if (image.imageId === 'hero-2') throw new PlatformError('IMAGE_READ_FAILED', '第二张图片失败', { retryable: true });
+      return new Blob(['png'], { type: 'image/png' });
+    });
+    const runner = createDistributionRunner({
+      adapterFactories: { zhihu: () => ({ id: 'zhihu', checkAuth: async () => ({ authenticated: true }), uploadImage, saveDraft }) },
+      runtimeFactory: () => ({ requestImage }), onState: vi.fn(), persist: vi.fn(async () => {}),
+    });
+
+    const result = await runner.runBatch({
+      taskId: 'task-progress', operationId: 'op-progress',
+      article: { ...article, semanticHtml: '<img src="img://hero"><img src="img://hero-2">' },
+      platformIds: ['zhihu'],
+    });
+
+    expect(result.results[0]).toMatchObject({
+      state: 'failed', imageTotal: 2, imageUploaded: 1,
+      error: { code: 'IMAGE_READ_FAILED', stage: 'uploading-images', suggestion: '检查图片地址或重新导入后重试' },
+    });
+    expect(saveDraft).not.toHaveBeenCalled();
+  });
+
   it('keeps earlier success when a later platform fails and persists each result', async () => {
     const persist = vi.fn(async () => {});
     const runner = createDistributionRunner({

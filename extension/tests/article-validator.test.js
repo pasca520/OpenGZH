@@ -5,6 +5,7 @@ import {
   applyImageMap,
   articleContentForPlatform,
   assertAdapter,
+  platformContentContract,
 } from '../src/core/adapter-contract.js';
 import { validateArticle, validateSelectedPlatformImages } from '../src/core/article-validator.js';
 
@@ -31,11 +32,13 @@ describe('adapter contract', () => {
   it('exposes the locked platforms and metadata', () => {
     expect(PLATFORM_IDS).toEqual(['weixin', 'zhihu', 'juejin', 'woshipm']);
     expect(PLATFORMS).toEqual({
-      weixin: { name: '微信公众号', loginUrl: 'https://mp.weixin.qq.com/' },
-      zhihu: { name: '知乎', loginUrl: 'https://www.zhihu.com/signin' },
-      juejin: { name: '掘金', loginUrl: 'https://juejin.cn/login' },
-      woshipm: { name: '人人都是产品经理', loginUrl: 'https://www.woshipm.com/login.html' },
+      weixin: { name: '微信公众号', loginUrl: 'https://mp.weixin.qq.com/', content: { field: 'wechatHtml', format: 'html' }, capabilities: { imageUpload: true, draftOnly: true, retryUpdate: true } },
+      zhihu: { name: '知乎', loginUrl: 'https://www.zhihu.com/signin', content: { field: 'semanticHtml', format: 'html' }, capabilities: { imageUpload: true, draftOnly: true, retryUpdate: true } },
+      juejin: { name: '掘金', loginUrl: 'https://juejin.cn/login', content: { field: 'portableMarkdown', format: 'markdown' }, capabilities: { imageUpload: true, draftOnly: true, retryUpdate: true } },
+      woshipm: { name: '人人都是产品经理', loginUrl: 'https://www.woshipm.com/login.html', content: { field: 'semanticHtml', format: 'html' }, capabilities: { imageUpload: true, draftOnly: true, retryUpdate: true } },
     });
+    expect(platformContentContract('juejin')).toEqual({ field: 'portableMarkdown', format: 'markdown' });
+    expect(() => platformContentContract('unknown')).toThrowError(/未知平台/);
   });
 
   it('requires each adapter to implement the three privileged operations', () => {
@@ -165,6 +168,34 @@ describe('validateArticle', () => {
         alt: '',
       }],
     })).toThrowError(expect.objectContaining({ code: 'ARTICLE_INVALID' }));
+  });
+
+  it('accepts exact HTTPS remote image assets and rejects unsafe remote URLs', () => {
+    const remote = 'https://images.example.com/path/hero.png?version=1';
+    const remoteImage = { ref: remote, kind: 'remote-url', url: remote, filename: 'hero.png', alt: 'Hero' };
+    expect(validateArticle({
+      ...article,
+      semanticHtml: `<img src="${remote}">`,
+      images: [remoteImage],
+    }).images).toEqual([remoteImage]);
+    expect(() => validateSelectedPlatformImages({
+      ...article,
+      semanticHtml: `<img src="${remote}">`,
+      images: [remoteImage],
+    }, ['zhihu'])).not.toThrow();
+
+    for (const url of [
+      'http://images.example.com/hero.png',
+      'https://user:pass@images.example.com/hero.png',
+      'https://images.example.com:8443/hero.png',
+      'https://localhost/hero.png',
+    ]) {
+      expect(() => validateArticle({
+        ...article,
+        semanticHtml: `<img src="${url}">`,
+        images: [{ ref: url, kind: 'remote-url', url, filename: 'hero.png', alt: '' }],
+      })).toThrowError(expect.objectContaining({ code: 'ARTICLE_INVALID' }));
+    }
   });
 
   it('rejects accessors before a valid getter can cross the boundary', () => {

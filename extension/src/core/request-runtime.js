@@ -29,6 +29,8 @@ const ALLOWED_HOSTS = Object.freeze({
 });
 
 const CREDENTIALLESS_HOSTS = new Set(['imagex.bytedanceapi.com', 'tos-d-x-lf.douyin.com']);
+const REMOTE_IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif']);
+const MAX_REMOTE_IMAGE_BYTES = 20 * 1024 * 1024;
 const TAB_QUERY_PATTERNS = Object.freeze({
   weixin: Object.freeze(['https://mp.weixin.qq.com/*']),
 });
@@ -58,6 +60,77 @@ export function assertFixedUrl(platformId, input) {
 
 function credentialPolicy(url) {
   return CREDENTIALLESS_HOSTS.has(url.hostname) || url.hostname.endsWith('.volces.com') ? 'omit' : 'include';
+}
+
+function remoteImageError(message, details = {}) {
+  return new PlatformError('IMAGE_READ_FAILED', message, { retryable: true, ...details });
+}
+
+function assertRemoteImageUrl(image, remoteImageOrigins) {
+  let url;
+  try {
+    url = new URL(image?.url);
+  } catch {
+    throw remoteImageError('远程图片地址无效', { retryable: false });
+  }
+  if (image?.kind !== 'remote-url' || image.ref !== image.url || url.protocol !== 'https:' || url.port || url.username || url.password
+    || /^(?:localhost|.*\.localhost|.*\.local|\d{1,3}(?:\.\d{1,3}){3}|\[.*\])$/i.test(url.hostname)) {
+    throw remoteImageError('远程图片地址无效', { retryable: false });
+  }
+  if (!remoteImageOrigins.has(url.origin)) {
+    throw new PlatformError('PERMISSION_DENIED', `没有读取图片来源的权限: ${url.origin}`, { retryable: true });
+  }
+  return url;
+}
+
+async function limitedImageBlob(response, mimeType) {
+  const lengthHeader = response.headers.get('content-length');
+  if (lengthHeader != null) {
+    const length = Number(lengthHeader);
+    if (!Number.isInteger(length) || length < 0 || length > MAX_REMOTE_IMAGE_BYTES) throw remoteImageError('远程图片超过 20MB 限制', { retryable: false });
+  }
+  if (!response.body?.getReader) {
+    const blob = await response.blob();
+    if (blob.size > MAX_REMOTE_IMAGE_BYTES) throw remoteImageError('远程图片超过 20MB 限制', { retryable: false });
+    return new Blob([blob], { type: mimeType });
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_REMOTE_IMAGE_BYTES) {
+        await reader.cancel();
+        throw remoteImageError('远程图片超过 20MB 限制', { retryable: false });
+      }
+      chunks.push(value);
+    }
+  } catch (error) {
+    if (error instanceof PlatformError) throw error;
+    throw remoteImageError('远程图片响应读取失败');
+  }
+  return new Blob(chunks, { type: mimeType });
+}
+
+async function fetchRemoteImage(image, fetchImpl, remoteImageOrigins) {
+  const url = assertRemoteImageUrl(image, remoteImageOrigins);
+  let response;
+  try {
+    response = await fetchImpl(url.href, {
+      method: 'GET', credentials: 'omit', redirect: 'manual', referrerPolicy: 'no-referrer',
+    });
+  } catch {
+    throw remoteImageError('远程图片下载失败');
+  }
+  if (!response?.ok || response.status < 200 || response.status >= 300) {
+    throw remoteImageError(`远程图片下载失败: HTTP ${Number(response?.status) || 0}`, { httpStatus: Number(response?.status) || 0 });
+  }
+  const mimeType = String(response.headers?.get?.('content-type') || '').split(';', 1)[0].trim().toLowerCase();
+  if (!REMOTE_IMAGE_MIME_TYPES.has(mimeType)) throw remoteImageError('远程地址返回的不是支持的图片格式', { retryable: false });
+  return limitedImageBlob(response, mimeType);
 }
 
 export function createPortImageBroker(port, { timeoutMs = 30000, idFactory = randomId } = {}) {
@@ -172,8 +245,10 @@ export function createRequestRuntime({
   declarativeNetRequest = globalThis.chrome?.declarativeNetRequest,
   tabsApi = globalThis.chrome?.tabs,
   logSink = console,
+  remoteImageOrigins = [],
 }) {
   if (typeof fetchImpl !== 'function') throw new TypeError('fetch 不可用');
+  const approvedRemoteOrigins = new Set(remoteImageOrigins);
   return Object.freeze({
     platformId,
     taskId,
@@ -211,7 +286,9 @@ export function createRequestRuntime({
       }
       return urls;
     },
-    requestImage: (image) => imageBroker.requestImage(image, { taskId, platformId }),
+    requestImage: (image) => image?.kind === 'remote-url'
+      ? fetchRemoteImage(image, fetchImpl, approvedRemoteOrigins)
+      : imageBroker.requestImage(image, { taskId, platformId }),
     withHeaderRules: (rules, work) => withSessionHeaderRules(declarativeNetRequest, rules, work),
     log(stage, fields = {}) {
       logSink?.info?.('[OpenGZH]', redactSecrets({ platformId, stage, ...fields }));

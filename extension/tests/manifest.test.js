@@ -44,7 +44,7 @@ describe('OpenGZH MV3 manifest', () => {
       'https://*.volces.com/*',
       'https://www.woshipm.com/*',
     ]);
-    expect(manifest.optional_host_permissions).toBeUndefined();
+    expect(manifest.optional_host_permissions).toEqual(['https://*/*']);
     const serialized = JSON.stringify(manifest);
     for (const forbidden of ['<all_urls>', 'cookies', 'unlimitedStorage', 'externally_connectable']) {
       expect(serialized).not.toContain(forbidden);
