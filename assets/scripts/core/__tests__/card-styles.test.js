@@ -2192,7 +2192,7 @@ describe('card presentation DOM application', () => {
 });
 
 it.each(['check-list', 'timeline', 'index-badge'])(
-  'keeps a loose-list paragraph and its links inline with the %s row marker',
+  'keeps a loose-list paragraph and its links structurally inline with the %s row marker',
   (styleId) => {
     const doc = new FakeDocument();
     const heading = appendElement(doc, doc.createElement('div'), 'h4', '序列文章');
@@ -2206,17 +2206,80 @@ it.each(['check-list', 'timeline', 'index-badge'])(
 
     applyCardStyles(doc, theme);
 
-    expect(item.children.map(({ tagName }) => tagName)).toEqual(['SPAN', 'P']);
-    expect(paragraph.style.getPropertyValue('display')).toBe('inline');
-    expect(paragraph.style.getPropertyPriority('display')).toBe('important');
-    expect(paragraph.children).toEqual([link]);
+    expect(item.children.map(({ tagName }) => tagName)).toEqual(['P']);
+    expect(paragraph.style.getPropertyValue('display')).toBe('');
+    expect(paragraph.children.map(({ tagName }) => tagName)).toEqual(['SPAN', 'A']);
+    expect(paragraph.children[1]).toBe(link);
 
     section.setAttribute('data-ogzh-card', 'minimal-outline');
     applyCardStyles(doc, theme);
     expect(paragraph.style.getPropertyValue('display')).toBe('');
     expect(item.children.map(({ tagName }) => tagName)).toEqual(['P']);
+    expect(paragraph.children).toEqual([link]);
   }
 );
+
+it('removes fixed inline text fill from every light-theme card before WeChat copy', () => {
+  expect(cardStyles.normalizeCardTextForWechat).toBeTypeOf('function');
+  if (!cardStyles.normalizeCardTextForWechat) return;
+
+  const failures = [];
+  const cards = [
+    ...CARD_STYLES,
+    ...['accent-bar', 'double-frame', 'label-title'].map((id) => getCardStyle(id))
+  ];
+
+  for (const [themeId, styleConfig] of Object.entries(STYLES)) {
+    if (styleConfig.gzh?.bg) continue;
+    for (const card of cards) {
+      const doc = new FakeDocument();
+      const paragraph = doc.createElement('p');
+      const inlineElements = ['strong', 'em', 'a', 'del'].map((tagName) => {
+        const element = appendElement(doc, paragraph, tagName, tagName);
+        element.setAttribute(
+          'style',
+          styleConfig.styles[tagName] || styleConfig.styles.strong || 'color: #777777 !important;'
+        );
+        return element;
+      });
+      const children = [];
+      if (card.slots === 'title-body' || card.slots === 'title-list') {
+        children.push(appendElement(doc, doc.createElement('div'), 'h4', card.defaultTitle || '标题'));
+      }
+      children.push(paragraph);
+      createCard(doc, card.id, children);
+
+      applyCardStyles(doc, styleConfig);
+      cardStyles.normalizeCardTextForWechat(doc, styleConfig);
+
+      for (const element of inlineElements) {
+        if (element.style.getPropertyValue('-webkit-text-fill-color')) {
+          failures.push(`${themeId}/${card.id}/${element.tagName.toLowerCase()}`);
+        }
+      }
+    }
+  }
+
+  expect(failures, failures.join('\n')).toEqual([]);
+});
+
+it('keeps fixed inline text fill for native dark themes that WeChat must not recolor', () => {
+  expect(cardStyles.normalizeCardTextForWechat).toBeTypeOf('function');
+  if (!cardStyles.normalizeCardTextForWechat) return;
+
+  const styleConfig = Object.values(STYLES).find(({ gzh }) => Boolean(gzh?.bg));
+  const doc = new FakeDocument();
+  const paragraph = doc.createElement('p');
+  const link = appendElement(doc, paragraph, 'a', '链接');
+  createCard(doc, 'index-badge', [paragraph]);
+
+  applyCardStyles(doc, styleConfig);
+  const before = link.style.getPropertyValue('-webkit-text-fill-color');
+  cardStyles.normalizeCardTextForWechat(doc, styleConfig);
+
+  expect(before).toBeTruthy();
+  expect(link.style.getPropertyValue('-webkit-text-fill-color')).toBe(before);
+});
 
 it('shows row markers in previews for the three list cards', () => {
   for (const styleId of ['check-list', 'timeline', 'index-badge']) {

@@ -1081,10 +1081,10 @@ function applyRowMarkerList(doc, section, presentation, tokens) {
     marker.setAttribute('aria-hidden', 'true');
     marker.textContent = spec.markerText(index);
     applyTrustedStyle(marker, spec.marker);
-    item.insertBefore(marker, item.firstChild);
+    const rowContent = paragraph || item;
+    rowContent.insertBefore(marker, rowContent.firstChild);
     const last = index === items.length - 1;
     applyTrustedStyle(item, last ? spec.item.replace(/border-bottom:[^;]+;\s*/i, '') : spec.item);
-    if (paragraph) applyTrustedStyle(paragraph, 'display: inline !important;');
   });
   applyTrustedStyle(list, spec.list);
 }
@@ -1239,6 +1239,23 @@ function applyHistoryDocumentRows(doc, section, bodyStyle, tokens) {
 }
 
 const SAFE_INLINE_TAGS = new Set(['STRONG', 'EM', 'A', 'DEL']);
+
+export function normalizeCardTextForWechat(doc, styleConfig) {
+  if (normalizeColor(styleConfig?.gzh?.bg)) return;
+
+  const visit = (element) => {
+    Array.from(element.children).forEach((child) => {
+      if (child.tagName === 'SECTION' && child.hasAttribute('data-ogzh-card')) return;
+      if (child.tagName === 'CODE') return;
+      if (SAFE_INLINE_TAGS.has(child.tagName)) {
+        child.style.removeProperty('-webkit-text-fill-color');
+      }
+      visit(child);
+    });
+  };
+
+  doc.querySelectorAll('section[data-ogzh-card]').forEach(visit);
+}
 
 function applyInlineTextStyles(element, foreground) {
   Array.from(element.children).forEach((child) => {

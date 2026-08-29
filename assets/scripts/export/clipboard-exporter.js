@@ -7,7 +7,7 @@ import { convertMathForWechat, stripFormulaExportMetadata } from './math-exporte
 import { applyCodeHighlighting, serializeHighlightedCodeHtml } from '../core/code-highlight.js';
 import { buildEndDividerGif, END_DIVIDER_META } from './end-divider-gif.js';
 import { buildCardDecorationGif } from './card-decoration-gif.js';
-import { resolveCardTokens } from '../core/card-styles.js';
+import { normalizeCardTextForWechat, resolveCardTokens } from '../core/card-styles.js';
 import { buildTableImageAlt, renderTableToPng } from './table-image-renderer.js';
 
 function extractBackgroundColor(styleString) {
@@ -1070,6 +1070,7 @@ export async function prepareWechatContent({
   convertOrderedListsToWechatParagraphs(doc, effectiveStyleConfig);
   normalizeListTypographyForWechat(doc, effectiveStyleConfig);
   inlineContainerTypographyForWechat(doc, effectiveStyleConfig);
+  normalizeCardTextForWechat(doc, effectiveStyleConfig);
   normalizeBlockquotes(doc);
   wrapSectionIfNeeded(doc, effectiveStyleConfig);
 
