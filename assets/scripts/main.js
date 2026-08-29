@@ -8,6 +8,7 @@ import { ImageCompressor } from './core/image-compressor.js';
 import { createMarkdownEngine } from './core/markdown-engine.js';
 import { createTurndownService, createPasteHandler } from './core/paste-handler.js';
 import { createEditHistory } from './core/edit-history.js';
+import { extractBodyText, countChars, countWords } from './core/text-stats.js';
 import { clampNumber, hexToRgba } from './core/format-utils.js';
 import { renderPipeline } from './core/render-pipeline.js';
 import {
@@ -811,12 +812,19 @@ function updateStats() {
     return;
   }
 
-  charCount.value = text.length;
-  const chineseChars = (text.match(/[\u4e00-\u9fff\u3400-\u4dbf]/g) || []).length;
-  const englishWords = text.replace(/[\u4e00-\u9fff\u3400-\u4dbf]/g, ' ').split(/\s+/).filter(Boolean).length;
-  const total = chineseChars + englishWords;
-  wordCount.value = total;
-  readTime.value = Math.max(1, Math.ceil(total / 300));
+  // 只统计「正文」：渲染后读者可见的文字（排除 markdown 语法、图片地址、标签等）
+  let bodyText = text;
+  if (md) {
+    try {
+      bodyText = extractBodyText(md.parse(text, {}));
+    } catch (_error) {
+      // 解析失败时退回原始文本，保证统计不中断
+    }
+  }
+
+  charCount.value = countChars(bodyText);
+  wordCount.value = countWords(bodyText);
+  readTime.value = Math.max(1, Math.ceil(wordCount.value / 300));
 }
 
 function getResolvedCodeTheme() {
