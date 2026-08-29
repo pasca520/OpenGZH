@@ -8,9 +8,10 @@ import {
 
 const manifest = {
   manifest_version: 3,
-  name: 'OpenGZH',
+  name: 'OpenGZH - Markdown 文章多平台同步',
   short_name: 'OpenGZH',
-  description: '微信公众号、知乎、掘金、人人都是产品经理文章同步助手',
+  description: '在 OpenGZH 完成 Markdown 排版后，一键同步到微信公众号、知乎、掘金和人人都是产品经理草稿箱。',
+  action: { default_title: 'OpenGZH - Markdown 文章多平台同步' },
   version: '0.1.0',
   permissions: ['storage', 'scripting', 'declarativeNetRequestWithHostAccess'],
   host_permissions: [
@@ -72,6 +73,7 @@ describe('extension build', () => {
     expect(() => validateExtensionManifest({ ...manifest, optional_host_permissions: null })).toThrowError(/可选域名/);
     expect(() => validateExtensionManifest({ ...manifest, externally_connectable: false })).toThrowError(/externally_connectable/);
     expect(() => validateExtensionManifest({ ...manifest, version: '0.1.1' })).toThrowError(/版本/);
+    expect(() => validateExtensionManifest({ ...manifest, action: { default_title: '旧标题' } })).toThrowError(/按钮标题/);
   });
 
   it('normalizes archive paths before applying exact forbidden checks', () => {

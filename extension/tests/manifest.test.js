@@ -7,14 +7,14 @@ describe('OpenGZH MV3 manifest', () => {
   it('locks identity, version, action and worker', () => {
     expect(manifest).toMatchObject({
       manifest_version: 3,
-      name: 'OpenGZH',
+      name: 'OpenGZH - Markdown 文章多平台同步',
       short_name: 'OpenGZH',
       version: '0.1.0',
-      description: '微信公众号、知乎、掘金、人人都是产品经理文章同步助手',
+      description: '在 OpenGZH 完成 Markdown 排版后，一键同步到微信公众号、知乎、掘金和人人都是产品经理草稿箱。',
       minimum_chrome_version: '116',
       background: { service_worker: 'src/background/service-worker.js', type: 'module' },
       action: {
-        default_title: 'OpenGZH 文章同步助手',
+        default_title: 'OpenGZH - Markdown 文章多平台同步',
         default_icon: {
           16: 'assets/icon-16.png',
           48: 'assets/icon-48.png',

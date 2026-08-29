@@ -65,8 +65,9 @@ export function validateArchiveRootListing(listing) {
 
 export function validateExtensionManifest(manifest) {
   if (manifest.manifest_version !== 3) throw new Error('Manifest 必须是 MV3');
-  if (manifest.name !== 'OpenGZH' || manifest.short_name !== 'OpenGZH') throw new Error('插件名称错误');
-  if (manifest.description !== '微信公众号、知乎、掘金、人人都是产品经理文章同步助手') throw new Error('插件副标题错误');
+  if (manifest.name !== 'OpenGZH - Markdown 文章多平台同步' || manifest.short_name !== 'OpenGZH') throw new Error('插件名称错误');
+  if (manifest.description !== '在 OpenGZH 完成 Markdown 排版后，一键同步到微信公众号、知乎、掘金和人人都是产品经理草稿箱。') throw new Error('插件副标题错误');
+  if (manifest.action?.default_title !== 'OpenGZH - Markdown 文章多平台同步') throw new Error('插件按钮标题错误');
   if (manifest.version !== VERSION) throw new Error(`插件版本必须是 ${VERSION}`);
   if (JSON.stringify(manifest.permissions) !== JSON.stringify(REQUIRED_PERMISSIONS)) {
     throw new Error('Manifest 权限必须且只能包含已锁定权限');
