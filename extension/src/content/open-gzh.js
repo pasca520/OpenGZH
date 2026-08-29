@@ -9,7 +9,7 @@
     woshipm: Object.freeze({ name: '人人都是产品经理', loginUrl: 'https://www.woshipm.com/login.html' }),
   });
   const PLATFORM_ICONS = Object.freeze({ weixin: '微', zhihu: '知', juejin: '掘', woshipm: '人' });
-  const SUBTITLE = '选择平台，确认登录状态后同步到各平台草稿箱。';
+  const SUBTITLE = '在 OpenGZH 完成排版后，一键同步到所选平台草稿箱。';
   const PORT_NAME = 'opengzh-distribution-v1';
   const STORAGE_KEY = 'opengzh.selectedPlatformIds';
   const PAGE_EVENTS = Object.freeze({
@@ -622,7 +622,7 @@
     header.className = 'opengzh-header';
     const heading = doc.createElement('div');
     heading.className = 'opengzh-heading';
-    const title = textElement(doc, 'h2', '同步到草稿', 'opengzh-title');
+    const title = textElement(doc, 'h2', 'Markdown 文章多平台同步', 'opengzh-title');
     title.id = 'opengzh-title';
     const selectedCount = textElement(doc, 'span', '已选 4', 'opengzh-selected-count');
     panel.setAttribute('aria-labelledby', title.id);

@@ -402,7 +402,7 @@ describe('content script source contract', () => {
     expect(source).not.toContain('保存草稿');
     expect(source).not.toContain('同步到平台');
     expect(source).not.toContain('opengzh-trigger');
-    expect(source).toContain('选择平台，确认登录状态后同步到各平台草稿箱。');
+    expect(source).toContain('在 OpenGZH 完成排版后，一键同步到所选平台草稿箱。');
     expect(source).not.toContain('opengzh-backdrop');
     expect(source).not.toContain('chrome.permissions');
     expect(source).not.toContain('permissions.request');
@@ -433,7 +433,7 @@ describe('content script shadow DOM UI', () => {
     expect(ui.shadow.children.find((child) => child.tagName === 'STYLE').textContent).not.toContain('opengzh-trigger');
     expect(ui.shadow.children.find((child) => child.className === 'opengzh-extension-shell').children[0]).toBe(ui.panel);
     expect(ui.panel.attributes.get('aria-modal')).toBeUndefined();
-    expect(ui.title.textContent).toBe('同步到草稿');
+    expect(ui.title.textContent).toBe('Markdown 文章多平台同步');
     expect(ui.selectedCount.textContent).toBe('已选 4');
     expect(ui.start.textContent).toBe('同步到草稿');
     expect(ui.rows.get('weixin').row.children[1].className).toBe('platform-icon');
@@ -1895,9 +1895,9 @@ describe('Shadow DOM CSS, accessibility, and focus contract', () => {
     const ui = createUi({ document: doc, anchor, storage: { get: async () => ({}), set: async () => {}, remove: async () => {} }, port: { postMessage: () => {} } });
     const style = ui.shadow.children.find((child) => child.tagName === 'STYLE');
     expect(style).toBeTruthy();
-    expect(ui.title.textContent).toBe('同步到草稿');
+    expect(ui.title.textContent).toBe('Markdown 文章多平台同步');
     expect(ui.selectedCount.textContent).toBe('已选 4');
-    expect(ui.subtitle.textContent).toBe('选择平台，确认登录状态后同步到各平台草稿箱。');
+    expect(ui.subtitle.textContent).toBe('在 OpenGZH 完成排版后，一键同步到所选平台草稿箱。');
     expect(ui.header.className).toBe('opengzh-header');
     expect(ui.footer.className).toBe('opengzh-footer');
     expect(ui.footerNote.textContent).toBe('同步到所选平台草稿箱，不会发布');
