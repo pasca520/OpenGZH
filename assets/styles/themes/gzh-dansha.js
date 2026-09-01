@@ -14,7 +14,7 @@ export const theme = {
     numStyle: 'plain'
   },
   styles: {
-    container: "max-width: 100%; margin: 0 auto; padding: 16px 6px 48px 6px; font-family: -apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", sans-serif; font-size: 15px; line-height: 1.8; letter-spacing: 0.3px; color: #3f3f46 !important; background-color: #ffffff !important; word-wrap: break-word;",
+    container: "max-width: 100%; margin: 0 auto; padding: 16px 6px 48px 6px; font-family: -apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", sans-serif; font-size: 15px; line-height: 1.8; letter-spacing: 0.3px; font-feature-settings: \"hwid\" 1; color: #3f3f46 !important; background-color: #ffffff !important; word-wrap: break-word;",
     h1: "font-size: 22px; font-weight: 800; color: #18181b !important; line-height: 1.35 !important; margin: 0 10px 26px; letter-spacing: 0.5px;",
     h2: "font-size: 20px; font-weight: 800; color: #18181b !important; margin: 0 0 12px; letter-spacing: 0.5px; line-height: 1.45 !important;",
     h3: "font-size: 15px; font-weight: 800; color: #18181b !important; margin: 26px 10px 12px; padding-left: 12px; border-left: 3px solid #DC2626; line-height: 1.4 !important;",

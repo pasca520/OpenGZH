@@ -106,4 +106,8 @@ describe('article theme readability for WeChat', () => {
     const failures = Object.entries(STYLES).flatMap(([key, theme]) => auditTheme(key, theme));
     expect(failures, failures.join('\n')).toEqual([]);
   });
+
+  it('正红红线 trims the full-width gap after CJK punctuation', () => {
+    expect(getProperty(STYLES['gzh-dansha'].styles.container, 'font-feature-settings')).toBe('"hwid" 1');
+  });
 });
